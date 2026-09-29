@@ -1,0 +1,51 @@
+# Dependabot version updates, checked by tests.yml like any pull request. Some versions are held on
+# purpose, and Dependabot is told to leave them:
+# - the SDK image and Microsoft.AspNetCore.Mvc.Testing move together with global.json, by hand
+#   (global.json says how);
+# - SixLabors.ImageSharp stays on 3.x, and the tests on the xunit.v3 3.x stack
+#   (Directory.Packages.props says why).
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # The project folders, rather than "/": the solution is a .slnx. The versions themselves are in
+  # Directory.Packages.props.
+  - package-ecosystem: nuget
+    directories:
+      - /DungeonTable.Application
+      - /DungeonTable.ContentTests
+      - /DungeonTable.Core
+      - /DungeonTable.Infrastructure
+      - /DungeonTable.Tests
+      - /DungeonTable.Web
+    schedule:
+      interval: weekly
+    groups:
+      nuget-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: Microsoft.AspNetCore.Mvc.Testing
+      - dependency-name: SixLabors.ImageSharp
+        update-types: [version-update:semver-major]
+      - dependency-name: xunit.v3
+        update-types: [version-update:semver-major]
+      - dependency-name: xunit.runner.visualstudio
+        update-types: [version-update:semver-major]
+      - dependency-name: Microsoft.NET.Test.Sdk
+        update-types: [version-update:semver-major, version-update:semver-minor]
+
+  # The runtime image may move on its own, for its security fixes; the SDK image may not.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*dotnet/sdk"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
