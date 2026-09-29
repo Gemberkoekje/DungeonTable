@@ -1,0 +1,38 @@
+{
+  "title": "The Silent Bell",
+  "startAreaNodeId": "data_dossiers_level_1_area_1",
+  "sections": [
+    {
+      "heading": "Millbrook",
+      "kind": "lore",
+      "secret": false,
+      "body": "A village of forty households where the drovers' road fords the Mill Brook. It has a mill ([[the-old-mill]]), a chapel ([[millbrook-chapel]]) with a square bell tower, an alehouse, and not much else. The chapel bell has rung at every dusk for longer than anyone can remember."
+    },
+    {
+      "heading": "The Undercroft",
+      "kind": "lore",
+      "secret": false,
+      "body": "The bell was cast in the undercroft beneath the chapel by the [[the-bell-founders|bell-founders]] who built it. Their workshop, their chapel for the dead and the stair to their crypt are still down there. The village keeps the landing at the foot of the stair swept, and otherwise leaves the undercroft alone."
+    },
+    {
+      "heading": "Why the Bell Rings",
+      "kind": "secret",
+      "secret": true,
+      "body": "The founders cast the bell to ring their dead to sleep. While it tolls at dusk the crypt stays quiet and the [[bell-warden]] sleeps on its plinth. Ten days ago [[brother-aldous|Brother Aldous]] gave the bell's silver clapper to [[grask]] to pay a gambling debt. Since then the ringers in [[L1 area 5]] have risen, and the warden is awake."
+    }
+  ],
+  "levelsHeading": "Levels of the Undercroft",
+  "levelsNote": "quest gates test the character level shown",
+  "levels": [
+    { "level": 1, "name": "The Undercroft", "characterLevel": "2nd", "requiredLevel": 2, "authored": true },
+    { "level": 2, "name": "The Sealed Crypt", "characterLevel": "3rd", "requiredLevel": 3, "authored": false }
+  ],
+  "bonusXp": [
+    {
+      "heading": "Bonus XP",
+      "kind": "lore",
+      "secret": false,
+      "body": "Award 50 XP to each character when the party talks [[nib]] into a deal instead of fighting the goblins, and 100 XP to each character the first time the bell rings at dusk again."
+    }
+  ]
+}

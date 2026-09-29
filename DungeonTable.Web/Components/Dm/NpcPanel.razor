@@ -1,0 +1,93 @@
+@*
+    The Info panel's NPCs sub-tab: the named people the campaign has accumulated.
+
+    A filter box across the top, because this list only grows — an NPC roster is the one dossier
+    tier that gets longer every session, and scrolling for a name the players just said out loud is
+    exactly the wrong thing to be doing mid-scene.
+*@
+
+<section class="npc-panel" aria-label="Non-player characters">
+    @if (Roster.Npcs.Count == 0)
+    {
+        <p class="muted">No NPCs are authored.</p>
+    }
+    else
+    {
+        @if (Roster.Summary.Length > 0)
+        {
+            <p class="party-summary"><CrossRefProse Text="@Roster.Summary" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+        }
+
+        <input class="npc-filter" type="search" placeholder="Filter by name, role, place or what they know…"
+               aria-label="Filter NPCs" @bind="filter" @bind:event="oninput" />
+
+        IReadOnlyList<Keyed<NpcDossier>> shown = Shown();
+        @if (shown.Count == 0)
+        {
+            <p class="muted">No NPC matches &ldquo;@filter&rdquo;.</p>
+        }
+        else
+        {
+            @foreach (Keyed<NpcDossier> npc in shown)
+            {
+                <NpcCard @key="npc.Key" Npc="npc.Item" ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
+            }
+        }
+    }
+</section>
+
+@code {
+    /// <summary>The authored NPC roster.</summary>
+    [Parameter]
+    public NpcRoster Roster { get; set; } = new NpcRoster();
+
+    /// <summary>
+    /// Resolves cross-references in NPC prose. These people belong to the campaign rather than the
+    /// shown floor, so callers should pass the entity-only resolver.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with a node id to open an entity's reference card.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    private string filter = string.Empty;
+
+    // Matches across everything an NPC is indexed by, not just the name: a DM who remembers "the
+    // miller's widow by the ford" but not "Wenna" should still land on her. Keyed before filtering,
+    // so an NPC keeps its key whatever the filter hides (see RenderKeys).
+    private IReadOnlyList<Keyed<NpcDossier>> Shown()
+    {
+        IReadOnlyList<Keyed<NpcDossier>> all = RenderKeys.Of(Roster.Npcs, npc => npc.Id);
+        if (string.IsNullOrWhiteSpace(filter))
+        {
+            return all;
+        }
+
+        string needle = filter.Trim();
+        return all.Where(npc => Matches(npc.Item, needle)).ToList();
+    }
+
+    private static bool Matches(NpcDossier npc, string needle)
+    {
+        if (Has(npc.Name, needle) || Has(npc.Role, needle) || Has(npc.Where, needle)
+            || Has(npc.Disposition, needle) || Has(npc.Summary, needle))
+        {
+            return true;
+        }
+
+        if (npc.Contacts.Any(contact => Has(contact.Name, needle) || Has(contact.Role, needle)))
+        {
+            return true;
+        }
+
+        return npc.Knows.Concat(npc.Detail).Concat(npc.Hooks)
+            .Any(block => Has(block.Heading, needle) || Has(block.Body, needle));
+    }
+
+    // Against the words on the card rather than the raw text, so "four human bandits" is found in
+    // "four [[bandit|human bandits]]".
+    private static bool Has(string haystack, string needle) =>
+        LinkMarkup.Plain(haystack).Contains(needle, StringComparison.OrdinalIgnoreCase);
+}

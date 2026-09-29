@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DungeonTable.Web</RootNamespace>
+    <!-- The Web host is the only publishable project. -->
+    <IsPublishable>true</IsPublishable>
+    <!-- The app's version: a release tags this commit vX.Y.Z to match, and the release workflow
+         refuses a tag that does not. -->
+    <Version>1.0.0</Version>
+    <!-- Local non-docker dev supplies Auth:Passphrase through `dotnet user-secrets`, which needs this
+         id to have somewhere outside the repo to put it. Production still
+         passes it as the Auth__Passphrase environment variable. -->
+    <UserSecretsId>dungeontable-web</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DungeonTable.Tests" />
+  </ItemGroup>
+
+  <!-- The Web host is the sole composition root; it references only Infrastructure and
+       pulls Application + Core in transitively. -->
+  <ItemGroup>
+    <ProjectReference Include="../DungeonTable.Infrastructure/DungeonTable.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- The Web SDK adds Microsoft.AspNetCore.App.Internal.Assets (blazor.web.js and the framework's
+       other scripts) as an implicit package, at the version the installed SDK bundles. Left to that,
+       every newer SDK writes a different packages.lock.json, and the Dockerfile's locked restore, on
+       the SDK in global.json, then refuses the working tree with NU1004. Pinned to what that SDK
+       bundles, the lock files come out the same on any .NET 10 SDK. It is the one version outside
+       Directory.Packages.props: an Update there runs before the SDK defines the item, and does
+       nothing. Bump it with global.json. -->
+  <ItemGroup>
+    <KnownAspNetCorePack Update="Microsoft.AspNetCore.App.Internal.Assets" AspNetCorePackVersion="10.0.10" />
+  </ItemGroup>
+
+</Project>

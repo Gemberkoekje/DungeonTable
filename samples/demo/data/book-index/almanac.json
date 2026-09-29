@@ -1,0 +1,48 @@
+{
+  "book": "almanac",
+  "title": "A Millbrook Almanac",
+  "source": "",
+  "isAdventure": true,
+  "entries": [
+    {
+      "id": "millbrook",
+      "kind": "place",
+      "name": "Millbrook",
+      "description": "A village of forty households where the drovers' road fords the Mill Brook.",
+      "page": 3
+    },
+    {
+      "id": "the-old-mill",
+      "kind": "place",
+      "name": "The Old Mill",
+      "description": "The Brask family's watermill on the brook, the oldest building in the village after the chapel.",
+      "page": 5
+    },
+    {
+      "id": "millbrook-chapel",
+      "kind": "place",
+      "name": "Millbrook Chapel",
+      "description": "A squat stone chapel with a square bell tower. Its bell was cast in the undercroft beneath it.",
+      "page": 6
+    },
+    {
+      "id": "wenna-brask",
+      "kind": "person",
+      "name": "Wenna Brask",
+      "description": "The miller, widowed young, who runs the mill with her son.",
+      "page": 5
+    },
+    {
+      "id": "the-bell-founders",
+      "kind": "lore",
+      "name": "The Bell-Founders",
+      "description": "The guild that cast Millbrook's bell in the undercroft and buried its dead in a crypt beneath the chapel.",
+      "page": 9
+    }
+  ],
+  "links": [
+    { "a": "millbrook-chapel", "rel": "located-in", "b": "millbrook" },
+    { "a": "wenna-brask", "rel": "runs", "b": "the-old-mill" },
+    { "a": "the-bell-founders", "rel": "related", "b": "millbrook-chapel", "note": "They built it, and cast its bell." }
+  ]
+}

@@ -1,0 +1,632 @@
+@inherits DmTabBase
+@implements IDisposable
+@inject BattleState Fight
+@inject IPartyRoster PartyRoster
+@inject IAllyRoster AllyRoster
+@inject IJSRuntime JS
+@*
+    The DM screen's Battle tab: the initiative order at a glance, and the hit points that change on
+    every round.
+
+    Everything here drives BattleState, which already owns the rules (numbering, clamping, the turn
+    order that skips downed creatures). This file is the table side of it: nothing demands a roll,
+    the list never re-sorts under the cursor, and the current turn is readable from across the table.
+
+    Nothing here reaches the player circuit: the projector keeps showing the map, and the fight itself
+    happens in miniatures and physical dice on the table.
+*@
+
+<div class="battle-tab">
+    <header class="battle-head">
+        <h2>
+            Battle
+            @if (Snapshot.IsActive && Snapshot.AreaTitle.Length > 0)
+            {
+                <span class="battle-where">&middot; @Snapshot.AreaTitle</span>
+            }
+        </h2>
+
+        <div class="battle-controls">
+            @if (Snapshot.IsActive)
+            {
+                <span class="battle-round" title="The current round">Round @Snapshot.Round</span>
+                <button type="button" class="primary" title="Whose turn it is moves down the order (n)"
+                        disabled="@(Snapshot.Entries.Count == 0)" @onclick="Fight.NextTurn">&#x25B8; Next</button>
+                <button type="button" title="Step the turn marker back (p)"
+                        disabled="@(Snapshot.Entries.Count == 0)" @onclick="Fight.PreviousTurn">&#x25C2; Prev</button>
+                <button type="button" title="Roll d20 + DEX for every monster row at once (r) — always overwritable"
+                        disabled="@(MonsterRows == 0)" @onclick="Fight.RollAllMonsterInitiative">&#x2684; Roll monsters</button>
+                <button type="button" title="Order the list by initiative, highest first"
+                        disabled="@(Snapshot.Entries.Count < 2)" @onclick="Fight.Sort">Sort</button>
+                <button type="button" class="danger" title="Clear the initiative list and all combatant state"
+                        @onclick="() => confirmEnd = true">End battle</button>
+            }
+            else
+            {
+                <button type="button" class="primary" disabled="@(Workspace.PanelNode.Length == 0)"
+                        title="Start a fight in the area the Info tab is showing, seeding the saved party"
+                        @onclick="StartHere">Start battle in @Workspace.PanelTitle</button>
+            }
+        </div>
+    </header>
+
+    @if (confirmEnd)
+    {
+        <div class="battle-confirm" role="alertdialog" aria-label="End the battle">
+            <p>End the battle? This clears the initiative list and all combatant state. There is no undo.</p>
+            <button type="button" class="danger" @onclick="EndBattle">End battle</button>
+            <button type="button" @onclick="() => confirmEnd = false">Keep playing</button>
+        </div>
+    }
+
+    @if (confirmReplace)
+    {
+        <div class="battle-confirm" role="alertdialog" aria-label="Replace the running battle">
+            <p>
+                A battle is already running in <strong>@RunningIn</strong>. Starting one in
+                <strong>@Workspace.PanelTitle</strong> ends it &mdash; the initiative order and all
+                combatant state are lost.
+            </p>
+            <button type="button" class="danger" @onclick="ReplaceBattle">Start the new battle</button>
+            <button type="button" @onclick="() => confirmReplace = false">Keep the current battle</button>
+        </div>
+    }
+
+    @* Two columns while a combatant is open, one when it is not: the initiative order is the tab's
+       reason to exist and keeps its width until the DM asks for a creature's detail. *@
+    <div class="battle-layout @(Open is null ? string.Empty : "with-detail")">
+        <div class="battle-main">
+        @if (!Snapshot.IsActive)
+        {
+            <p class="muted battle-empty">
+                No battle is running. Start one here, or add creatures from the <strong>Encounter</strong>
+                strip on the Info tab &mdash; that opens a fight in their area and seeds the party.
+            </p>
+        }
+        else
+        {
+            <ol class="battle-order @(dragging ? "is-dragging" : string.Empty)">
+                @for (int i = 0; i < Snapshot.Entries.Count; i++)
+                {
+                    int index = i;
+                    InitiativeEntry row = Snapshot.Entries[i];
+                    bool current = Snapshot.Started && index == Snapshot.TurnIndex;
+                    <li @key="row.Id" class="battle-entry kind-@row.Kind.ToString().ToLowerInvariant() @(current ? "is-current" : string.Empty)"
+                        @ondragover:preventDefault="true"
+                        @ondrop="() => Drop(index)">
+                        <div class="battle-entry-head">
+                            @* Drag settles ties the way the table played them; the arrow keys do the same
+                               thing for a keyboard, because a drag handle alone is unreachable without a mouse. *@
+                            <button type="button" class="battle-grip" draggable="true"
+                                    title="Drag, or use the arrow keys, to move this row"
+                                    aria-label="@($"Move {row.Label} in the order")"
+                                    @ondragstart="() => StartDrag(index)" @ondragend="() => dragging = false"
+                                    @onkeydown="e => OnGripKey(e, row.Id, index)">&#x22EE;&#x22EE;</button>
+
+                            <span class="turn-marker" aria-hidden="true">@(current ? "▸" : string.Empty)</span>
+
+                            <input type="number" class="battle-init" id="@InitId(row.Id)" min="-20" max="99"
+                                   placeholder="—" aria-label="@($"Initiative for {row.Label}")"
+                                   title="Type what was rolled; Enter moves to the next blank row"
+                                   value="@InitValue(row)"
+                                   @oninput="e => Typing(row.Id, e.Value)"
+                                   @onchange="e => Commit(row.Id, Text(e.Value))"
+                                   @onkeydown="e => OnInitKey(e, row.Id, index)" />
+
+                            <span class="battle-label">@row.Label</span>
+
+                            @if (row.MemberIds.Count > 1)
+                            {
+                                <span class="battle-count">&times;@row.MemberIds.Count</span>
+                                <button type="button" class="battle-collapse" aria-expanded="@Shows(row)"
+                                        title="@(IsCollapsed(row) ? "Show each creature's hit points" : "Fold the group up")"
+                                        @onclick="() => ToggleCollapsed(row.Id)">@(IsCollapsed(row) ? "▸" : "▾")</button>
+                            }
+
+                            <button type="button" class="battle-roll" title="Roll d20 + @Signed(row.InitiativeModifier) for this row"
+                                    @onclick="() => Fight.RollInitiative(row.Id)">&#x2684;</button>
+
+                            @if (row.MemberIds.Count > 1)
+                            {
+                                <button type="button" class="battle-split" title="Give each member its own initiative"
+                                        @onclick="() => Fight.SplitGroup(row.Id)">Split</button>
+                            }
+                            else if (Fight.CanMerge(row.Id))
+                            {
+                                <button type="button" class="battle-split" title="Put every one of these back on a single initiative"
+                                        @onclick="() => Fight.MergeGroup(row.Id)">Merge</button>
+                            }
+
+                            <button type="button" class="battle-remove danger" title="Remove this row from the fight"
+                                    @onclick="() => Fight.RemoveEntry(row.Id)">&times;</button>
+                        </div>
+
+                        @if (!IsCollapsed(row))
+                        {
+                            <ul class="battle-members">
+                                @foreach (Combatant member in Members(row))
+                                {
+                                    <li @key="member.Id" class="battle-member">
+                                        <CombatantRow Who="member" OnOpen="OpenDetail"
+                                                      Selected="@string.Equals(openId, member.Id, StringComparison.Ordinal)" />
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="battle-folded">@FoldedSummary(row)</p>
+                        }
+                    </li>
+                }
+            </ol>
+        }
+
+        <div class="battle-add">
+            <div class="battle-add-group">
+                <label>
+                    Add player
+                    @* Options carry the roster index, not the name: two characters may share a name. *@
+                    <select @bind="pickedPlayer">
+                        <option value="">&mdash; from the party &mdash;</option>
+                        @for (int i = 0; i < party.Count; i++)
+                        {
+                            <option value="@i">@party[i].Name</option>
+                        }
+                    </select>
+                </label>
+                <button type="button" disabled="@(pickedPlayer.Length == 0)" @onclick="AddPlayer">Add</button>
+                <button type="button" class="link-btn" @onclick="() => editing = RosterKind.Party">Edit party</button>
+            </div>
+
+            <div class="battle-add-group">
+                <label>
+                    Add ally
+                    <select @bind="pickedAlly">
+                        <option value="">&mdash; from the roster &mdash;</option>
+                        @for (int i = 0; i < allies.Count; i++)
+                        {
+                            <option value="@i">@allies[i].Name</option>
+                        }
+                    </select>
+                </label>
+                <button type="button" disabled="@(pickedAlly.Length == 0)" @onclick="AddAlly">Add</button>
+                <button type="button" class="link-btn" @onclick="() => editing = RosterKind.Allies">Edit allies</button>
+            </div>
+
+            <div class="battle-add-group">
+                <label>
+                    One-off
+                    <input placeholder="name" aria-label="One-off combatant name" @bind="oneOffName" @bind:event="oninput" />
+                </label>
+                <select @bind="oneOffKind" aria-label="What the one-off combatant is">
+                    <option value="@CombatantKind.Ally">ally</option>
+                    <option value="@CombatantKind.Player">player</option>
+                    <option value="@CombatantKind.Monster">monster</option>
+                </select>
+                <button type="button" disabled="@(oneOffName.Trim().Length == 0)" @onclick="AddOneOff">Add</button>
+            </div>
+        </div>
+        </div>
+
+        @if (Open is not null)
+        {
+            <CombatantDetail @key="Open.Id" Who="Open" AreaNodeId="@Snapshot.AreaNodeId"
+                             AreaTitle="@Snapshot.AreaTitle" OnClose="CloseDetail" />
+        }
+    </div>
+
+    @if (editing == RosterKind.Party)
+    {
+        <PartyEditor OnClose="CloseEditor" OnSaved="LoadRosters" />
+    }
+    else if (editing == RosterKind.Allies)
+    {
+        <AllyEditor OnClose="CloseEditor" OnSaved="LoadRosters" />
+    }
+</div>
+
+@code {
+    // Which roster editor is open, if either.
+    private enum RosterKind
+    {
+        None,
+        Party,
+        Allies,
+    }
+
+    private Battle Snapshot = new Battle();
+
+    private IReadOnlyList<PartyMember> party = Array.Empty<PartyMember>();
+    private IReadOnlyList<AllyMember> allies = Array.Empty<AllyMember>();
+
+    // What the DM has typed into an initiative box but not committed yet. Rendering the box from
+    // here rather than from the snapshot is what keeps a half-typed "1" from being wiped when some
+    // unrelated damage elsewhere re-renders the list.
+    private readonly Dictionary<string, string> typedInit = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    // Group rows the DM has folded up. Groups start expanded: hit points are the reason the members
+    // are listed at all, and folding is the exception (a group already dealt with).
+    private readonly HashSet<string> collapsed = new HashSet<string>(StringComparer.Ordinal);
+
+    // The combatant whose detail pane is open, if any. Only the id is kept: the pane must render from
+    // the current snapshot, or damage applied on the row behind it would not show up in it.
+    private string openId = string.Empty;
+
+    private RosterKind editing = RosterKind.None;
+    private string pickedPlayer = string.Empty;
+    private string pickedAlly = string.Empty;
+    private string oneOffName = string.Empty;
+    private CombatantKind oneOffKind = CombatantKind.Ally;
+    private bool confirmEnd;
+    private bool confirmReplace;
+
+    private int dragFrom = -1;
+    private bool dragging;
+
+    // Set when a fresh battle wants the first initiative box focused, served from OnAfterRenderAsync
+    // once that box actually exists.
+    private bool focusFirst;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Fight.Changed += OnBattleChanged;
+        Snapshot = Fight.Snapshot();
+        LoadRosters();
+    }
+
+    /// <summary>Unsubscribes from the battle as well as the shared DM state.</summary>
+    /// <param name="disposing">True when called from <see cref="IDisposable.Dispose"/>.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Fight.Changed -= OnBattleChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <summary>
+    /// Runs the Battle tab's single-letter shortcuts, dispatched by the shell so they only fire while
+    /// this tab is the one on show (see <c>DmView.DmKey</c>). They do nothing without a fight.
+    /// </summary>
+    /// <param name="key">
+    /// "n" (next turn), "p" (previous turn), "r" (roll monster initiative) or "esc" (close the
+    /// combatant detail pane).
+    /// </param>
+    public void HandleKey(string key)
+    {
+        // Esc is not about the fight: it closes the pane, and must work while the DM is typing (which
+        // is exactly when a pane is in the way), so it is handled before the no-fight guard.
+        // It also has to ask for its own re-render: n/p/r change the fight and come back through
+        // BattleState.Changed, but closing the pane touches nothing the shell knows about, and the
+        // shell's own StateHasChanged does not reach a child whose parameters have not changed.
+        if (string.Equals(key, "esc", StringComparison.Ordinal))
+        {
+            CloseDetail();
+            StateHasChanged();
+            return;
+        }
+
+        if (!Fight.IsActive)
+        {
+            return;
+        }
+
+        if (string.Equals(key, "n", StringComparison.Ordinal))
+        {
+            Fight.NextTurn();
+        }
+        else if (string.Equals(key, "p", StringComparison.Ordinal))
+        {
+            Fight.PreviousTurn();
+        }
+        else if (string.Equals(key, "r", StringComparison.Ordinal))
+        {
+            Fight.RollAllMonsterInitiative();
+        }
+    }
+
+    /// <summary>
+    /// Puts the cursor in the first initiative box once a freshly started fight has rendered one, so
+    /// the DM can start typing what the players call out without reaching for the mouse.
+    /// </summary>
+    /// <param name="firstRender">True on the tab's very first render.</param>
+    /// <returns>A task that completes once the focus request has run.</returns>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focusFirst && Snapshot.Entries.Count > 0)
+        {
+            focusFirst = false;
+            await Focus(InitId(Snapshot.Entries[0].Id));
+        }
+    }
+
+    private void OnBattleChanged() => InvokeAsync(() =>
+    {
+        Snapshot = Fight.Snapshot();
+        StateHasChanged();
+    });
+
+    private string RunningIn => Snapshot.AreaTitle.Length > 0 ? Snapshot.AreaTitle : "another area";
+
+    private int MonsterRows => Snapshot.Entries.Count(entry => entry.Kind == CombatantKind.Monster);
+
+    // The open combatant, read fresh from the snapshot every render so the pane shows current hit
+    // points. Null closes the pane by itself when the creature is removed or the fight ends, which is
+    // why nothing has to remember to.
+    private Combatant Open => openId.Length == 0
+        ? null
+        : Snapshot.Combatants.FirstOrDefault(combatant => string.Equals(combatant.Id, openId, StringComparison.Ordinal));
+
+    private void OpenDetail(string combatantId) =>
+        openId = string.Equals(openId, combatantId, StringComparison.Ordinal) ? string.Empty : combatantId;
+
+    private void CloseDetail() => openId = string.Empty;
+
+    private void LoadRosters()
+    {
+        var savedParty = PartyRoster.GetParty();
+        party = savedParty.IsValid ? savedParty.Value.Members : Array.Empty<PartyMember>();
+
+        var savedAllies = AllyRoster.GetAllies();
+        allies = savedAllies.IsValid ? savedAllies.Value.Members : Array.Empty<AllyMember>();
+    }
+
+    private void CloseEditor() => editing = RosterKind.None;
+
+    // ---- Initiative entry -------------------------------------------------------------------
+
+    private static string InitId(string entryId) => "init-" + entryId;
+
+    // The box shows what is being typed while it is being typed, and the committed value otherwise.
+    private string InitValue(InitiativeEntry row)
+    {
+        if (typedInit.TryGetValue(row.Id, out string typed))
+        {
+            return typed;
+        }
+
+        return row.HasInitiative ? row.Initiative.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
+    }
+
+    private void Typing(string entryId, object value) => typedInit[entryId] = Text(value);
+
+    // Hand the typed value to the service and drop the local copy, so the box goes back to mirroring
+    // the fight (a roll or a split can change it from elsewhere).
+    private void Commit(string entryId, string value)
+    {
+        typedInit.Remove(entryId);
+
+        if (value.Trim().Length == 0)
+        {
+            Fight.ClearInitiative(entryId);
+            return;
+        }
+
+        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int rolled))
+        {
+            Fight.SetInitiative(entryId, rolled);
+        }
+    }
+
+    // Enter commits and jumps to the next row still missing an initiative, so four numbers go in
+    // without touching the mouse. Only when none are left blank does the list re-sort — sorting
+    // mid-entry would yank rows out from under the DM.
+    // (Tab walks the same column, handled in dt-battle.js: preventing its default needs JS.)
+    private async Task OnInitKey(KeyboardEventArgs e, string entryId, int index)
+    {
+        if (!string.Equals(e.Key, "Enter", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Commit(entryId, typedInit.TryGetValue(entryId, out string typed) ? typed : InitValue(Row(entryId)));
+
+        Battle after = Fight.Snapshot();
+        string next = NextBlank(after, index);
+        if (next.Length == 0)
+        {
+            Fight.Sort();
+            return;
+        }
+
+        await Focus(InitId(next));
+    }
+
+    // The next row with no initiative yet, searched forward from the one just filled and wrapping
+    // once, so filling them out of order still walks to whatever is left.
+    private static string NextBlank(Battle snapshot, int from)
+    {
+        for (int step = 1; step <= snapshot.Entries.Count; step++)
+        {
+            InitiativeEntry candidate = snapshot.Entries[(from + step) % snapshot.Entries.Count];
+            if (!candidate.HasInitiative)
+            {
+                return candidate.Id;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private InitiativeEntry Row(string entryId) =>
+        Snapshot.Entries.FirstOrDefault(entry => string.Equals(entry.Id, entryId, StringComparison.Ordinal)) ?? new InitiativeEntry();
+
+    private async Task Focus(string elementId)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dtBattle.focus", elementId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit dropped; there is nothing left to focus.
+        }
+        catch (OperationCanceledException)
+        {
+            // The render was cancelled during teardown.
+        }
+    }
+
+    // ---- Reordering -------------------------------------------------------------------------
+
+    private void StartDrag(int index)
+    {
+        dragFrom = index;
+        dragging = true;
+    }
+
+    private void Drop(int index)
+    {
+        dragging = false;
+        if (dragFrom >= 0 && dragFrom < Snapshot.Entries.Count)
+        {
+            Fight.MoveEntry(Snapshot.Entries[dragFrom].Id, index);
+        }
+
+        dragFrom = -1;
+    }
+
+    // The keyboard's answer to the drag handle. Plain arrows are safe here: the handle is a button,
+    // so nothing is being typed into it.
+    private void OnGripKey(KeyboardEventArgs e, string entryId, int index)
+    {
+        if (string.Equals(e.Key, "ArrowUp", StringComparison.Ordinal))
+        {
+            Fight.MoveEntry(entryId, index - 1);
+        }
+        else if (string.Equals(e.Key, "ArrowDown", StringComparison.Ordinal))
+        {
+            Fight.MoveEntry(entryId, index + 1);
+        }
+    }
+
+    // ---- Groups -----------------------------------------------------------------------------
+
+    private bool IsCollapsed(InitiativeEntry row) => collapsed.Contains(row.Id);
+
+    private string Shows(InitiativeEntry row) => IsCollapsed(row) ? "false" : "true";
+
+    private void ToggleCollapsed(string entryId)
+    {
+        if (!collapsed.Remove(entryId))
+        {
+            collapsed.Add(entryId);
+        }
+    }
+
+    // What a folded group still has to say: how many of it are still standing.
+    private string FoldedSummary(InitiativeEntry row)
+    {
+        List<Combatant> members = Members(row).ToList();
+        int up = members.Count(member => !member.Down);
+        return $"{up} of {members.Count} still up";
+    }
+
+    // ---- Starting, ending, adding -----------------------------------------------------------
+
+    // Starting a fight over a running one is never silent: it costs the DM an evening's initiative
+    // order and there is no undo, so it goes through the same confirm the encounter strip uses.
+    private void StartHere()
+    {
+        if (Fight.IsActive)
+        {
+            confirmReplace = true;
+            return;
+        }
+
+        Fight.StartBattle(Workspace.PanelNode, Workspace.PanelTitle);
+        focusFirst = true;
+    }
+
+    private void ReplaceBattle()
+    {
+        confirmReplace = false;
+        Fight.StartBattle(Workspace.PanelNode, Workspace.PanelTitle);
+        focusFirst = true;
+    }
+
+    private void EndBattle()
+    {
+        confirmEnd = false;
+        typedInit.Clear();
+        collapsed.Clear();
+        CloseDetail();
+        Fight.EndBattle();
+    }
+
+    private void AddPlayer()
+    {
+        PartyMember member = At(party, pickedPlayer);
+        if (member is null)
+        {
+            return;
+        }
+
+        Fight.AddCombatant(new CombatantSeed
+        {
+            Kind = CombatantKind.Player,
+            Name = member.Name,
+            MaxHp = member.MaxHp,
+            ArmourClass = member.ArmourClass,
+            PassivePerception = member.PassivePerception,
+            InitiativeModifier = member.InitiativeModifier,
+        });
+
+        pickedPlayer = string.Empty;
+    }
+
+    private void AddAlly()
+    {
+        AllyMember member = At(allies, pickedAlly);
+        if (member is null)
+        {
+            return;
+        }
+
+        Fight.AddCombatant(new CombatantSeed
+        {
+            Kind = CombatantKind.Ally,
+            Name = member.Name,
+            StatBlockNodeId = member.StatBlockNodeId,
+            MaxHp = member.MaxHp,
+            ArmourClass = member.ArmourClass,
+            PassivePerception = member.PassivePerception,
+            InitiativeModifier = member.InitiativeModifier,
+        });
+
+        pickedAlly = string.Empty;
+    }
+
+    // A guest character or a reskinned monster joins without ever landing in a roster: the rosters
+    // are for the ones worth remembering, not a mandatory step before a creature can fight.
+    private void AddOneOff()
+    {
+        Fight.AddCombatant(new CombatantSeed { Kind = oneOffKind, Name = oneOffName.Trim() });
+        oneOffName = string.Empty;
+    }
+
+    // The roster row a "&lt;option value='3'&gt;" picker is pointing at, or null when nothing is picked.
+    private static T At<T>(IReadOnlyList<T> roster, string picked)
+        where T : class =>
+        int.TryParse(picked, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int index)
+            && index >= 0
+            && index < roster.Count
+                ? roster[index]
+                : null;
+
+    private IEnumerable<Combatant> Members(InitiativeEntry entry) =>
+        entry.MemberIds
+            .Select(id => Snapshot.Combatants.FirstOrDefault(c => string.Equals(c.Id, id, StringComparison.Ordinal)))
+            .Where(combatant => combatant is not null);
+
+    private static string Signed(int modifier) =>
+        modifier < 0
+            ? modifier.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : "+" + modifier.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Text(object value) => value as string ?? string.Empty;
+}

@@ -1,0 +1,29 @@
+{
+  "id": "village-rumours",
+  "title": "Village Rumours",
+  "cardNoun": "rumour",
+  "drawRule": "kept",
+  "usage": "Draw one whenever the party buys a round at the alehouse or gossips with the villagers. They keep what they hear, true or not.",
+  "cards": [
+    {
+      "id": "the-millers-debt",
+      "name": "The Miller's Debt",
+      "body": "The mill owes money in town, they say, and young Tam ran off rather than work it off."
+    },
+    {
+      "id": "lights-in-the-chapel",
+      "name": "Lights in the Chapel",
+      "body": "Old Hobb swears he has seen a candle moving in the chapel after midnight, twice this tenday, when nobody should be there."
+    },
+    {
+      "id": "the-statue-that-turned",
+      "name": "The Statue That Turned",
+      "body": "A girl who crept down the chapel stair on a dare swears one of the statues below turned its head to watch her go."
+    },
+    {
+      "id": "the-brothers-dice",
+      "name": "The Brother's Dice",
+      "body": "Brother Aldous has been seen at the alehouse dice table, and he has not been winning."
+    }
+  ]
+}

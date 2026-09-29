@@ -1,0 +1,13 @@
+{
+  "members": [
+    {
+      "name": "Scrap",
+      "owner": "Follows Hild",
+      "statBlockNodeId": "data_statblocks_monsters_goblin",
+      "armourClass": 15,
+      "maxHp": 7,
+      "passivePerception": 9,
+      "initiativeModifier": 2
+    }
+  ]
+}

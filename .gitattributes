@@ -1,0 +1,15 @@
+# The repository stores text with LF line endings, whatever a contributor's core.autocrlf says.
+* text=auto
+
+# Binary: never converted, never diffed as text. A Dungeon Scrawl map (.ds) is a zip archive.
+*.ds binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary

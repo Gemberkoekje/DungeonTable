@@ -1,0 +1,273 @@
+@* Full stat-block rendering for one monster (DungeonTable.Core.Stats.StatBlock): the shared
+   component behind both the reference drawer's monster card and the Battle tab's combatant detail
+   pane, so the two surfaces always agree on layout. Every entry shows its own full text, as the book
+   prints it: the parsed attack drops what it has no field for (a target such as "one prone
+   creature", a thrown weapon's second damage), so it is shown only for an entry written without
+   text. The Battle tab lifts the parsed numbers out into its quick attack lines instead. *@
+
+<div class="stat-block">
+    <p class="stat-subline">@Subtitle</p>
+
+    <dl class="stat-topline">
+        <dt>Armor Class</dt>
+        <dd>@Block.ArmourClass @(string.IsNullOrWhiteSpace(Block.ArmourNote) ? string.Empty : $"({Block.ArmourNote})")</dd>
+        <dt>Hit Points</dt>
+        <dd>@Block.AverageHitPoints @(string.IsNullOrWhiteSpace(Block.HitDice) ? string.Empty : $"({Block.HitDice})")</dd>
+        <dt>Speed</dt>
+        <dd>@SpeedLine(Block.Speeds)</dd>
+    </dl>
+
+    <div class="stat-abilities">
+        @foreach (string abilityCode in StatBlockMath.AbilityCodes)
+        {
+            <div class="stat-ability">
+                <span class="stat-ability-code">@abilityCode.ToUpperInvariant()</span>
+                <span class="stat-ability-score">@StatBlockMath.ScoreFor(Block.Abilities, abilityCode)</span>
+                <span class="stat-ability-mod">@StatBlockMath.FormatModifier(StatBlockMath.AbilityModifier(StatBlockMath.ScoreFor(Block.Abilities, abilityCode)))</span>
+            </div>
+        }
+    </div>
+
+    <div class="stat-saves">
+        @foreach (string abilityCode in StatBlockMath.AbilityCodes)
+        {
+            <span class="stat-save @(StatBlockMath.IsProficientSave(Block, abilityCode) ? "proficient" : string.Empty)">
+                @abilityCode @StatBlockMath.FormatModifier(StatBlockMath.SaveFor(Block, abilityCode))
+            </span>
+        }
+    </div>
+
+    @if (Block.Skills.Count > 0)
+    {
+        <p class="stat-line"><strong>Skills</strong> @string.Join(", ", Block.Skills.Select(skill => $"{skill.Skill} {StatBlockMath.FormatModifier(skill.Bonus)}"))</p>
+    }
+
+    @if (Block.DamageVulnerabilities.Count > 0)
+    {
+        <p class="stat-line"><strong>Damage Vulnerabilities</strong> @string.Join(", ", Block.DamageVulnerabilities)</p>
+    }
+
+    @if (Block.DamageResistances.Count > 0)
+    {
+        <p class="stat-line"><strong>Damage Resistances</strong> @string.Join(", ", Block.DamageResistances)</p>
+    }
+
+    @if (Block.DamageImmunities.Count > 0)
+    {
+        <p class="stat-line"><strong>Damage Immunities</strong> @string.Join(", ", Block.DamageImmunities)</p>
+    }
+
+    @if (Block.ConditionImmunities.Count > 0)
+    {
+        <p class="stat-line"><strong>Condition Immunities</strong> @string.Join(", ", Block.ConditionImmunities)</p>
+    }
+
+    <p class="stat-line"><strong>Senses</strong> @SensesLine()</p>
+
+    <p class="stat-line"><strong>Languages</strong> @(Block.Languages.Count > 0 ? string.Join(", ", Block.Languages) : "&mdash;")</p>
+
+    <p class="stat-line"><strong>Challenge</strong> @Block.ChallengeRating (@Block.Xp.ToString("N0") XP) &nbsp; <strong>Proficiency Bonus</strong> @StatBlockMath.FormatModifier(Block.ProficiencyBonus)</p>
+
+    @EntrySection("Traits", Block.Traits)
+    @EntrySection("Actions", Block.Actions)
+    @EntrySection("Bonus Actions", Block.BonusActions)
+    @EntrySection("Reactions", Block.Reactions)
+
+    @if (Block.LegendaryActions.Count > 0)
+    {
+        <h4 class="stat-section">Legendary Actions</h4>
+        @if (Block.LegendaryActionsPerRound > 0)
+        {
+            <p class="stat-line muted">Can take @Block.LegendaryActionsPerRound legendary actions, choosing from the options below.</p>
+        }
+        @foreach (StatBlockEntry entry in Block.LegendaryActions)
+        {
+            @EntryBlock(entry)
+        }
+    }
+
+    @if (HasSpellcasting)
+    {
+        <h4 class="stat-section">Spellcasting</h4>
+        <p class="stat-line">
+            @(string.IsNullOrWhiteSpace(Block.Spellcasting.Note) ? "Spellcasting" : Block.Spellcasting.Note)
+            @if (!string.IsNullOrWhiteSpace(Block.Spellcasting.Ability))
+            {
+                <text> (@Block.Spellcasting.Ability@(Block.Spellcasting.SaveDc > 0 ? $", save DC {Block.Spellcasting.SaveDc}" : string.Empty)@(Block.Spellcasting.AttackBonus != 0 ? $", {StatBlockMath.FormatModifier(Block.Spellcasting.AttackBonus)} to hit" : string.Empty))</text>
+            }
+        </p>
+
+        @if (Block.Spellcasting.Slots.Count > 0)
+        {
+            <p class="stat-line muted">Slots: @string.Join(" &middot; ", Block.Spellcasting.Slots.Select(slot => $"L{slot.Level} &times;{slot.Total}"))</p>
+        }
+
+        @foreach (var levelGroup in Block.Spellcasting.Spells.GroupBy(spell => spell.Level).OrderBy(group => group.Key))
+        {
+            <p class="stat-line">
+                <strong>@(levelGroup.Key == 0 ? "Cantrips" : $"Level {levelGroup.Key}")</strong>
+                @for (int i = 0; i < levelGroup.Count(); i++)
+                {
+                    SpellReference spell = levelGroup.ElementAt(i);
+                    @if (i > 0)
+                    {
+                        <text>, </text>
+                    }
+                    @if (spell.NodeId.Length > 0 && OnOpenReference.HasDelegate)
+                    {
+                        <button type="button" class="ref-link" @onclick="() => OnOpenReference.InvokeAsync(spell.NodeId)">@spell.Name</button>
+                    }
+                    else
+                    {
+                        <span>@spell.Name</span>
+                    }
+                    @if (!string.IsNullOrEmpty(spell.PerDay))
+                    {
+                        <span class="muted"> (@spell.PerDay)</span>
+                    }
+                }
+            </p>
+        }
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Citation))
+    {
+        <p class="reference-citation">@Citation</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(Block.Source))
+    {
+        <p class="reference-citation">@Block.Source @Block.SourceLocation</p>
+    }
+</div>
+
+@code {
+    /// <summary>The stat block to render.</summary>
+    [Parameter]
+    public StatBlock Block { get; set; } = new StatBlock();
+
+    /// <summary>
+    /// Where the block is printed, by the book's title ("SRD 5.1 p.266"), as the cards and the encounter
+    /// strip cite it. When blank, the block's own source file and page are shown instead.
+    /// </summary>
+    [Parameter]
+    public string Citation { get; set; } = string.Empty;
+
+    /// <summary>Raised with a node id when the DM clicks a spell link in the spellcasting list.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    private string Subtitle
+    {
+        get
+        {
+            string size = string.IsNullOrWhiteSpace(Block.Size) ? string.Empty : Block.Size;
+            string type = string.IsNullOrWhiteSpace(Block.CreatureType) ? string.Empty : Block.CreatureType;
+            string alignment = string.IsNullOrWhiteSpace(Block.Alignment) ? string.Empty : Block.Alignment;
+            string headline = string.Join(" ", new[] { size, type }.Where(part => part.Length > 0));
+            return alignment.Length > 0 ? $"{headline}, {alignment}" : headline;
+        }
+    }
+
+    private bool HasSpellcasting =>
+        !string.IsNullOrWhiteSpace(Block.Spellcasting.Ability) || Block.Spellcasting.Spells.Count > 0;
+
+    private static string SpeedLine(IReadOnlyList<Speed> speeds)
+    {
+        if (speeds.Count == 0)
+        {
+            return "&mdash;";
+        }
+
+        return string.Join(", ", speeds.Select(speed =>
+        {
+            string label = speed.Kind == SpeedKind.Walk ? string.Empty : $"{speed.Kind.ToString().ToLowerInvariant()} ";
+            string note = string.IsNullOrWhiteSpace(speed.Note) ? string.Empty : $" ({speed.Note})";
+            return $"{label}{speed.Feet} ft.{note}";
+        }));
+    }
+
+    private string SensesLine()
+    {
+        string senses = Block.Senses.Count > 0 ? string.Join(", ", Block.Senses) + ", " : string.Empty;
+        return $"{senses}passive Perception {Block.PassivePerception}";
+    }
+
+    // One section of named entries (Traits / Actions / Bonus Actions / Reactions), skipped entirely
+    // when the block has none — most monsters have no bonus actions or reactions at all.
+    private static RenderFragment EntrySection(string heading, IReadOnlyList<StatBlockEntry> entries) =>
+        __builder =>
+        {
+            if (entries.Count == 0)
+            {
+                return;
+            }
+
+            __builder.OpenElement(0, "h4");
+            __builder.AddAttribute(1, "class", "stat-section");
+            __builder.AddContent(2, heading);
+            __builder.CloseElement();
+
+            foreach (StatBlockEntry entry in entries)
+            {
+                __builder.AddContent(3, EntryBlock(entry));
+            }
+        };
+
+    // One trait/action entry: its name, then its full text. The space is written out: Razor drops the
+    // whitespace before a code block, and the name ran into the text ("Bite.+14 to hit").
+    private static RenderFragment EntryBlock(StatBlockEntry entry) =>
+        @<p class="stat-line">
+            @if (!string.IsNullOrWhiteSpace(entry.Name))
+            {
+                <strong>@entry.Name.</strong>@(" ")
+            }
+            @EntryText(entry)
+        </p>;
+
+    // The entry as the book prints it; the parsed attacks only for an entry written without its text
+    // (a block made by hand, field by field).
+    private static string EntryText(StatBlockEntry entry) =>
+        !string.IsNullOrWhiteSpace(entry.Text) ? entry.Text : string.Join(" ", entry.Attacks.Select(FormatAttack));
+
+    // "+4 to hit, reach 5 ft., one target. Hit: 11 (2d8 + 2) piercing damage plus 7 (2d6) poison damage."
+    private static string FormatAttack(AttackLine attack)
+    {
+        var parts = new List<string> { $"{StatBlockMath.FormatModifier(attack.ToHit)} to hit," };
+
+        if (attack.Reach > 0)
+        {
+            parts.Add($"reach {attack.Reach} ft.,");
+        }
+
+        if (attack.RangeNormal > 0)
+        {
+            string range = attack.RangeLong > 0 ? $"{attack.RangeNormal}/{attack.RangeLong} ft." : $"{attack.RangeNormal} ft.";
+            parts.Add($"range {range},");
+        }
+
+        parts.Add(attack.Targets == 1 ? "one target." : $"{attack.Targets} targets.");
+
+        var damage = new List<string>();
+        if (!string.IsNullOrWhiteSpace(attack.DamageDice))
+        {
+            damage.Add($"{attack.DamageAverage} ({attack.DamageDice}) {attack.DamageType}");
+        }
+
+        foreach (DamageRider rider in attack.ExtraDamage)
+        {
+            damage.Add($"plus {rider.DamageAverage} ({rider.DamageDice}) {rider.DamageType}");
+        }
+
+        if (damage.Count > 0)
+        {
+            parts.Add($"Hit: {string.Join(" ", damage)} damage.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(attack.OnHit))
+        {
+            parts.Add(attack.OnHit);
+        }
+
+        return string.Join(" ", parts);
+    }
+}

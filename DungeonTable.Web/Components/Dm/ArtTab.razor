@@ -1,0 +1,285 @@
+@inherits DmTabBase
+@inject IArtCatalogue Art
+@inject BattleState Fight
+@*
+    The DM screen's Art tab: pick a picture, push it onto the projector, and flip between the few
+    staged for this scene.
+
+    The shape follows one scene — the party meets something in the dark and the DM wants its
+    portrait on the beamer inside a second. So the tray is the fast path and the picker is the slow
+    one: prep before the fight, click during it. Clicking a picture SHOWS it, because a DM who
+    clicked a gargoyle wants the gargoyle on screen, not staged for a second click.
+
+    Everything here writes to SessionState, which the player view observes; this tab holds no state
+    of its own beyond the search box and the upload form.
+*@
+
+@* Resolved once per render: each of these walks the catalogue, and the markup reads them several
+   times over. *@
+@{
+    IReadOnlyList<ArtImage> tray = TrayImages();
+    IReadOnlyList<ArtImage> results = Results();
+    IReadOnlyList<ArtImage> suggested = SuggestedFromFight();
+}
+
+<div class="art-tab">
+    <header class="art-head">
+        <h2>Art</h2>
+
+        <div class="art-controls">
+            @if (Shown is not null)
+            {
+                <span class="art-showing @(Session.ShownArtVisible ? "live" : string.Empty)"
+                      title="What the projector is showing">
+                    <span class="see-dot" aria-hidden="true">&#x25CF;</span>
+                    @(Session.ShownArtVisible ? "Showing" : "Staged"): @Shown.Title
+                </span>
+
+                @if (Session.ShownArtVisible)
+                {
+                    <button type="button" class="primary" title="Take the picture off the projector; it stays staged"
+                            @onclick="Session.HideArt">Hide</button>
+                }
+                else
+                {
+                    <button type="button" class="primary" title="Put the staged picture back on the projector"
+                            @onclick="Session.ShowStagedArt">Show</button>
+                }
+            }
+            else
+            {
+                <span class="art-showing" title="What the projector is showing">
+                    <span class="see-dot" aria-hidden="true">&#x25CB;</span>
+                    Nothing staged
+                </span>
+            }
+
+            <span class="art-sizes" role="group" aria-label="Picture size">
+                @foreach ((ArtSize size, string label) in Sizes)
+                {
+                    ArtSize candidate = size;
+                    <button type="button" class="art-size @(Session.ShownArtSize == candidate ? "on" : string.Empty)"
+                            aria-pressed="@(Session.ShownArtSize == candidate ? "true" : "false")"
+                            title="@($"Draw the picture at {label.ToLowerInvariant()} size")"
+                            @onclick="() => Session.SetArtSize(candidate)">@label</button>
+                }
+            </span>
+        </div>
+    </header>
+
+    @* The tray: what this scene is prepared with. First, because it is what gets clicked mid-fight. *@
+    <section class="art-tray">
+        <div class="art-tray-head">
+            <h3>Tray</h3>
+            @if (tray.Count > 0)
+            {
+                <span class="muted">@tray.Count staged &mdash; n / p to flip</span>
+                <button type="button" title="Empty the tray; whatever is on the projector stays there"
+                        @onclick="Session.ClearTray">Clear tray</button>
+            }
+            @if (suggested.Count > 0)
+            {
+                <button type="button" class="primary"
+                        title="Stage a picture for every creature in the running fight that has one"
+                        @onclick="StageFromFight">Add from the fight (@suggested.Count)</button>
+            }
+        </div>
+
+        @if (tray.Count == 0)
+        {
+            <p class="muted">
+                Nothing staged yet. Find pictures below and add them here before the scene &mdash;
+                then one click, or <kbd>n</kbd> / <kbd>p</kbd>, puts each on the projector.
+            </p>
+        }
+        else
+        {
+            <ul class="art-grid">
+                @foreach (ArtImage image in tray)
+                {
+                    ArtImage candidate = image;
+                    <li class="@(IsShown(candidate) ? "on" : string.Empty)">
+                        <button type="button" class="art-card" title="@candidate.Subject"
+                                @onclick="() => Session.ShowArt(candidate.Id)">
+                            <img src="art/@candidate.File" alt="" loading="lazy" />
+                            <span class="art-card-title">@candidate.Title</span>
+                        </button>
+                        <button type="button" class="art-drop" title="Take it out of the tray"
+                                @onclick="() => Session.RemoveFromTray(candidate.Id)">&times;</button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="art-picker">
+        <div class="art-picker-head">
+            <h3>Catalogue</h3>
+            @* A literal "…": Blazor sets an attribute through setAttribute, which does no entity
+               decoding, so "&hellip;" here shows as its own source text. *@
+            <input type="search" placeholder="Search art by title, subject or tag…"
+                   aria-label="Search the art catalogue"
+                   @bind="query" @bind:event="oninput" />
+            <span class="muted">@results.Count of @Art.All().Count</span>
+        </div>
+
+        @if (results.Count == 0)
+        {
+            <p class="muted">Nothing matches &ldquo;@query&rdquo;.</p>
+        }
+        else
+        {
+            <ul class="art-grid">
+                @foreach (ArtImage image in results)
+                {
+                    ArtImage candidate = image;
+                    <li class="@(IsShown(candidate) ? "on" : string.Empty)">
+                        <button type="button" class="art-card" title="@candidate.Subject"
+                                @onclick="() => Session.ShowArt(candidate.Id)">
+                            <img src="art/@candidate.File" alt="" loading="lazy" />
+                            <span class="art-card-title">@candidate.Title</span>
+                        </button>
+                        @if (InTray(candidate))
+                        {
+                            <button type="button" class="art-drop" title="Take it out of the tray"
+                                    @onclick="() => Session.RemoveFromTray(candidate.Id)">&times;</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="art-stage" title="Stage it for this scene"
+                                    @onclick="() => Session.AddToTray(candidate.Id)">+</button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <ArtUpload />
+</div>
+
+@code {
+    // How many catalogue entries the picker shows at once. The Level 1 set is under a hundred, so
+    // this is really a guard for later levels: a grid of 400 thumbnails would stall the circuit.
+    private const int PickerLimit = 60;
+
+    private static readonly (ArtSize Size, string Label)[] Sizes =
+    {
+        (ArtSize.Small, "S"),
+        (ArtSize.Medium, "M"),
+        (ArtSize.Large, "L"),
+        (ArtSize.Full, "Full"),
+    };
+
+    private string query = string.Empty;
+
+    // Every DM panel stays mounted and is hidden with CSS (DmView), and Blazor skips a child whose
+    // parameters have not changed — this tab takes none. So switching to it does NOT re-render it,
+    // and without these subscriptions it would still be showing whatever it saw when the circuit
+    // started. DmTabBase covers the workspace and the session; the fight and the catalogue are the
+    // third and fourth things this tab reads, so it subscribes to those itself.
+    //
+    // The catalogue one is not theoretical: deleting an upload from the ArtUpload section below is
+    // handled inside that child component, so nothing would re-render the picker above it and it
+    // would keep showing a thumbnail whose file has just been deleted.
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Fight.Changed += OnSourceChanged;
+        Art.Changed += OnSourceChanged;
+    }
+
+    /// <summary>Unsubscribes from the fight and the catalogue as well as the shared DM state.</summary>
+    /// <param name="disposing">True when called from <see cref="IDisposable.Dispose"/>.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Fight.Changed -= OnSourceChanged;
+            Art.Changed -= OnSourceChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void OnSourceChanged() => InvokeAsync(StateHasChanged);
+
+    private ArtImage Shown
+    {
+        get
+        {
+            var result = Art.GetImage(Session.ShownArtImageId);
+            return result.IsValid ? result.Value : null;
+        }
+    }
+
+    private IReadOnlyList<ArtImage> TrayImages() => Session.TrayImageIds()
+        .Select(id => Art.GetImage(id))
+        .Where(result => result.IsValid)
+        .Select(result => result.Value)
+        .ToList();
+
+    private IReadOnlyList<ArtImage> Results() => query.Trim().Length == 0
+        ? Art.All().Take(PickerLimit).ToList()
+        : Art.Search(query, PickerLimit);
+
+    // The creatures in the running fight that have art and are not staged yet. This is the
+    // pay-off of ArtImage.NodeIds: a node id lookup, not a name match.
+    private IReadOnlyList<ArtImage> SuggestedFromFight()
+    {
+        var staged = new HashSet<string>(Session.TrayImageIds(), StringComparer.Ordinal);
+        return Fight.Snapshot().Entries
+            .Select(entry => entry.StatBlockNodeId)
+            .Where(node => !string.IsNullOrEmpty(node))
+            .Distinct(StringComparer.Ordinal)
+            .SelectMany(node => Art.ForNode(node))
+            .DistinctBy(image => image.Id, StringComparer.Ordinal)
+            .Where(image => !staged.Contains(image.Id))
+            .ToList();
+    }
+
+    private void StageFromFight()
+    {
+        foreach (ArtImage image in SuggestedFromFight())
+        {
+            Session.AddToTray(image.Id);
+        }
+    }
+
+    private bool IsShown(ArtImage image) =>
+        Session.ShownArtVisible && string.Equals(Session.ShownArtImageId, image.Id, StringComparison.Ordinal);
+
+    private bool InTray(ArtImage image) =>
+        Session.TrayImageIds().Contains(image.Id, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Handles the tab's bare-key shortcuts, routed from the shell so they only fire while this tab
+    /// is the one on show: <c>n</c> / <c>p</c> flip the tray, <c>h</c> toggles the projector.
+    /// </summary>
+    /// <param name="key">The key token.</param>
+    public void HandleKey(string key)
+    {
+        switch (key)
+        {
+            case "n":
+                Session.StepTray(forward: true);
+                break;
+            case "p":
+                Session.StepTray(forward: false);
+                break;
+            case "h":
+                if (Session.ShownArtVisible)
+                {
+                    Session.HideArt();
+                }
+                else
+                {
+                    Session.ShowStagedArt();
+                }
+
+                break;
+            default:
+                break;
+        }
+    }
+}

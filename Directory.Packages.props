@@ -1,0 +1,51 @@
+<Project>
+  <!--
+    Central Package Management: every NuGet version is declared once here.
+    Project files carry PackageReference entries WITHOUT a Version.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="DotNetProjectFile.Analyzers" Version="1.18.0" />
+    <PackageVersion Include="Marten" Version="9.37.0" />
+    <PackageVersion Include="Qowaiv.Validation.Abstractions" Version="2.1.0" />
+    <!-- Decodes and re-encodes DM art uploads. An upload is never stored as it arrived:
+         it is decoded (which is the real validation), downscaled and written back out as WebP,
+         which also drops EXIF. System.Drawing.Common is Windows-only since .NET 7 and the app
+         runs in a Linux container, so this is the cross-platform option. -->
+    <!-- HELD at 3.1.x deliberately. 4.x looks for a Six Labors licence key at build time and warns
+         without one ("No Six Labors license found ... obtain a license from sixlabors.com/pricing").
+         3.1.x needs no key; the licence note below says under which terms it is used. -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.34.0.3385" />
+  </ItemGroup>
+  <!--
+    Third-party licences this repository accepts (Proj0503, new in DotNetProjectFile.Analyzers
+    1.18.0), recorded because the analyzer asks for the acknowledgement explicitly.
+    - SixLabors.ImageSharp 3.1.x is published under the Six Labors Split License 1.0, which grants the
+      Apache License 2.0 to software that is itself under an open-source licence. DungeonTable is MIT,
+      so it uses ImageSharp under Apache 2.0, and that is the licence to name wherever the project
+      mentions it, as the Split License asks.
+    - SonarAnalyzer.CSharp (SONAR Source-Available License 1.0) runs at build time only, as an
+      analyzer; nothing of it ships with the app.
+  -->
+  <ItemGroup Label="Licences">
+    <ThirdPartyLicense Include="SixLabors.ImageSharp" Hash="C3au3cYr2n3QFmhQ3SSmTQ" />
+    <ThirdPartyLicense Include="SonarAnalyzer.CSharp" Hash="IBM9yngU7omFyJOMSFSy0w" />
+  </ItemGroup>
+
+  <ItemGroup Label="Test">
+    <!-- Tracks the ASP.NET Core runtime the pinned SDK ships (global.json: 10.0.302 -> 10.0.10),
+         NOT nuget's latest. Bump this together with global.json, the Dockerfile SDK tag and the
+         assets pin in DungeonTable.Web.csproj, which tracks the same runtime. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
+    <!-- HELD at 3.x deliberately. xunit.v3 4.x with Microsoft.NET.Test.Sdk 18.10 drops the VSTest
+         bridge on the .NET 10 SDK, so moving up means migrating the suite to
+         Microsoft.Testing.Platform (and Proj0452 wants Test.Sdk present). Worth doing on purpose. -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+  </ItemGroup>
+</Project>

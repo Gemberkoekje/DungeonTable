@@ -1,0 +1,183 @@
+@*
+    One NPC. Same shape as a character card — the identity strip stays visible, the prose collapses
+    — but the strip carries where to find them and how they stand towards the party rather than
+    combat numbers, because that is what gets asked about an NPC mid-session.
+
+    "What can this person tell them?" comes first inside the card, above everything else.
+*@
+
+<article class="character-card npc-card">
+    <header class="character-head">
+        <button type="button" class="character-title" aria-expanded="@(open ? "true" : "false")"
+                aria-controls="npc-body-@Npc.Id"
+                title="@(open ? "Collapse" : "Expand")" @onclick="() => open = !open">
+            <span class="quest-caret" aria-hidden="true">@(open ? "▾" : "▸")</span>
+            <span class="character-name">@Npc.Name</span>
+            <span class="character-build">@Npc.Role</span>
+        </button>
+
+        @if (Npc.Disposition.Length > 0)
+        {
+            <span class="npc-disposition" title="How they stand towards the party">@Npc.Disposition</span>
+        }
+    </header>
+
+    <dl class="vitals">
+        @if (Npc.Where.Length > 0)
+        {
+            <div class="vital wide">
+                <dt>Where</dt>
+                <dd>@Npc.Where</dd>
+            </div>
+        }
+        @if (Npc.ArmourClass > 0)
+        {
+            <div class="vital">
+                <dt>AC</dt>
+                <dd>@Npc.ArmourClass</dd>
+            </div>
+        }
+        @if (Npc.MaxHp > 0)
+        {
+            <div class="vital">
+                <dt>HP</dt>
+                <dd>@Npc.MaxHp</dd>
+            </div>
+        }
+        @if (Npc.StatLine.Length > 0)
+        {
+            <div class="vital wide">
+                <dt>Stats</dt>
+                <dd>@Npc.StatLine</dd>
+            </div>
+        }
+    </dl>
+
+    @if (open)
+    {
+        <div class="character-body" id="npc-body-@Npc.Id">
+            @if (Npc.Appearance.Length > 0)
+            {
+                <p class="character-line"><span class="field-label">Looks like</span> <CrossRefProse Text="@Npc.Appearance" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+            }
+
+            @if (Npc.Summary.Length > 0)
+            {
+                <div class="character-prose">
+                    <CrossRefProse Text="@Npc.Summary" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+                </div>
+            }
+
+            @if (Npc.Knows.Count > 0)
+            {
+                <section class="character-section">
+                    <h4>What they can tell the party</h4>
+                    @foreach (DossierBlock block in Npc.Knows)
+                    {
+                        @Block(block)
+                    }
+                </section>
+            }
+
+            @if (Npc.Contacts.Count > 0)
+            {
+                <section class="character-section">
+                    <h4>Their people</h4>
+                    <table class="cast-table">
+                        <caption class="visually-hidden">Who @Npc.Name is connected to</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Who</th>
+                                <th scope="col">What</th>
+                                <th scope="col">Where they stand</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (CastMember contact in Npc.Contacts)
+                            {
+                                <tr class="@(contact.Secret ? "secret" : string.Empty)">
+                                    <th scope="row">
+                                        @if (contact.Ref.Length > 0 && OnOpenReference.HasDelegate)
+                                        {
+                                            <button type="button" class="ref-link" title="Open their card"
+                                                    @onclick="() => OnOpenReference.InvokeAsync(contact.Ref)">@contact.Name</button>
+                                        }
+                                        else
+                                        {
+                                            @contact.Name
+                                        }
+                                        @if (contact.Secret)
+                                        {
+                                            <span class="secret-badge" title="DM only — the players do not know this">DM</span>
+                                        }
+                                    </th>
+                                    <td>@contact.Role</td>
+                                    <td class="cast-state">@contact.State</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+
+            @if (Npc.Detail.Count > 0)
+            {
+                <section class="character-section">
+                    <h4>Worth knowing</h4>
+                    @foreach (DossierBlock block in Npc.Detail)
+                    {
+                        @Block(block)
+                    }
+                </section>
+            }
+
+            @if (Npc.Hooks.Count > 0)
+            {
+                <section class="character-section">
+                    <h4>Hooks I can pull</h4>
+                    @foreach (DossierBlock hook in Npc.Hooks)
+                    {
+                        @Block(hook)
+                    }
+                </section>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    /// <summary>The NPC to show.</summary>
+    [Parameter]
+    public NpcDossier Npc { get; set; } = new NpcDossier();
+
+    /// <summary>Resolves cross-references in the NPC's prose. When null, prose renders as plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with a node id to open an entity's reference card.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>
+    /// Whether the card starts opened. The NPCs tab lists everyone collapsed; the reference drawer
+    /// shows one person the DM asked for, so it opens them.
+    /// </summary>
+    [Parameter]
+    public bool StartOpen { get; set; }
+
+    private bool open;
+
+    protected override void OnInitialized() => open = StartOpen;
+
+    private RenderFragment Block(DossierBlock block) =>
+        @<details class="detail-block @(block.Secret ? "secret" : string.Empty)">
+            <summary>
+                <span class="detail-heading">@block.Heading</span>
+                @if (block.Secret)
+                {
+                    <span class="secret-badge" title="DM only — don't read this aloud">secret</span>
+                }
+            </summary>
+            <div class="detail-body"><CrossRefProse Text="@block.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></div>
+        </details>;
+}

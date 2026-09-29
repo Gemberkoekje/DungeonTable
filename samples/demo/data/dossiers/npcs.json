@@ -1,0 +1,115 @@
+{
+  "title": "The people of Millbrook",
+  "summary": "Who the party can talk to in the village above the undercroft. [[wenna-brask|Wenna]] gives them their first quest; [[brother-aldous|Brother Aldous]] is the reason she has to.",
+  "npcs": [
+    {
+      "id": "wenna-brask",
+      "name": "Wenna Brask",
+      "role": "The miller, Tam's mother",
+      "where": "The mill, by the ford",
+      "disposition": "Ally",
+      "appearance": "A tired woman in her forties with a red kerchief over her hair, clutching a dark shawl shut at her throat with a floury hand. She has not slept since Tam went down, and it shows.",
+      "summary": "Has run the mill on the brook ([[the-old-mill]]) since her husband died, with her son [[tam-brask|Tam]] doing the heavy lifting. She is [[maren|Maren]]'s aunt. Three days ago Tam went down into the undercroft to find out why the bell had stopped, and he has not come back.",
+      "knows": [
+        {
+          "heading": "Tam went down at dusk",
+          "body": "Three days ago, with the mill's lantern. He said somebody had to find out why the bell had stopped, since nobody else would. His boots have a split heel."
+        },
+        {
+          "heading": "Aldous told her not to worry",
+          "body": "[[brother-aldous|Brother Aldous]] said Tam had most likely gone to the drovers' fair, and that the undercroft was locked anyway. It is not locked, and she has started to wonder why he said so."
+        },
+        {
+          "heading": "Goblins at the mill",
+          "body": "Sacks have gone missing from the mill all autumn. She blamed rats, then Tam's friends. Now she thinks about the small bare footprints in the spilt flour."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "How to play her",
+          "body": "Practical, frightened, and angry about being frightened. She pays what she promises, and she will not beg twice."
+        }
+      ],
+      "hooks": [
+        {
+          "heading": "Who took the clapper",
+          "body": "If the party brings the clapper back, Wenna wants it in the tower by that same dusk, and she wants to know who took it. She will not let that rest."
+        }
+      ],
+      "contacts": [
+        { "name": "Tam Brask", "role": "Her son, fourteen", "state": "Missing below the chapel", "ref": "tam-brask", "rel": "family" },
+        { "name": "Brother Aldous", "role": "The chapel's acolyte", "state": "Told her not to worry", "ref": "brother-aldous" }
+      ]
+    },
+    {
+      "id": "brother-aldous",
+      "name": "Brother Aldous",
+      "role": "The chapel's acolyte",
+      "where": "Millbrook chapel; the vestry below, on the nights he pays Grask",
+      "disposition": "Friendly, until he guesses what the party knows",
+      "appearance": "A soft-faced young man in a brown habit, forever washing his hands. His sandals are grey with undercroft dust.",
+      "armourClass": 10,
+      "maxHp": 9,
+      "statLine": "Spell save DC 12, +4 to hit with spells. Crosses the nave under sanctuary.",
+      "statBlock": "acolyte",
+      "summary": "Keeps the chapel for a priest who visits twice a year. He gambles, and he loses: he lost forty gold to [[grask]] at the alehouse dice table, paid part of it in the chapel's candlesticks, and then in the bell's clapper.",
+      "knows": [
+        {
+          "heading": "The undercroft",
+          "body": "Every room of it, and that the [[bell-warden]] is awake. He will not say so, because he knows why."
+        },
+        {
+          "heading": "The secret door",
+          "body": "The vestment press in the vestry ([[L1 area 3b]]) swings out onto a door to the bell-founder's workshop. He gives this up to save his own skin."
+        },
+        {
+          "heading": "What the bell is for",
+          "body": "He has read the founders' book in the chapel: the bell rings the dead to sleep. He did not believe it until the ringers rose."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "How to play him",
+          "body": "Helpful, nervous, and lying. He wants the party to go below and fail, or to go below and quietly kill [[grask]]. If they find the IOU he confesses, and begs them to keep it from the village."
+        }
+      ],
+      "hooks": [
+        {
+          "heading": "The IOU",
+          "body": "His sealed IOU is in Grask's strongbox ([[L1 area 4]]). Whoever holds it holds him."
+        }
+      ],
+      "contacts": [
+        { "name": "Old Hobb", "role": "The sexton", "state": "Thinks the world of him" }
+      ]
+    },
+    {
+      "id": "tam-brask",
+      "name": "Tam Brask",
+      "role": "The miller's son, fourteen",
+      "where": "Missing. Chained in the bell-founder's workshop below the chapel.",
+      "disposition": "Friendly",
+      "appearance": "Thin, freckled and furious, in a torn mill smock.",
+      "summary": "Went down into the undercroft three days ago to find out why the bell had stopped. The goblins caught him in the passage and gave him to [[grask]]. He saw the [[silver-clapper]] on the anvil, so Grask keeps him chained there.",
+      "knows": [
+        {
+          "heading": "Who took the clapper",
+          "body": "He heard [[grask]] laugh about the priest who paid him with it. He does not know the priest's name, but Millbrook has only one."
+        },
+        {
+          "heading": "The bugbears' habits",
+          "body": "They eat at dusk and sleep after. One of them always stays awake by the furnace."
+        }
+      ],
+      "hooks": [
+        {
+          "heading": "Going back down",
+          "body": "Tam wants to see Grask pay. Freed, he tries to follow the party back below unless somebody stops him."
+        }
+      ],
+      "contacts": [
+        { "name": "Wenna Brask", "role": "His mother", "state": "Waiting at the mill", "ref": "wenna-brask", "rel": "family" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+@*
+    A list of relations read from one end: "plots against Grask (4) — would sell him to the party for the den." Shared by
+    the reference drawer (a card's relations) and the briefing's "involved with". The other end opens
+    its own card; the keys in brackets say which rooms it is listed in; a secret one carries the DM
+    badge the dossier uses for secret blocks.
+*@
+
+<ul class="relation-list">
+    @foreach (RelationLine line in Lines)
+    {
+        <li class="@(line.Secret ? "relation-line secret" : "relation-line")">
+            <span class="relation-phrase">@line.Phrase</span>
+            @if (OnOpenReference.HasDelegate && line.OtherId.Length > 0)
+            {
+                <button type="button" class="xref xref-@CrossRefStyle.CssClass(line.OtherKind)"
+                        title="@CrossRefStyle.KindName(line.OtherKind) — open reference"
+                        @onclick="() => OnOpenReference.InvokeAsync(line.OtherId)">@line.OtherLabel</button>
+            }
+            else
+            {
+                <span class="relation-other">@line.OtherLabel</span>
+            }
+            @if (line.OtherWhere.Count > 0)
+            {
+                <span class="relation-where" title="The rooms that list them">(@string.Join(", ", line.OtherWhere))</span>
+            }
+            @if (line.Secret)
+            {
+                <span class="secret-badge" title="DM only — the players don't know this">DM</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(line.Note))
+            {
+                <span class="relation-note"><CrossRefProse Text="@line.Note" ResolveRefs="RefsFor(line)" OnActivate="OnOpenReference" /></span>
+            }
+        </li>
+    }
+</ul>
+
+@code {
+    /// <summary>The relations to list, each already read from the end being shown.</summary>
+    [Parameter]
+    public IReadOnlyList<RelationLine> Lines { get; set; } = Array.Empty<RelationLine>();
+
+    /// <summary>Raised with the other end's id to open its card. When no delegate is attached, names are plain text.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>
+    /// Resolves a note's cross-references on the floor it belongs to. When null, notes render as plain
+    /// text with any authored links reduced to their words.
+    /// </summary>
+    [Parameter]
+    public Func<string, string, IReadOnlyList<CrossRef>> ResolveRefsOn { get; set; }
+
+    // A note read on its own floor. No resolver at all, rather than one that finds nothing, is what
+    // makes CrossRefProse reduce a link to its words instead of printing its brackets.
+    private Func<string, IReadOnlyList<CrossRef>> RefsFor(RelationLine line) =>
+        ResolveRefsOn is null ? null : text => ResolveRefsOn(text, line.Floor);
+}

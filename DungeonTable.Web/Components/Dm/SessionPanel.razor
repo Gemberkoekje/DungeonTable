@@ -1,0 +1,163 @@
+@*
+    The Info panel's Session sub-tab: the evening's prep.
+
+    The tier the other tabs leave homeless. A person belongs on NPCs and a hook belongs on Quests,
+    but a running order belongs to neither — it is a statement about the evening rather than about
+    the campaign, and the question it answers ("who is sitting and watching while this happens?")
+    is one nobody else can answer.
+
+    Canon renders as a plain table rather than as collapsible blocks: a settled fact is something
+    to glance at, not something to open.
+*@
+
+<section class="session-panel" aria-label="Session prep">
+    @if (Sessions.Count == 0)
+    {
+        <p class="muted">No session prep is authored.</p>
+    }
+    else
+    {
+        @if (Log.Summary.Length > 0)
+        {
+            <p class="party-summary"><CrossRefProse Text="@Log.Summary" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+        }
+
+        @if (Sessions.Count > 1)
+        {
+            <nav class="session-picker" role="group" aria-label="Sessions">
+                @for (int i = 0; i < Sessions.Count; i++)
+                {
+                    int index = i;
+                    <button type="button" class="quest-filter @(index == Shown ? "on" : string.Empty)"
+                            @onclick="() => shown = index">@Sessions[index].Title</button>
+                }
+            </nav>
+        }
+
+        <article class="session-plan">
+            <header class="story-head">
+                <h3>@Current.Title</h3>
+                @if (Current.Source.Length > 0)
+                {
+                    <p class="muted story-source">@Current.Source</p>
+                }
+            </header>
+
+            @if (Current.Summary.Length > 0)
+            {
+                <div class="story-summary">
+                    <CrossRefProse Text="@Current.Summary" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+                </div>
+            }
+
+            @if (Current.Canon.Count > 0)
+            {
+                <h4>Settled canon this rests on</h4>
+                <table class="cast-table session-canon">
+                    <caption class="visually-hidden">Facts the plan treats as decided</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">What</th>
+                            <th scope="col">Where it stands</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (DossierBlock fact in Current.Canon)
+                        {
+                            <tr class="@(fact.Secret ? "secret" : string.Empty)">
+                                <th scope="row">
+                                    @fact.Heading
+                                    @if (fact.Secret)
+                                    {
+                                        <span class="secret-badge" title="DM only — the players do not know this">DM</span>
+                                    }
+                                </th>
+                                <td><CrossRefProse Text="@fact.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            @if (Current.Scenes.Count > 0)
+            {
+                <h4>Running order</h4>
+                @foreach (Keyed<SessionScene> keyed in RenderKeys.Of(Current.Scenes, scene => scene.Id))
+                {
+                    SessionScene scene = keyed.Item;
+                    <section @key="keyed.Key" class="session-scene">
+                        <header class="session-scene-head">
+                            <span class="session-ordinal">@scene.Ordinal</span>
+                            <h5>@scene.Title</h5>
+                        </header>
+                        <dl class="session-strip">
+                            <dt>On</dt>
+                            <dd>@(scene.Cast.Length > 0 ? scene.Cast : "—")</dd>
+                            <dt>When</dt>
+                            <dd>@(scene.When.Length > 0 ? scene.When : "—")</dd>
+                        </dl>
+                        @if (scene.Purpose.Length > 0)
+                        {
+                            <p class="session-purpose">
+                                <CrossRefProse Text="@scene.Purpose" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+                            </p>
+                        }
+                        @foreach (DossierBlock beat in scene.Beats)
+                        {
+                            @Block(beat)
+                        }
+                    </section>
+                }
+            }
+
+            @if (Current.Decisions.Count > 0)
+            {
+                <h4>Still to decide</h4>
+                @foreach (DossierBlock decision in Current.Decisions)
+                {
+                    @Block(decision)
+                }
+            }
+        </article>
+    }
+</section>
+
+@code {
+    /// <summary>The table's session prep.</summary>
+    [Parameter]
+    public SessionLog Log { get; set; } = new SessionLog();
+
+    /// <summary>
+    /// Resolves cross-references in the prep's prose. A session's scenes range across the whole
+    /// campaign and mostly happen above ground rather than on the shown floor, so callers should
+    /// pass the entity-only resolver.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with a node id to open an entity's reference card.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    private int shown;
+
+    private IReadOnlyList<SessionPlan> Sessions => Log.Sessions;
+
+    // Clamped rather than indexed directly: the session list is authored content that can shrink
+    // under a DM who has already clicked past the end of the new one.
+    private int Shown => Sessions.Count == 0 ? 0 : Math.Clamp(shown, 0, Sessions.Count - 1);
+
+    private SessionPlan Current => Sessions.Count == 0 ? new SessionPlan() : Sessions[Shown];
+
+    private RenderFragment Block(DossierBlock block) =>
+        @<details class="detail-block @(block.Secret ? "secret" : string.Empty)">
+            <summary>
+                <span class="detail-heading">@block.Heading</span>
+                @if (block.Secret)
+                {
+                    <span class="secret-badge" title="DM only — don't read this aloud">secret</span>
+                }
+            </summary>
+            <div class="detail-body"><CrossRefProse Text="@block.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></div>
+        </details>;
+}

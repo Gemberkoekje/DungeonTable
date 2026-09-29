@@ -1,0 +1,212 @@
+@inherits DmTabBase
+@*
+    The DM screen's Info tab: everything the old briefing aside did — the node picker, the
+    back/forward history and breadcrumb, the reference drawer and the briefing panel — plus a small static map for orientation, showing the selected area in context.
+
+    It always shows the most recently map-clicked area: the shell's Inspect clicks navigate the
+    shared workspace whichever tab is on top, so switching here lands on the right room. The
+    briefing's tab strip is Room / Level / Quests / Party / NPCs / Story / Session / Rules / Search.
+*@
+
+<div class="info-tab">
+    <div class="info-main">
+        <div class="node-picker">
+            <input @bind="nodeId" @bind:event="oninput" placeholder="area node id" aria-label="Area node id" />
+            <button @onclick="() => Workspace.NavigateTo(nodeId)">Load briefing</button>
+        </div>
+
+        @if (Workspace.History.Entries.Count > 1)
+        {
+            <nav class="nav-history" aria-label="Reference history">
+                <div class="nav-steps">
+                    <button type="button" class="nav-step" disabled="@(!Workspace.History.CanBack)"
+                            title="Back (Alt+Left)" aria-label="Back" @onclick="Workspace.NavigateBack">&larr;</button>
+                    <button type="button" class="nav-step" disabled="@(!Workspace.History.CanForward)"
+                            title="Forward (Alt+Right)" aria-label="Forward" @onclick="Workspace.NavigateForward">&rarr;</button>
+                </div>
+                <ol class="breadcrumb">
+                    @if (CrumbStart > 0)
+                    {
+                        <li class="crumb-ellipsis" aria-hidden="true">&hellip;</li>
+                    }
+                    @for (int i = CrumbStart; i <= Workspace.History.Cursor; i++)
+                    {
+                        int index = i;
+                        NavEntry entry = Workspace.History.Entries[index];
+                        <li>
+                            <button type="button"
+                                    class="crumb crumb-@CrossRefStyle.CssClass(entry.Kind) @(index == Workspace.History.Cursor ? "current" : string.Empty)"
+                                    title="@entry.Label" @onclick="() => Workspace.JumpTo(index)">@entry.Label</button>
+                        </li>
+                    }
+                </ol>
+            </nav>
+        }
+
+        @if (!string.IsNullOrEmpty(Workspace.CardNode))
+        {
+            <ReferenceDrawer Card="Workspace.ReferenceCard"
+                             BookCard="Workspace.BookCard"
+                             StatBlock="Workspace.OpenStatBlock"
+                             SpellEntry="Workspace.OpenSpellEntry"
+                             StatBlockCitation="@Workspace.OpenStatBlockCitation"
+                             SpellCitation="@Workspace.OpenSpellCitation"
+                             Npc="Workspace.OpenNpc"
+                             Character="Workspace.OpenCharacter"
+                             ResolveRefs="Workspace.ResolveCardRefs"
+                             ResolveEntityRefs="Workspace.ResolveEntityRefs"
+                             ResolveRefsOn="Workspace.ResolveRefsOn"
+                             OnOpenReference="Workspace.OpenReference"
+                             OnClose="Workspace.CloseDrawer" />
+        }
+
+        <EncounterStrip Monsters="Workspace.Encounter"
+                        AreaNodeId="@Workspace.PanelNode"
+                        AreaTitle="@Workspace.PanelTitle"
+                        OnOpenReference="Workspace.OpenReference" />
+
+        @* Beside the ticks, not under the briefing: "what is in this room" and "what did we do about
+           it" are one thought, and the book's own text starts below both. *@
+        <AreaNotes AreaNodeId="@Workspace.PanelNode" AreaTitle="@Workspace.PanelTitle" />
+
+        @if (!string.IsNullOrEmpty(Workspace.RegionNotice))
+        {
+            <p class="muted" role="status">@Workspace.RegionNotice</p>
+        }
+        @if (!string.IsNullOrEmpty(Workspace.ErrorMessage))
+        {
+            <p class="error" role="alert">@Workspace.ErrorMessage</p>
+        }
+        else
+        {
+            <RoomBriefingPanel Briefing="Workspace.Briefing"
+                               Dossier="Workspace.AreaDossier"
+                               Level="Workspace.LevelDossier"
+                               Reference="Workspace.ReferenceLibrary"
+                               Quests="Workspace.QuestLog"
+                               Campaign="Workspace.CampaignDossier"
+                               Party="Workspace.PartyDossier"
+                               Npcs="Workspace.NpcRoster"
+                               Story="Workspace.StoryLibrary"
+                               Sessions="Workspace.SessionLog"
+                               Decks="Workspace.Decks"
+                               IsAreaAuthored="Workspace.IsAreaAuthored"
+                               IsFloorAuthored="Workspace.IsFloorAuthored"
+                               SearchNodes="Workspace.SearchNodes"
+                               OnNavigate="Workspace.NavigateTo"
+                               OnOpenReference="Workspace.OpenReference"
+                               ResolveRefs="Workspace.ResolveRefs"
+                               ResolveEntityRefs="Workspace.ResolveEntityRefs"
+                               ResolveRefsOn="Workspace.ResolveRefsOn" />
+        }
+    </div>
+
+    <aside class="info-orient" aria-label="Where this area is">
+        @if (Active && Workspace.MapLoaded)
+        {
+            <figure class="mini-map-figure" title="Show this area on the Map tab" @onclick="ShowOnMap">
+                <VectorMapCanvas Map="Workspace.Map" ShowGrid="false" ShowObjects="true" Pannable="false"
+                                 ViewBox="MiniViewBox()"
+                                 CssClass="mini-map"
+                                 Overlay="MiniOverlay()"
+                                 SecretDoorIds="Workspace.SecretDoorIds" MarkSecretDoors="true"
+                                 ConcealedObjectIds="Workspace.ConcealedObjectIds"
+                                 RevealedFeatureIds="Session.RevealedFeatureIds()"
+                                 OpenDoorIds="Session.OpenDoorIds()" DoubleDoorIds="Workspace.DoubleDoorIds" />
+                <figcaption class="muted">@MiniCaption</figcaption>
+            </figure>
+            <button type="button" class="context-action" title="Centre the Map tab on this area (Ctrl+1)"
+                    @onclick="ShowOnMap">Show on map &#x2922;</button>
+        }
+        else if (!Workspace.MapLoaded)
+        {
+            <p class="muted context-note">No map is loaded, so there is nothing to orient against.</p>
+        }
+    </aside>
+</div>
+
+@code {
+    /// <summary>
+    /// True while this tab is the visible one. The mini map is a second full render of the level's
+    /// SVG, so it is only built when the DM can actually see it — the panel itself stays mounted.
+    /// </summary>
+    [Parameter]
+    public bool Active { get; set; }
+
+    /// <summary>
+    /// Raised with a world-unit point when the DM asks to see the shown area on the Map tab, so the
+    /// shell can switch tabs and centre the canvas there.
+    /// </summary>
+    [Parameter]
+    public EventCallback<MapPoint> OnShowOnMap { get; set; }
+
+    // How many breadcrumb chips to show before eliding the older ones.
+    private const int MaxCrumbs = 8;
+
+    // Padding around the shown area on the mini map, and the smallest area it will zoom to, both in
+    // grid cells — a one-cell closet at full zoom is unreadable as orientation.
+    private const double MiniPadCells = 2;
+    private const double MiniMinCells = 14;
+
+    private string nodeId = string.Empty;
+    private string lastPanelNode = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        SyncNodeBox();
+    }
+
+    protected override void OnSharedStateChanged() => SyncNodeBox();
+
+    // Keep the editable node box in step with wherever the shared history has navigated to, without
+    // stamping on what the DM is typing: it only follows an actual change of shown area.
+    private void SyncNodeBox()
+    {
+        if (!string.Equals(lastPanelNode, Workspace.PanelNode, StringComparison.Ordinal))
+        {
+            lastPanelNode = Workspace.PanelNode;
+            nodeId = Workspace.PanelNode;
+        }
+    }
+
+    private int CrumbStart => Math.Max(0, Workspace.History.Cursor - MaxCrumbs + 1);
+
+    private string MiniCaption =>
+        Workspace.SelectedRegions().Count > 0 ? Workspace.PanelTitle : "Whole level — this area has no region drawn yet.";
+
+    // The mini map's window: the shown area padded by a couple of cells (and never zoomed past a
+    // readable minimum), or the whole level when the area has no geometry to frame.
+    private MapBounds MiniViewBox()
+    {
+        MapBounds bounds = Workspace.SelectedBounds();
+        if (bounds.Width <= 0 && bounds.Height <= 0)
+        {
+            return Workspace.Map.Bounds;
+        }
+
+        double cell = Workspace.UnitSize;
+        MapBounds framed = MapFraming.AtLeast(MapFraming.Pad(bounds, MiniPadCells * cell), MiniMinCells * cell);
+        return MapFraming.ClampToMap(framed, Workspace.Map.Bounds);
+    }
+
+    private EditorOverlay MiniOverlay() => new EditorOverlay
+    {
+        Regions = Workspace.SelectedRegions(),
+        SelectedRegionId = Workspace.SelectedRegionId,
+        UnitSize = Workspace.UnitSize,
+    };
+
+    private Task ShowOnMap()
+    {
+        MapBounds bounds = Workspace.SelectedBounds();
+        if (bounds.Width <= 0 && bounds.Height <= 0)
+        {
+            bounds = Workspace.Map.Bounds;
+        }
+
+        return OnShowOnMap.InvokeAsync(new MapPoint(
+            bounds.MinX + (bounds.Width / 2),
+            bounds.MinY + (bounds.Height / 2)));
+    }
+}

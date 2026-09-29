@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The content rules: run against any content root, the one named by the DUNGEONTABLE_CONTENT_ROOT
+    environment variable, or the sample pack (samples/demo) when it is unset.
+    They read the content through the app's own loaders, so they check what the app will show.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>DungeonTable.ContentTests</RootNamespace>
+    <!-- xUnit v3 test projects are self-executing. -->
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <!--
+      CA1707: identifiers should not contain underscores.
+      [Justification: as in DungeonTable.Tests, test methods read best with underscores. Suppressed
+       for the test projects only; production code keeps the rule.]
+    -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../DungeonTable.Application/DungeonTable.Application.csproj" />
+    <ProjectReference Include="../DungeonTable.Core/DungeonTable.Core.csproj" />
+    <ProjectReference Include="../DungeonTable.Infrastructure/DungeonTable.Infrastructure.csproj" />
+    <ProjectReference Include="../DungeonTable.Web/DungeonTable.Web.csproj" />
+  </ItemGroup>
+
+</Project>

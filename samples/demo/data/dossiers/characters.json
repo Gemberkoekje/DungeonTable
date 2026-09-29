@@ -1,0 +1,131 @@
+{
+  "title": "The party at a glance",
+  "summary": "Three 2nd-level characters and no arcane caster. [[hild|Hild]] holds the front, [[oswin-tull|Oswin]] scouts and opens locks, and [[maren|Maren]] keeps everyone standing.",
+  "characters": [
+    {
+      "id": "maren",
+      "name": "Maren",
+      "playerName": "Robin",
+      "build": "Human Cleric 2, Life Domain",
+      "level": 2,
+      "armourClass": 18,
+      "armourNote": "chain mail + shield",
+      "maxHp": 17,
+      "passivePerception": 13,
+      "initiativeModifier": 0,
+      "speed": "30 ft.",
+      "saves": "Wis +5, Cha +3 (proficient); Str +1, Dex +0, Con +2, Int +0",
+      "skills": "Insight +5, Medicine +5, Persuasion +3, Religion +2",
+      "languages": "Common, Halfling",
+      "saveDc": "DC 13, spell attack +5",
+      "attacks": "Mace +3 to hit, 1d6 + 1 bludgeoning",
+      "kit": "A holy symbol shaped like a bell, a healer's kit, a lantern.",
+      "abilities": [
+        {
+          "heading": "Disciple of Life",
+          "body": "Her healing spells restore an extra 2 + the spell's level hit points."
+        },
+        {
+          "heading": "Channel Divinity",
+          "body": "Once per short rest, one of two. Preserve Life: restore 10 hit points, shared among creatures within 30 feet, none above half its maximum. Turn Undead: each undead within 30 feet that fails a DC 13 Wisdom save flees for a minute, which matters for the ringers in [[L1 area 5]]."
+        }
+      ],
+      "backstory": "[[wenna-brask|Wenna]]'s niece, raised in town and sent to Millbrook as a girl to learn her letters from the old priest. She took the chapel's faith with her when she left, and came back for the harvest to find the bell silent and her cousin [[tam-brask|Tam]] gone.",
+      "hooks": [
+        {
+          "heading": "The chapel was hers first",
+          "body": "Maren learned her faith in the chapel above the undercroft. When Aldous's part in it comes out she takes it personally, and the village looks to her to say what happens to him."
+        }
+      ]
+    },
+    {
+      "id": "oswin-tull",
+      "name": "Oswin Tull",
+      "playerName": "Alex",
+      "build": "Lightfoot Halfling Rogue 2",
+      "level": 2,
+      "armourClass": 14,
+      "armourNote": "leather",
+      "maxHp": 15,
+      "passivePerception": 15,
+      "initiativeModifier": 3,
+      "speed": "25 ft.",
+      "saves": "Dex +5, Int +3 (proficient); Str -1, Con +1, Wis +1, Cha +2",
+      "skills": "Stealth +7, Perception +5, Sleight of Hand +5, Deception +4",
+      "languages": "Common, Halfling, Thieves' Cant",
+      "attacks": "Shortsword +5 to hit, 1d6 + 3 piercing; Sneak Attack +1d6",
+      "kit": "Thieves' tools, a shortbow he never practises with, a pair of loaded dice.",
+      "dmOnly": "[[grask]] knows Oswin. Oswin lost ten gold to the bugbear at the alehouse dice table last autumn, at the same table as Brother Aldous, and never paid. The rest of the table doesn't know. Grask greets him by name.",
+      "abilities": [
+        {
+          "heading": "Cunning Action",
+          "body": "Dash, Disengage or Hide as a bonus action."
+        },
+        {
+          "heading": "Lucky",
+          "body": "Rerolls a natural 1 on an attack roll, ability check or saving throw."
+        }
+      ],
+      "backstory": "A drover's son who never took to droving. He came to Millbrook with the autumn herds, stayed for the dice at the alehouse, and has owed somebody money ever since.",
+      "hooks": [
+        {
+          "heading": "Ten gold",
+          "body": "Oswin owes [[grask]] ten gold. If Grask lives long enough to talk, he says so in front of everyone."
+        }
+      ]
+    },
+    {
+      "id": "hild",
+      "name": "Hild",
+      "playerName": "Sam",
+      "build": "Mountain Dwarf Fighter 2, Protection style",
+      "level": 2,
+      "armourClass": 18,
+      "armourNote": "chain mail + shield",
+      "maxHp": 22,
+      "passivePerception": 13,
+      "initiativeModifier": 0,
+      "speed": "25 ft.",
+      "senses": "Darkvision 60 ft.",
+      "saves": "Str +5, Con +5 (proficient); advantage against poison",
+      "skills": "Athletics +5, Perception +3, Intimidation +1",
+      "languages": "Common, Dwarvish",
+      "defences": "Resistance to poison damage",
+      "attacks": "Warhammer +5 to hit, 1d8 + 3 bludgeoning; handaxe +5 to hit, 1d6 + 3 slashing",
+      "kit": "Smith's tools, a lantern, and Scrap.",
+      "abilities": [
+        {
+          "heading": "Protection",
+          "body": "With her shield up, she can use her reaction to give disadvantage to an attack against someone else within 5 feet of her."
+        },
+        {
+          "heading": "Second Wind and Action Surge",
+          "body": "Once each per short rest: regain 1d10 + 2 hit points as a bonus action, or take one extra action on her turn."
+        }
+      ],
+      "backstory": "A dwarf smith's apprentice who walked away from her master's forge and took up the hammer for other work. Her master cast bells, so she knows a founders' workshop the moment she sees one.",
+      "hooks": [
+        {
+          "heading": "A founder's eye",
+          "body": "Hild can tell whether the slumped clapper can be saved, and could recast it herself, given a week at a proper forge."
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "heading": "Family business",
+      "body": "[[maren]] is [[wenna-brask|Wenna]]'s niece and [[tam-brask|Tam]]'s cousin, so the first quest is personal for her. Let her player do the talking at the mill."
+    },
+    {
+      "heading": "Two debts, one bugbear",
+      "body": "[[oswin-tull|Oswin]] owes [[grask]] ten gold, and Brother Aldous owes him far more. Neither knows about the other. Put them in a room together and let it come out."
+    }
+  ],
+  "openQuestions": [
+    {
+      "heading": "Scrap",
+      "body": "Does Sam want Scrap to fight, or only to tag along? It decides whether the goblin goes into initiative at all."
+    }
+  ]
+}

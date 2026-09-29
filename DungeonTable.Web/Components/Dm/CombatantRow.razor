@@ -1,0 +1,219 @@
+@inject BattleState Fight
+@*
+    One creature's line inside an initiative row: the name, its hit points, and the damage box the
+    DM's whole fight goes through.
+
+    The line stays deliberately thin — name, HP, state, AC, passive Perception, damage — because it
+    is read from across the table while the DM is looking at the players. Everything that is typed
+    rather than glanced at (renaming, notes, concentration, correcting AC or maximum HP) hides behind
+    the "..." toggle, one click away.
+
+    Local state lives here rather than in a dictionary on the tab: the typed damage and the two open
+    panels belong to this creature, and a keyed component keeps them attached to it when the
+    initiative order re-sorts underneath.
+*@
+
+<div class="combatant @HealthClass @(Selected ? "is-open" : string.Empty)">
+    @* The name opens the detail pane, for every combatant — a player with no stat block still has
+       hit points, conditions and the area's own notes worth a pane. *@
+    <button type="button" class="combatant-name ref-link" aria-expanded="@Expanded(Selected)"
+            title="Open this combatant's detail pane"
+            @onclick="() => OnOpen.InvokeAsync(Who.Id)">@Who.Name</button>
+
+    <span class="combatant-hp" title="Current / maximum hit points">@Hp</span>
+
+    @if (Who.Down)
+    {
+        <span class="battle-state down" title="At 0 hit points — skipped in the turn order until healed">down</span>
+    }
+    else if (Who.Bloodied)
+    {
+        <span class="battle-state bloodied" title="At or below half hit points">bloodied</span>
+    }
+
+    @if (Who.ArmourClass > 0)
+    {
+        <span class="battle-ac">AC @Who.ArmourClass</span>
+    }
+    @if (Who.PassivePerception > 0)
+    {
+        <span class="battle-pp">pp @Who.PassivePerception</span>
+    }
+    @if (Who.Concentrating)
+    {
+        <span class="combatant-conc" title="@ConcentrationTitle">conc</span>
+    }
+
+    <span class="combatant-damage">
+        @* Enter is the fast path and Shift+Enter heals; the buttons are the same thing for a mouse. *@
+        <input type="number" class="dmg-box" min="0" max="999" placeholder="dmg"
+               aria-label="@($"Damage or healing for {Who.Name}")"
+               title="Type a number: Enter takes that much damage, Shift+Enter heals it"
+               @bind="damage" @bind:event="oninput" @onkeydown="OnDamageKey" />
+        <button type="button" disabled="@(Amount <= 0)" title="Take that much damage"
+                @onclick="() => Apply(false)">&minus;</button>
+        <button type="button" disabled="@(Amount <= 0)" title="Heal that much"
+                @onclick="() => Apply(true)">+</button>
+    </span>
+
+    @foreach (ConditionKind condition in Who.Conditions)
+    {
+        ConditionKind chip = condition;
+        <button type="button" class="cond-chip on" title="@($"{ConditionPalette.Label(chip)} — click to clear")"
+                @onclick="() => Fight.ToggleCondition(Who.Id, chip)">@ConditionPalette.Label(chip)</button>
+    }
+
+    <button type="button" class="combatant-icon @(conditions ? "open" : string.Empty)"
+            title="Conditions" aria-expanded="@Expanded(conditions)"
+            @onclick="() => conditions = !conditions">&#x25C7;</button>
+
+    <button type="button" class="combatant-icon @(detail ? "open" : string.Empty)"
+            title="Rename, note, concentration and number corrections" aria-expanded="@Expanded(detail)"
+            @onclick="() => detail = !detail">&hellip;</button>
+
+    <button type="button" class="battle-remove danger" title="@($"Remove {Who.Name} from the fight")"
+            @onclick="() => Fight.RemoveCombatant(Who.Id)">&times;</button>
+</div>
+
+@if (Who.Notes.Length > 0 && !detail)
+{
+    <p class="combatant-note-shown" title="DM note">@Who.Notes</p>
+}
+
+@if (conditions)
+{
+    <div class="cond-palette" role="group" aria-label="@($"Conditions on {Who.Name}")">
+        @for (int i = 0; i < ConditionPalette.All.Count; i++)
+        {
+            ConditionKind option = ConditionPalette.All[i];
+            <button type="button" class="cond-chip @(Has(option) ? "on" : string.Empty)"
+                    aria-pressed="@Expanded(Has(option))"
+                    @onclick="() => Fight.ToggleCondition(Who.Id, option)">@ConditionPalette.Label(option)</button>
+        }
+    </div>
+}
+
+@if (detail)
+{
+    <div class="combatant-detail">
+        <label class="wide">
+            Name
+            <input value="@Who.Name" aria-label="@($"Rename {Who.Name}")"
+                   @onchange="e => Fight.SetName(Who.Id, Text(e.Value))" />
+        </label>
+        <label>
+            HP
+            <input type="number" min="0" max="999" value="@Who.CurrentHp"
+                   @onchange="e => Fight.SetHp(Who.Id, Number(e.Value))" />
+        </label>
+        <label>
+            Max
+            <input type="number" min="0" max="999" value="@Who.MaxHp"
+                   @onchange="e => Fight.SetMaxHp(Who.Id, Number(e.Value))" />
+        </label>
+        <label>
+            AC
+            <input type="number" min="0" max="40" value="@Who.ArmourClass"
+                   @onchange="e => Fight.SetArmourClass(Who.Id, Number(e.Value))" />
+        </label>
+        <label class="check">
+            <input type="checkbox" checked="@Who.Concentrating"
+                   @onchange="e => Fight.SetConcentration(Who.Id, Checked(e.Value), Who.ConcentrationNote)" />
+            Concentrating
+        </label>
+        <label class="wide">
+            On
+            <input value="@Who.ConcentrationNote" placeholder="hold person" disabled="@(!Who.Concentrating)"
+                   aria-label="What this combatant is concentrating on"
+                   @onchange="e => Fight.SetConcentration(Who.Id, true, Text(e.Value))" />
+        </label>
+        <label class="wide">
+            Note
+            <input value="@Who.Notes" placeholder="fled through the east door"
+                   aria-label="@($"DM note for {Who.Name}")"
+                   @onchange="e => Fight.SetNotes(Who.Id, Text(e.Value))" />
+        </label>
+    </div>
+}
+
+@code {
+    /// <summary>The combatant this line shows — a snapshot, never the live object.</summary>
+    [Parameter]
+    public Combatant Who { get; set; } = new Combatant();
+
+    /// <summary>True while this creature is the one the tab's detail pane is showing.</summary>
+    [Parameter]
+    public bool Selected { get; set; }
+
+    /// <summary>Raised with this combatant's id to open it in the tab's detail pane.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpen { get; set; }
+
+    private string damage = string.Empty;
+    private bool conditions;
+    private bool detail;
+
+    private string Hp => Who.MaxHp > 0 ? $"{Who.CurrentHp}/{Who.MaxHp}" : "—";
+
+    private int Amount => Number(damage);
+
+    private string ConcentrationTitle => Who.ConcentrationNote.Length > 0
+        ? $"Concentrating on {Who.ConcentrationNote}"
+        : "Concentrating";
+
+    private string HealthClass
+    {
+        get
+        {
+            if (Who.Down)
+            {
+                return "is-down";
+            }
+
+            return Who.Bloodied ? "is-bloodied" : string.Empty;
+        }
+    }
+
+    // Enter is the whole point of the box: the DM hears "seven damage" and types 7 + Enter without
+    // looking. Shift+Enter is the same gesture for healing, so neither needs a mode switch.
+    private void OnDamageKey(KeyboardEventArgs e)
+    {
+        if (string.Equals(e.Key, "Enter", StringComparison.Ordinal))
+        {
+            Apply(e.ShiftKey);
+        }
+    }
+
+    private void Apply(bool healing)
+    {
+        int amount = Amount;
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        if (healing)
+        {
+            Fight.Heal(Who.Id, amount);
+        }
+        else
+        {
+            Fight.ApplyDamage(Who.Id, amount);
+        }
+
+        damage = string.Empty;
+    }
+
+    private bool Has(ConditionKind condition) => Who.Conditions.Contains(condition);
+
+    private static string Expanded(bool open) => open ? "true" : "false";
+
+    private static string Text(object value) => value as string ?? string.Empty;
+
+    private static bool Checked(object value) => value is bool flag && flag;
+
+    private static int Number(object value) =>
+        int.TryParse(Text(value), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int parsed)
+            ? parsed
+            : 0;
+}

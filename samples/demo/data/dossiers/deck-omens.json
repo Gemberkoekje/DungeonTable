@@ -1,0 +1,50 @@
+{
+  "id": "omens-of-the-bell",
+  "title": "Omens of the Bell",
+  "cardNoun": "omen",
+  "drawRule": "fresh",
+  "drawHint": "Read an omen for the party as they step into the nave",
+  "usage": "Draw one each time the party enters the nave while the bell is silent. It lasts until they leave the undercroft.",
+  "cards": [
+    {
+      "id": "cracked-bell",
+      "name": "Cracked Bell",
+      "subtitle": "Omen of Warning",
+      "body": "A far-off note, like a bell struck under water.",
+      "effects": [
+        { "heading": "Boon Effect", "body": "The next time a character would be [[surprise|surprised]] in the undercroft, they are not." },
+        { "heading": "Bane Effect", "body": "The [[bell-warden]] has advantage on its first attack roll." }
+      ]
+    },
+    {
+      "id": "guttering-candle",
+      "name": "Guttering Candle",
+      "subtitle": "Omen of the Dead",
+      "body": "Every flame the party carries leans toward the ringers' stair.",
+      "effects": [
+        { "heading": "Boon Effect", "body": "The party knows the way to the ringers' stair ([[L1 area 5]]) without looking for it." },
+        { "heading": "Bane Effect", "body": "The ringers hear the party coming, and cannot be surprised." }
+      ]
+    },
+    {
+      "id": "silver-in-the-dark",
+      "name": "Silver in the Dark",
+      "subtitle": "Omen of Hope",
+      "body": "A glint of silver at the corner of the eye, gone when anyone looks.",
+      "effects": [
+        { "heading": "Boon Effect", "body": "One character gains the benefit of [[bless]] until the end of their next fight." },
+        { "heading": "Bane Effect", "body": "[[grask]] feels the clapper's pull, and is awake when the party reaches him." }
+      ]
+    },
+    {
+      "id": "rope-without-a-bell",
+      "name": "Rope Without a Bell",
+      "subtitle": "Omen of Silence",
+      "body": "A bell-rope swings in the dark with nothing on its end.",
+      "effects": [
+        { "heading": "Boon Effect", "body": "The party moves in silence: advantage on Dexterity (Stealth) checks until they leave the nave." },
+        { "heading": "Bane Effect", "body": "Sound dies here. A spell with a verbal component fails on a roll of 1 on a d6." }
+      ]
+    }
+  ]
+}

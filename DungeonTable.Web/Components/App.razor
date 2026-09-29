@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="@(HttpContext.Request.PathBase)/" />
+    <link rel="stylesheet" href="app.css" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="js/dt-pan-zoom.js"></script>
+    <script src="js/dt-player-box.js"></script>
+    <script src="js/dt-editor.js"></script>
+    <script src="js/dt-nav-keys.js"></script>
+    <script src="js/dt-dm-keys.js"></script>
+    <script src="js/dt-battle.js"></script>
+    <script src="js/dt-projector.js"></script>
+    <script src="js/dt-clock.js"></script>
+</body>
+
+</html>
+
+@code {
+    // Reflects the path prefix the request came in under ("/dnd" when the PathBase setting is
+    // "/dnd" and the URL starts with it, empty at the host root) so relative asset/SignalR URLs
+    // resolve correctly under either entry point. Set by app.UsePathBase(...) in Program.cs.
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; }
+}

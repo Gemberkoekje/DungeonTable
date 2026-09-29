@@ -1,0 +1,587 @@
+@inherits DmTabBase
+@inject CampaignState Campaign
+@*
+    The DM screen's Map tab: a vertical tool rail, the pannable map canvas, a context rail for the
+    last-clicked region, and a contextual options strip carrying only the active tool's settings
+    plus its one-line hint. Exactly one tool is active; it decides what a map click does.
+
+    This panel is never unmounted — the shell only hides it with CSS — because the canvas holds its
+    pan/zoom state in JS (dt-editor / dt-pan-zoom) and re-mounting the SVG would reset the view.
+*@
+
+<div class="map-tab">
+    <div class="map-stage">
+        <nav class="tool-rail" role="group" aria-label="Map tool">
+            @foreach ((MapTool tool, string glyph, string label) in Tools)
+            {
+                MapTool candidate = tool;
+                <button type="button" class="tool @(activeTool == candidate ? "active" : string.Empty)"
+                        aria-pressed="@(activeTool == candidate ? "true" : "false")"
+                        title="@($"{label} ({ToolIndex(candidate)})")"
+                        @onclick="() => SetTool(candidate)">
+                    <span class="tool-glyph" aria-hidden="true">@glyph</span>
+                    <span class="tool-label">@label</span>
+                    <span class="tool-key" aria-hidden="true">@ToolIndex(candidate)</span>
+                </button>
+            }
+        </nav>
+
+        <section class="map-stage-canvas" aria-label="Map">
+            @if (!string.IsNullOrEmpty(Workspace.MapError))
+            {
+                <p class="error" role="alert">@Workspace.MapError</p>
+            }
+            else if (Workspace.MapLoaded)
+            {
+                <VectorMapCanvas @ref="canvas" Map="Workspace.Map" ShowGrid="showGrid" ShowObjects="true" Pannable="true"
+                                 ShowPlayerBox="true"
+                                 PlayerViewport="Session.PlayerViewport"
+                                 PlayerAspect="Session.PlayerAspect"
+                                 PlayerViewportChanged="OnBoxChanged"
+                                 EnableEditor="true" EditorTool="@EditorToolName()"
+                                 SecretDoorIds="Workspace.SecretDoorIds" MarkSecretDoors="true"
+                                 ConcealedObjectIds="Workspace.ConcealedObjectIds"
+                                 RevealedFeatureIds="Session.RevealedFeatureIds()"
+                                 OpenDoorIds="Session.OpenDoorIds()" DoubleDoorIds="Workspace.DoubleDoorIds"
+                                 Fog="BuildFog()"
+                                 Overlay="BuildOverlay()" CanvasClicked="OnCanvasClicked"
+                                 FogPainted="OnFogPainted" Measured="OnMeasured" />
+                @if (!string.IsNullOrEmpty(Workspace.AnnotationsWarning))
+                {
+                    <p class="error" role="alert">@Workspace.AnnotationsWarning</p>
+                }
+            }
+            else
+            {
+                <p class="muted">Loading map&hellip;</p>
+            }
+        </section>
+
+        <aside class="context-rail" aria-label="Selected region">
+            @if (Workspace.PanelNode.Length > 0)
+            {
+                <h2 class="context-title">@Workspace.PanelTitle</h2>
+                <p class="context-id muted">@Workspace.PanelNode</p>
+
+                @if (Workspace.RoomRegionIds.Count > 0)
+                {
+                    <button type="button" class="context-action reveal-room @(Workspace.RoomRevealed() ? "on" : string.Empty)"
+                            title="Show or hide this room on the player projector" @onclick="Workspace.ToggleRoomReveal">
+                        @(Workspace.RoomRevealed() ? "Room revealed to players" : "Reveal room to players")
+                    </button>
+                }
+                else
+                {
+                    <p class="muted context-note">No region on this map is linked to it yet.</p>
+                }
+
+                <button type="button" class="context-action" title="Read the full briefing (Ctrl+2)"
+                        @onclick="() => OnOpenInfo.InvokeAsync()">
+                    Open in Info
+                </button>
+
+                @* What this table already did here. The point of the checklist is answering "have we
+                   been in this room before?" at the moment the DM clicks it on the map — making them
+                   open the Info tab to find out would answer it too late. *@
+                @if (AreaCleared)
+                {
+                    <span class="context-cleared" title="Every creature this area names has been ticked off">
+                        <span aria-hidden="true">&#x2714;</span> Encounter cleared
+                    </span>
+                }
+
+                @if (AreaNote.Length > 0)
+                {
+                    <p class="context-noted" title="Your note on this area">@AreaNote</p>
+                }
+            }
+            else
+            {
+                <p class="muted context-note">Pick <strong>Inspect</strong> and click a region to load its briefing.</p>
+            }
+
+            @if (!string.IsNullOrEmpty(Workspace.RegionNotice))
+            {
+                <p class="muted context-note" role="status">@Workspace.RegionNotice</p>
+            }
+        </aside>
+    </div>
+
+    <div class="tool-options">
+        <label class="grid-toggle">
+            <input type="checkbox" @bind="showGrid" />
+            Show grid
+        </label>
+
+        @if (activeTool == MapTool.Lift)
+        {
+            <label class="vision-range">
+                Vision
+                <input type="number" min="5" max="120" step="5" @bind="visionFeet" aria-label="Vision range in feet" />
+                ft
+            </label>
+        }
+        else if (activeTool == MapTool.Fog)
+        {
+            <div class="brush-size" role="group" aria-label="Fog brush size">
+                Brush
+                @foreach (int size in BrushSizes)
+                {
+                    int candidate = size;
+                    <button type="button" class="brush @(brushCells == candidate ? "active" : string.Empty)"
+                            aria-pressed="@(brushCells == candidate ? "true" : "false")"
+                            title="@($"{candidate}×{candidate} cells")"
+                            @onclick="() => brushCells = candidate">@candidate</button>
+                }
+            </div>
+        }
+        else if (activeTool == MapTool.Measure)
+        {
+            @* Both figures, because they answer different questions — see MapMeasurement. The rules
+               distance leads, since that is the one that settles whether a move or a reach is legal. *@
+            <span class="measure-readout" role="status">
+                @if (!measured.IsSet)
+                {
+                    <span class="muted">Nothing measured yet</span>
+                }
+                else if (measured.HasGrid)
+                {
+                    <strong class="measure-feet">@measured.Feet ft</strong>
+                    <span class="measure-squares">@Squares(measured.Squares)</span>
+                    <span class="measure-straight" title="The true straight-line distance. Counting squares under-counts a diagonal, so this is the larger figure whenever the line is not straight along the grid.">
+                        straight @measured.StraightFeet ft
+                    </span>
+                }
+                else
+                {
+                    <strong class="measure-feet">~@measured.StraightFeet ft</strong>
+                    <span class="measure-straight">this map has no calibrated grid</span>
+                }
+
+                @if (measured.IsSet)
+                {
+                    <button type="button" class="measure-clear" title="Take the line off the map"
+                            @onclick="() => measured = MapMeasurement.None">Clear</button>
+                }
+            </span>
+        }
+        else if (activeTool == MapTool.Ping)
+        {
+            <span class="ping-readout" role="status">
+                @if (Session.Ping.IsSet)
+                {
+                    <span class="ping-live">Pointing at the projector</span>
+                    <button type="button" class="measure-clear" title="Take the pointer off both maps"
+                            @onclick="Session.ClearPing">Clear</button>
+                }
+                else
+                {
+                    <span class="muted">Nothing pointed at yet</span>
+                }
+            </span>
+        }
+
+        <p class="muted map-hint">@ToolHint</p>
+
+        <div class="clear-group">
+            @if (confirmingClear)
+            {
+                <span class="clear-confirm">Hide everything from the players again?</span>
+                <button type="button" class="clear-yes" @onclick="ConfirmClear">Clear all</button>
+                <button type="button" class="clear-no" @onclick="() => confirmingClear = false">Cancel</button>
+            }
+            else
+            {
+                <button type="button" class="clear-reveals" title="Hide every revealed region, feature and painted cell"
+                        @onclick="() => confirmingClear = true">Clear reveals&hellip;</button>
+                @if (Session.CanUndoClearReveals)
+                {
+                    <button type="button" class="clear-undo" title="Put back what the last clear hid"
+                            @onclick="Session.UndoClearReveals">Undo clear</button>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Raised when the DM asks to read the selected region's full briefing on the Info tab.</summary>
+    [Parameter]
+    public EventCallback OnOpenInfo { get; set; }
+
+    // The rail, in order; the index of each entry is also its keyboard shortcut (1-8).
+    private static readonly (MapTool Tool, string Glyph, string Label)[] Tools =
+    {
+        (MapTool.Inspect, "▣", "Inspect"),
+        (MapTool.Reveal, "◍", "Reveal"),
+        (MapTool.Fog, "▨", "Fog"),
+        (MapTool.Lift, "☀", "Lifter"),
+        (MapTool.Doors, "⌸", "Doors"),
+        (MapTool.Conceal, "◐", "Conceal"),
+        (MapTool.Measure, "⟺", "Measure"),
+        (MapTool.Ping, "◎", "Point"),
+    };
+
+    private static readonly int[] BrushSizes = { 1, 2, 3 };
+
+    // Two clicks on the same region within this window count as a double-click, which opens the
+    // Info tab. A single click never navigates away, so revealing stays uninterrupted.
+    private static readonly TimeSpan DoubleClickWindow = TimeSpan.FromMilliseconds(450);
+
+    // Bound the fog lifter's radius: a huge value would scan a giant tile grid and freeze the DM circuit.
+    private const int MaxVisionFeet = 120;
+
+    private VectorMapCanvas canvas;
+    private MapTool activeTool = MapTool.Inspect;
+    private bool showGrid;
+    private int visionFeet = 30;
+    private int brushCells = 1;
+    private bool confirmingClear;
+
+    // The last distance measured. Kept on the tab rather than the shared workspace: it is one DM's
+    // scratch working, of no interest to the players and of none to a second DM window either.
+    private MapMeasurement measured = MapMeasurement.None;
+
+    private string lastClickedRegion = string.Empty;
+    private DateTime lastClickedAt = DateTime.MinValue;
+
+    /// <summary>Activates the tool at a 1-based rail position (the <c>1</c>–<c>8</c> shortcuts).</summary>
+    /// <param name="index">The rail position, 1 through 8; out-of-range values are ignored.</param>
+    public void SelectToolByIndex(int index)
+    {
+        if (index < 1 || index > Tools.Length)
+        {
+            return;
+        }
+
+        SetTool(Tools[index - 1].Tool);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Pans the map so a world point sits at the centre of the canvas (the Info tab's mini map
+    /// jumping here). Must be called while this tab is visible.
+    /// </summary>
+    /// <param name="worldX">Target X in world units.</param>
+    /// <param name="worldY">Target Y in world units.</param>
+    /// <param name="zoomFactor">Zoom to apply about the centre; 1 leaves the zoom alone.</param>
+    /// <returns>A task that completes once the view has been moved.</returns>
+    public Task CenterOnAsync(double worldX, double worldY, double zoomFactor) =>
+        canvas is null ? Task.CompletedTask : canvas.CenterOnAsync(worldX, worldY, zoomFactor);
+
+    private void SetTool(MapTool next)
+    {
+        activeTool = next;
+        confirmingClear = false;
+    }
+
+    private static int ToolIndex(MapTool tool) => Array.FindIndex(Tools, entry => entry.Tool == tool) + 1;
+
+    private static string Squares(int squares) => squares == 1 ? "1 square" : $"{squares} squares";
+
+    // The checklist, read from the shown area. Derived rather than stored, exactly as the Info tab
+    // derives it, so the two badges can never disagree about whether a room is done.
+    private bool AreaCleared =>
+        Workspace.Encounter.Count > 0
+        && Campaign.ClearedCount(Workspace.PanelNode, Workspace.Encounter.Select(monster => monster.NodeId))
+            == Workspace.Encounter.Count;
+
+    private string AreaNote => Campaign.NoteFor(Workspace.PanelNode);
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        // DmTabBase watches the workspace and the session; the ticks and the note live on the
+        // campaign, which is changed from the Info tab — a panel that stays mounted would otherwise
+        // keep showing the badge it had when the DM last looked at it.
+        Campaign.Changed += OnCampaignChanged;
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Campaign.Changed -= OnCampaignChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void OnCampaignChanged() => InvokeAsync(StateHasChanged);
+
+    private void ConfirmClear()
+    {
+        confirmingClear = false;
+        Session.ClearReveals();
+    }
+
+    private string EditorToolName() => activeTool switch
+    {
+        MapTool.Fog => "fog",
+        MapTool.Measure => "measure",
+        _ => "select",
+    };
+
+    private string ToolHint => activeTool switch
+    {
+        MapTool.Reveal => "Reveal: click a region, door or feature to show or hide it for the players.",
+        MapTool.Doors => "Doors: click a door to open or close it. Click a secret door to discover it (then open/close it); click again to re-hide it.",
+        MapTool.Conceal => ConcealHint,
+        MapTool.Fog => "Fog brush: drag to reveal grid cells; hold Alt (or right-drag) to hide them again.",
+        MapTool.Lift => "Fog lifter: set a vision range, then click a spot to reveal every tile a viewer there would see (line of sight, stopping at walls).",
+        MapTool.Measure => "Measure: drag between two points to read the distance. Squares are counted the 5e way (a diagonal costs one). Your map only — the players see nothing.",
+        MapTool.Ping => "Point: click a spot to point at it on the projector. It pulses a few times and fades; the mark stays on your map so you can see where it went.",
+        _ => "Inspect: click a region to load its briefing; double-click to open it on the Info tab. Drag the box to frame the player view.",
+    };
+
+    // Nothing on this map is concealable until it is marked so in the Room editor, and a mode that
+    // silently does nothing is worse than one that says why.
+    private string ConcealHint => Workspace.ConcealedObjectIds.Count > 0
+        ? $"Conceal: click one of the {Workspace.ConcealedObjectIds.Count} ghosted object(s) to show it to the players; click it again to hide it."
+        : "Conceal: no concealed objects on this map yet. Mark a decoration or staircase 'Concealed' in the Room editor first.";
+
+    private EditorOverlay BuildOverlay() => new EditorOverlay
+    {
+        Regions = Workspace.Regions,
+        Markers = Workspace.Markers,
+        // Doors and Conceal each act on one set of objects, so those get transparent hit-targets.
+        // The overlay draws them last, above the region fills — without them an object inside a drawn
+        // region is unclickable, because the region polygon is painted over the object pass and eats
+        // the click. Every other tool emits none, so region clicks stay unobstructed.
+        HitTargets = ToolHitTargets(),
+        SelectedRegionId = Workspace.SelectedRegionId,
+        // The measured line is shown only while its own tool is up: it is working-out, and leaving
+        // it lying across the map while the DM is revealing rooms would just be clutter. The ping
+        // mark stays whatever tool is up, because "where did I point?" is a question the DM asks
+        // while doing something else.
+        Measure = activeTool == MapTool.Measure ? measured : MapMeasurement.None,
+        Ping = Session.Ping,
+        UnitSize = Workspace.UnitSize,
+    };
+
+    private IReadOnlyList<ObjectHighlight> ToolHitTargets() => activeTool switch
+    {
+        MapTool.Doors => BuildDoorHitTargets(),
+        MapTool.Conceal => BuildConcealHitTargets(),
+        _ => Array.Empty<ObjectHighlight>(),
+    };
+
+    // The map's doors as transparent, id-tagged rectangles (see BuildOverlay). Stairs are left out:
+    // the Doors tool ignores them, so a stair target would only swallow clicks over the region below.
+    private IReadOnlyList<ObjectHighlight> BuildDoorHitTargets()
+    {
+        var list = new List<ObjectHighlight>(Workspace.Map.Doors.Count);
+        foreach (DoorFeature door in Workspace.Map.Doors)
+        {
+            list.Add(new ObjectHighlight { Id = door.Id, Kind = MapObjectKind.Door, Bounds = door.Bounds });
+        }
+
+        return list;
+    }
+
+    // Only the objects actually authored concealed are clickable in Conceal mode. Restricting the
+    // targets to that set (rather than every decoration on the level) keeps the tool acting on
+    // exactly what it advertises, and keeps 150+ sprite boxes from swallowing the map's clicks.
+    private IReadOnlyList<ObjectHighlight> BuildConcealHitTargets()
+    {
+        var concealed = Workspace.ConcealedObjectIds;
+        var list = new List<ObjectHighlight>(concealed.Count);
+        foreach (MapDecoration decoration in Workspace.Map.Decorations.Where(d => concealed.Contains(d.Id)))
+        {
+            list.Add(new ObjectHighlight { Id = decoration.Id, Kind = MapObjectKind.Decoration, Bounds = decoration.Bounds });
+        }
+
+        foreach (StairFeature stair in Workspace.Map.Stairs.Where(s => concealed.Contains(s.Id)))
+        {
+            list.Add(new ObjectHighlight { Id = stair.Id, Kind = MapObjectKind.Stairs, Bounds = stair.Bounds });
+        }
+
+        return list;
+    }
+
+    // A map click is routed by the active tool: Inspect loads a region's briefing; Reveal toggles a
+    // region or feature for the players; the rest act on doors, concealed objects or the fog.
+    private Task OnCanvasClicked(CanvasClick click) => activeTool switch
+    {
+        MapTool.Reveal => RevealClick(click),
+        MapTool.Doors => DoorClick(click),
+        MapTool.Conceal => ConcealClick(click),
+        MapTool.Lift => LiftFog(click),
+        MapTool.Ping => PingClick(click),
+        MapTool.Measure => Task.CompletedTask, // measuring is a drag; a stray click means nothing
+        _ => InspectClick(click),
+    };
+
+    // Point at a spot on the projector. Deliberately not tied to a region or a reveal: the DM
+    // points at a doorway, a stretch of corridor or a bit of fog just as often as at a room, and
+    // requiring something to be under the click would make the tool useless exactly then.
+    private Task PingClick(CanvasClick click)
+    {
+        Session.PingAt(click.WorldX, click.WorldY);
+        return Task.CompletedTask;
+    }
+
+    // A finished measuring drag: the numbers come from the server so the committed line and the
+    // readout can never disagree with each other.
+    private void OnMeasured(CanvasSegment segment) =>
+        measured = MapMeasure.Between(
+            Workspace.Map.Grid, segment.FromX, segment.FromY, segment.ToX, segment.ToY);
+
+    // Inspect: a single click loads the briefing without leaving the map; a second click on the same
+    // region inside the double-click window opens the Info tab on it.
+    private Task InspectClick(CanvasClick click)
+    {
+        if (click.HitKind != "region" || string.IsNullOrEmpty(click.HitId))
+        {
+            return Task.CompletedTask;
+        }
+
+        DateTime now = DateTime.UtcNow;
+        bool second = string.Equals(lastClickedRegion, click.HitId, StringComparison.Ordinal)
+            && now - lastClickedAt <= DoubleClickWindow;
+        lastClickedRegion = click.HitId;
+        lastClickedAt = now;
+
+        Workspace.SelectRegion(click.HitId);
+        return second ? OnOpenInfo.InvokeAsync() : Task.CompletedTask;
+    }
+
+    private Task RevealClick(CanvasClick click)
+    {
+        switch (click.HitKind)
+        {
+            case "region":
+                Session.ToggleRegion(click.HitId);
+                break;
+            case "feature":
+            case "door":
+            case "stairs":
+                Session.ToggleFeature(click.HitId);
+                break;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    // Doors: a left-click on a door cycles its state for the players. A normal door toggles
+    // closed <-> open. A secret door cycles undiscovered (wall) -> discovered & closed -> open ->
+    // undiscovered again, so a single button both discovers and re-hides it without a modifier key.
+    private Task DoorClick(CanvasClick click)
+    {
+        if (click.HitKind != "door" || string.IsNullOrEmpty(click.HitId))
+        {
+            return Task.CompletedTask;
+        }
+
+        string id = click.HitId;
+        if (!Workspace.SecretDoorIds.Contains(id))
+        {
+            Session.ToggleDoorOpen(id);
+            return Task.CompletedTask;
+        }
+
+        bool discovered = new HashSet<string>(Session.RevealedFeatureIds(), StringComparer.Ordinal).Contains(id);
+        bool open = new HashSet<string>(Session.OpenDoorIds(), StringComparer.Ordinal).Contains(id);
+        if (discovered && !open)
+        {
+            // Discovered and closed -> open it for the players.
+            Session.SetDoorOpen(id, true);
+            return Task.CompletedTask;
+        }
+
+        // Either not yet discovered (discover it, closed) or discovered-and-open (re-hide it): both
+        // flip the discovered state and leave the door closed. ToggleFeature does the flip either way.
+        Session.SetDoorOpen(id, false);
+        Session.ToggleFeature(id);
+        return Task.CompletedTask;
+    }
+
+    // Conceal: a click on a concealed object shows it to the players; clicking it again hides it
+    // again. It rides the same reveal set a discovered secret door uses, so the DM has one notion of
+    // "the players have seen this". Objects the editor did not mark concealed are inert here.
+    private Task ConcealClick(CanvasClick click)
+    {
+        if (!string.IsNullOrEmpty(click.HitId) && Workspace.ConcealedObjectIds.Contains(click.HitId))
+        {
+            Session.ToggleFeature(click.HitId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    // The fog lifter: from the clicked point, reveal every whole floor tile a viewer with the chosen
+    // vision range (feet) would see — line of sight, stopping at walls and still-hidden secret doors.
+    private Task LiftFog(CanvasClick click)
+    {
+        if (visionFeet <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        int feet = Math.Min(visionFeet, MaxVisionFeet);
+
+        // A discovered secret door no longer blocks sight — it is a normal door now.
+        var discovered = new HashSet<string>(Session.RevealedFeatureIds(), StringComparer.Ordinal);
+        var blocking = new HashSet<string>(Workspace.SecretDoorIds, StringComparer.Ordinal);
+        blocking.ExceptWith(discovered);
+        Session.PaintCells(VisionReveal.Find(Workspace.Map, click.WorldX, click.WorldY, feet, blocking, Session.OpenDoorIds()));
+        return Task.CompletedTask;
+    }
+
+    // The fog brush reports a world point; paint (or erase) the brush-sized block of cells over it.
+    private void OnFogPainted(FogPaint paint) =>
+        Session.PaintCells(GridCells.BrushCells(Workspace.Map.Grid, paint.WorldX, paint.WorldY, brushCells), paint.Erase);
+
+    private void OnBoxChanged(MapBounds viewport) =>
+        Session.SetPlayerViewport(MapFraming.ClampToMap(viewport, Workspace.Map.Bounds));
+
+    // The DM sees the whole map under a translucent tint over anything the players cannot yet see;
+    // revealed regions and painted cells show through. Markers stay on the editor overlay (all of
+    // them), so the fog layer draws none itself here.
+    private FogOverlay BuildFog()
+    {
+        if (!Workspace.MapLoaded)
+        {
+            return FogOverlay.None;
+        }
+
+        return new FogOverlay
+        {
+            Enabled = true,
+            FogColour = "#1b2436",
+            FogOpacity = 0.5,
+            RevealedPolygons = RevealedPolygons(),
+            RevealedCells = RevealedCells(),
+            UnitSize = Workspace.UnitSize,
+        };
+    }
+
+    private IReadOnlyList<IReadOnlyList<MapPoint>> RevealedPolygons()
+    {
+        var revealed = new HashSet<string>(Session.RevealedRegionIds(), StringComparer.Ordinal);
+        var polygons = new List<IReadOnlyList<MapPoint>>();
+        foreach (Region region in Workspace.Regions)
+        {
+            if (revealed.Contains(region.RegionId) && region.Polygon.Count >= 3)
+            {
+                polygons.Add(region.Polygon);
+            }
+        }
+
+        return polygons;
+    }
+
+    private IReadOnlyList<MapBounds> RevealedCells()
+    {
+        var cells = new List<MapBounds>();
+        foreach ((int col, int row) in Session.FogCells())
+        {
+            cells.Add(GridCells.CellBounds(Workspace.Map.Grid, col, row));
+        }
+
+        return cells;
+    }
+}

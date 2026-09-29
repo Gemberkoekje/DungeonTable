@@ -1,0 +1,471 @@
+{
+  "level": {
+    "levelNodeId": "data_dossiers_level_1",
+    "title": "Level 1: The Undercroft",
+    "designedFor": "Three or four 2nd-level characters. Clearing it and hanging the clapper back in the bell should see them to 3rd level.",
+    "whatDwellsHere": "Below [[millbrook-chapel|Millbrook's chapel]] lies the undercroft where its bell was cast. [[grask]], a [[bugbear]], has moved into the old bell-founder's workshop with two of his kind, and [[nib]]'s [[wickfoot-goblins|Wickfoot goblins]] run his errands from their den. The [[bell-warden]] keeps the nave, and since the bell fell silent it keeps it against everyone. Past the nave, the ringers' stair leads down to the sealed crypt ([[L2 area 1]]).",
+    "factions": [
+      {
+        "id": "grasks-crew",
+        "heading": "Grask's crew",
+        "kind": "lore",
+        "secret": false,
+        "body": "[[grask]] and two more [[bugbear|bugbears]], who came down out of the hills at the first frost and took the old bell-foundry ([[area 4]]) for its furnace. They melt down whatever will sell: candlesticks, a cooking pot, and now the bell's silver clapper. They hold [[tam-brask|Tam]] because he saw it. Grask leaves the goblins' den alone as long as the goblins fetch and carry."
+      },
+      {
+        "id": "wickfoot-goblins",
+        "heading": "Wickfoot goblins",
+        "kind": "lore",
+        "secret": false,
+        "body": "A band of [[goblin|goblins]] under [[nib]], named for the lamp-wicks they steal from the chapel. They have squatted in the den ([[area 2]]) for years, living on candle-ends and the mill's sacks. Since the bugbears came they fetch coal and water for [[grask]], and hate every minute of it."
+      }
+    ],
+    "wanderingMonsters": [
+      {
+        "heading": "Overview",
+        "kind": "lore",
+        "secret": false,
+        "body": "The undercroft is small, and the goblins know every corner of it. Roll a d6 whenever the party rests below or makes a great deal of noise; on a 1, roll again on the list below."
+      },
+      {
+        "heading": "1-4: Goblin Fetchers",
+        "kind": "lore",
+        "secret": false,
+        "body": "Two [[goblin|goblins]] dragging a sack of coal to [[area 4]]. They drop it and run to warn [[nib]] rather than fight."
+      },
+      {
+        "heading": "5-6: A Risen Ringer",
+        "kind": "lore",
+        "secret": false,
+        "body": "A [[skeleton]] from [[area 5]], trailing a length of bell-rope, climbing toward the silent bell. It attacks anything living that stands in its way."
+      }
+    ],
+    "aftermath": "With [[grask]] dead or driven off and the clapper back in the bell, the bell rings at dusk again. The [[bell-warden]] settles on its plinth, the ringers in [[area 5]] lie down for good, and [[nib]] claims the whole undercroft for the goblins unless the party says otherwise. The slumped clapper rings flat until a bell-founder recasts it, and the crypt below ([[L2 area 1]]) stays sealed.",
+    "entities": [
+      {
+        "id": "grask",
+        "kind": "npc",
+        "name": "Grask",
+        "statBlock": "bugbear",
+        "description": "The bugbear who holds the undercroft: huge, soft-spoken and patient, with a founder's leather apron over his hide armour and a pair of long tongs never far from his hand. He won forty gold from [[brother-aldous|Brother Aldous]] at dice, took the bell's clapper in part payment, and is melting it down in [[area 4]]. He fears the [[bell-warden]] and never crosses the nave; he meets Aldous in the vestry ([[area 3b]]) through its secret door. He would trade [[tam-brask|Tam]] for the rest of the debt, and means it."
+      },
+      {
+        "id": "nib",
+        "kind": "npc",
+        "name": "Nib",
+        "statBlock": "goblin",
+        "description": "Boss of the [[wickfoot-goblins|Wickfoot goblins]]: small, quick and full of grievances, wearing a chapel altar cloth as a cloak. He wants [[grask]] gone and the den to himself. Promised the den, he tells the party about the secret door in the vestry ([[area 3b]]) and that the bugbears sleep after they eat."
+      },
+      {
+        "id": "bell-warden",
+        "kind": "creature",
+        "name": "Bell-Warden",
+        "statBlock": "gargoyle",
+        "description": "A [[gargoyle]] the bell-founders set on a plinth in the nave ([[area 3a]]) to keep the way between the chapel and their crypt. It sleeps while the bell tolls at dusk. Since the bell fell silent it has been awake, and it attacks anything that crosses the nave, from above or below, until the bell rings again. Until it moves, it is one more statue."
+      },
+      {
+        "id": "silver-clapper",
+        "kind": "item",
+        "name": "silver clapper",
+        "description": "The bell's tongue: a clapper of blessed silver as long as a forearm. [[brother-aldous|Brother Aldous]] unhooked it from the bell to pay [[grask]], and it lies across the anvil in [[area 4]] on a scorched leather apron, its ball end already slumped where the crucible got to it. Hung back in the bell it rings again, flat until a founder recasts it."
+      }
+    ],
+    "relations": [
+      { "a": "grask", "rel": "leads", "b": "grasks-crew" },
+      { "a": "nib", "rel": "leads", "b": "wickfoot-goblins" },
+      { "a": "wickfoot-goblins", "rel": "serves", "b": "grask" },
+      { "a": "nib", "rel": "plots-against", "b": "grask", "note": "He would sell Grask to the party for the den.", "secret": true },
+      { "a": "grask", "rel": "fears", "b": "bell-warden", "note": "It is why he never crosses the nave and uses the vestry's secret door." },
+      { "a": "bell-warden", "rel": "protects", "b": "area 3a" }
+    ]
+  },
+  "areas": [
+    {
+      "areaNumber": 1,
+      "title": "Undercroft Landing (Level 1, Area 1)",
+      "areaNodeId": "data_dossiers_level_1_area_1",
+      "readAloud": "The stair from the chapel ends in a low stone room that smells of tallow and cold ashes. Candle-ends and a broken lantern lie on the floor. To the south stand a pair of tall wooden doors carved with bells. To the west a passage runs into the dark, and somewhere down it a fire crackles.",
+      "glance": [
+        {
+          "heading": "Exits",
+          "kind": "exits",
+          "secret": false,
+          "body": "The stair climbs back to the chapel. Carved double doors lead south into the nave ([[area 3a]]), and a passage runs west to the goblins' den ([[area 2]])."
+        },
+        {
+          "heading": "Candle-Ends",
+          "kind": "feature",
+          "secret": false,
+          "body": "Stubs of chapel candles, most of them chewed. The teeth marks are too wide for rats."
+        },
+        {
+          "heading": "Carved Doors",
+          "kind": "feature",
+          "secret": false,
+          "body": "Two oak leaves, a bell carved on each. They open into the nave and are not locked."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "Tracks",
+          "kind": "feature",
+          "secret": false,
+          "body": "In the dust: small bare footprints running west and back, over and over, and one set of boots with a split heel going west and not coming back. They are [[tam-brask|Tam]]'s, three days old."
+        },
+        {
+          "heading": "The Broken Lantern",
+          "kind": "lore",
+          "secret": false,
+          "body": "One of the mill's lanterns, with a mill-wheel scratched into its tin. Tam dropped it when the goblins jumped him in the passage; its glass is smashed and its oil runs west."
+        }
+      ],
+      "skillChecks": [
+        {
+          "ability": "Wisdom (Survival)",
+          "dc": 10,
+          "purpose": "Read the tracks: goblins coming and going to the west, and one pair of boots that went west and never came back."
+        }
+      ],
+      "creatures": [],
+      "exits": [
+        { "to": "area 2", "note": "West along the passage. The goblins leave their door open." },
+        { "to": "area 3a", "note": "The carved double doors, south." }
+      ]
+    },
+    {
+      "areaNumber": 2,
+      "title": "Goblin Den (Level 1, Area 2)",
+      "areaNodeId": "data_dossiers_level_1_area_2",
+      "readAloud": "A smoky room with a fire of broken pews burning in the middle of the floor. Heaps of sacking, straw and stolen candles line the walls. Small figures leap up from around the fire, shrieking.",
+      "glance": [
+        {
+          "heading": "Exits",
+          "kind": "exits",
+          "secret": false,
+          "body": "The door east stands open onto the passage to the landing ([[area 1]]). A door in the south wall leads to the bell-founder's workshop ([[area 4]])."
+        },
+        {
+          "heading": "Pew Fire",
+          "kind": "feature",
+          "secret": false,
+          "body": "Smoke hangs under the ceiling. A ranged attack against a target more than 20 feet away has disadvantage."
+        },
+        {
+          "heading": "Sacking Beds",
+          "kind": "feature",
+          "secret": false,
+          "body": "Mill sacks stuffed with straw. Two still say BRASK in faded paint."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "Nib's Offer",
+          "kind": "lore",
+          "secret": false,
+          "body": "If the fight goes against the goblins, or the party talks first, [[nib]] offers a deal: the goblins stand aside and tell the party how to reach [[grask]] unseen, through the secret door in the vestry ([[area 3b]]), if the party promises them the den once the bugbears are gone. He knows the bugbears sleep after they eat, and that their prisoner is 'the miller's boy'."
+        },
+        {
+          "heading": "Loose Flagstone",
+          "kind": "loot",
+          "secret": true,
+          "body": "Under a flagstone in the north-east corner, marked only by a smear of wax, is the goblins' stash: 23 sp, a copper ring, a jar of the mill's honey, and [[tam-brask|Tam]]'s knife, its handle carved with a mill-wheel."
+        }
+      ],
+      "skillChecks": [
+        {
+          "ability": "Wisdom (Perception)",
+          "dc": 13,
+          "purpose": "Find the loose flagstone over the goblins' stash without a goblin's help."
+        },
+        {
+          "ability": "Charisma (Persuasion)",
+          "dc": 10,
+          "purpose": "Get Nib talking before the fighting starts."
+        }
+      ],
+      "creatures": [
+        { "ref": "nib" },
+        { "ref": "goblin", "count": "1d4+2", "note": "Around the fire. They fight until three have fallen, then scatter." }
+      ],
+      "exits": [
+        { "to": "area 1", "note": "The open door east, and the passage to the landing." },
+        { "to": "area 4", "note": "The door south. The goblins knock before they open it." }
+      ]
+    },
+    {
+      "areaNumber": 3,
+      "title": "The Lower Nave (Level 1, Area 3)",
+      "areaNodeId": "data_dossiers_level_1_area_3",
+      "glance": [
+        {
+          "heading": "Overview",
+          "kind": "lore",
+          "secret": false,
+          "body": "The founders' chapel for their dead: a pillared hall, the nave ([[area 3a]]), and off its west side through an archway, the vestry ([[area 3b]]). Worn stone saints stand in niches along the walls. One of the figures is not a saint: it is the [[bell-warden]]."
+        },
+        {
+          "heading": "Exits",
+          "kind": "exits",
+          "secret": false,
+          "body": "Carved double doors lead north to the landing ([[area 1]]), and a plain door south to the ringers' stair ([[area 5]])."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "The Founders' Rule",
+          "kind": "lore",
+          "secret": false,
+          "body": "The bell-founders buried their dead in the crypt below ([[L2 area 1]]) and cast the bell to ring them to sleep each dusk. They set the [[bell-warden]] in the nave in case it ever stopped: while the bell is silent, nothing crosses the nave, from above or below."
+        }
+      ]
+    },
+    {
+      "areaNumber": 3,
+      "title": "Nave (Level 1, Area 3a)",
+      "areaNodeId": "data_dossiers_level_1_area_3a",
+      "readAloud": "A long hall under a low vaulted roof, held up by two thick square pillars. Worn stone saints stand in niches along the walls, and by the east wall a stone gargoyle crouches on a plinth, wings folded, facing the doors. To the west an archway opens into a smaller room; at the far end, a plain door leads on.",
+      "glance": [
+        {
+          "heading": "Exits",
+          "kind": "exits",
+          "secret": false,
+          "body": "North, the carved double doors to the landing ([[area 1]]). West, an open archway to the vestry ([[area 3b]]). South, a plain door to the ringers' stair ([[area 5]])."
+        },
+        {
+          "heading": "Pillars",
+          "kind": "feature",
+          "secret": false,
+          "body": "Two square pillars hold up the roof. A creature behind one has half cover."
+        },
+        {
+          "heading": "The Gargoyle",
+          "kind": "feature",
+          "secret": false,
+          "body": "A stone gargoyle on a plinth by the east wall. It is the [[bell-warden]]."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "The Bell-Warden Wakes",
+          "kind": "secret",
+          "secret": true,
+          "body": "While the bell is silent, the [[bell-warden]] attacks anyone who comes more than halfway down the nave, and anyone who strikes it or its plinth. It fights until it has 10 hit points or fewer, then climbs back onto its plinth and goes still. It never leaves the nave. If the bell rings while it fights, it stops at once and goes back to its plinth."
+        },
+        {
+          "heading": "How Aldous Crosses",
+          "kind": "secret",
+          "secret": true,
+          "body": "[[brother-aldous|Aldous]] crosses the nave under [[sanctuary]] on the nights he pays [[grask]]: the warden must succeed on a DC 12 Wisdom saving throw to attack him, and it usually fails. A character who watches him do it can guess how."
+        },
+        {
+          "heading": "Plinths",
+          "kind": "lore",
+          "secret": false,
+          "body": "Each saint's niche carries a founder's name and a line of verse about bells. The gargoyle's plinth is blank, and there is no dust on the gargoyle."
+        }
+      ],
+      "skillChecks": [
+        {
+          "ability": "Intelligence (Investigation)",
+          "dc": 12,
+          "purpose": "Notice that the gargoyle's plinth carries no name, and the gargoyle no dust."
+        }
+      ],
+      "creatures": [
+        { "ref": "bell-warden", "note": "On its plinth by the east wall. Awake while the bell is silent.", "secret": true }
+      ],
+      "exits": [
+        { "to": "area 1", "note": "The carved double doors, north." },
+        { "to": "area 3b", "note": "The archway, west." },
+        { "to": "area 5", "note": "A plain door south, and a passage beyond with a pit in it." }
+      ]
+    },
+    {
+      "areaNumber": 3,
+      "title": "Vestry (Level 1, Area 3b)",
+      "areaNodeId": "data_dossiers_level_1_area_3b",
+      "readAloud": "A small room of shelves and hooks. Moth-eaten robes hang in a row, a tall vestment press stands against the west wall, and a stone saint with a book in its hands keeps watch from the corner. A lectern holds nothing but a ring of candle wax.",
+      "glance": [
+        {
+          "heading": "Exits",
+          "kind": "exits",
+          "secret": false,
+          "body": "The archway east, to the nave ([[area 3a]])."
+        },
+        {
+          "heading": "Vestment Press",
+          "kind": "feature",
+          "secret": false,
+          "body": "An oak press as tall as a man, full of rotten robes. It stands a hand's breadth out from the wall."
+        },
+        {
+          "heading": "Lectern",
+          "kind": "feature",
+          "secret": false,
+          "body": "An empty lectern with a ring of fresh candle wax on it."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "Secret Door",
+          "kind": "secret",
+          "secret": true,
+          "body": "The press swings out on hidden hinges onto a door in the west wall, to the bell-founder's workshop ([[area 4]]). [[grask]] uses it to meet [[brother-aldous|Aldous]] without crossing the nave. Scrape marks on the floor give it away."
+        },
+        {
+          "heading": "The Lost Hymnal",
+          "kind": "loot",
+          "secret": false,
+          "body": "The chapel's great hymnal lies on the bottom shelf under a heap of robes, where Old Hobb, the sexton, left it the evening the bell fell silent, when a statue in the nave moved and he ran. It is heavy, bound in boards, and worth nothing to anyone but Hobb."
+        },
+        {
+          "heading": "Wax and Footprints",
+          "kind": "feature",
+          "secret": false,
+          "body": "Sandal prints in the dust come in from the archway and go back to it: [[brother-aldous|Aldous]] waits here on the nights he pays. Broad bare prints, far bigger than a man's, come from behind the press and go back to it."
+        }
+      ],
+      "skillChecks": [
+        {
+          "ability": "Wisdom (Perception)",
+          "dc": 12,
+          "purpose": "Spot the scrape marks where the vestment press swings out over the secret door."
+        }
+      ],
+      "creatures": [
+        { "ref": "brother-aldous", "note": "Only on the nights he pays Grask: waiting at the lectern with a candle.", "secret": true }
+      ],
+      "exits": [
+        { "to": "area 3a", "note": "The archway, east." },
+        { "to": "area 4", "note": "The secret door behind the vestment press.", "secret": true }
+      ]
+    },
+    {
+      "areaNumber": 4,
+      "title": "Bell-Founder's Workshop (Level 1, Area 4)",
+      "areaNodeId": "data_dossiers_level_1_area_4",
+      "readAloud": "Heat hits you at the door. A brick furnace roars in the south-west corner, its mouth glowing orange, and the room stinks of hot metal and wet fur. An anvil stands in the middle of the floor, and a boy is chained to it.",
+      "glance": [
+        {
+          "heading": "Exits",
+          "kind": "exits",
+          "secret": false,
+          "body": "A door north to the goblins' den ([[area 2]])."
+        },
+        {
+          "heading": "Furnace",
+          "kind": "feature",
+          "secret": false,
+          "body": "A founder's furnace of old brick, fed with the goblins' coal. The bugbears keep it roaring."
+        },
+        {
+          "heading": "Anvil",
+          "kind": "feature",
+          "secret": false,
+          "body": "A great iron anvil on an oak stump. [[tam-brask|Tam Brask]] is chained to its foot, and the [[silver-clapper]] lies across its face."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "The Furnace",
+          "kind": "feature",
+          "secret": false,
+          "body": "A creature that ends its turn within 5 feet of the furnace mouth takes 3 (1d6) fire damage. One shoved into it takes 10 (3d6) fire damage and catches fire, taking 3 (1d6) fire damage at the start of each of its turns until someone uses an action to put it out. The bugbears know this, and try it."
+        },
+        {
+          "heading": "Tam's Chain",
+          "kind": "feature",
+          "secret": false,
+          "body": "[[tam-brask|Tam]] has been chained here for three days on scraps and water. The lock opens to [[grask]]'s key; the chain is too heavy to break without a hammer and a great deal of noise."
+        },
+        {
+          "heading": "Grask's Strongbox",
+          "kind": "loot",
+          "secret": false,
+          "body": "Under the bench by the furnace, locked, with Grask's key on his belt: 38 gp, 60 sp, and two of the chapel's silver candlesticks, which [[brother-aldous|Aldous]] paid with before he ran out of candlesticks."
+        },
+        {
+          "heading": "Aldous's IOU",
+          "kind": "secret",
+          "secret": true,
+          "body": "Nailed inside the strongbox lid: a torn half-sheet of vellum in a cramped hand. It reads 'Owed to Grask: forty gold. Part paid, one silver tongue. A.' A blob of red wax at its foot carries the chapel's bell seal. A bell's clapper is also called its tongue, and only [[brother-aldous|Brother Aldous]] uses the seal."
+        }
+      ],
+      "skillChecks": [
+        {
+          "ability": "Strength (Athletics)",
+          "dc": 15,
+          "purpose": "Tear Tam's chain from the anvil's stump by main force. It is loud."
+        },
+        {
+          "ability": "Dexterity (thieves' tools)",
+          "dc": 13,
+          "purpose": "Pick the lock of Tam's chain, or of Grask's strongbox."
+        }
+      ],
+      "creatures": [
+        { "ref": "grask" },
+        { "ref": "bugbear", "count": 2, "note": "Grask's crew. One works the bellows; one sleeps by the wall." },
+        { "ref": "tam-brask", "note": "Chained to the anvil." }
+      ],
+      "exits": [
+        { "to": "area 2", "note": "The door north." },
+        { "to": "area 3b", "note": "The secret door behind the coal sacks in the east wall.", "secret": true }
+      ]
+    },
+    {
+      "areaNumber": 5,
+      "title": "Ringers' Stair (Level 1, Area 5)",
+      "areaNodeId": "data_dossiers_level_1_area_5",
+      "readAloud": "Past the door a narrow passage runs south between rough walls and opens into a square room, where a stair winds down into the dark. Three figures in rotten grey robes stand at the head of it, bell-ropes wound around their bony hands. They turn their heads toward you.",
+      "glance": [
+        {
+          "heading": "Exits",
+          "kind": "exits",
+          "secret": false,
+          "body": "North, the passage back to the nave ([[area 3a]]). The stair in the south-east corner winds down to the sealed crypt ([[L2 area 1]])."
+        },
+        {
+          "heading": "Bell-Ropes",
+          "kind": "feature",
+          "secret": false,
+          "body": "Old bell-ropes, cut off at the ceiling, hang from iron rings. The ringers hold their ends."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "Pit",
+          "kind": "secret",
+          "secret": true,
+          "body": "The middle square of the passage is a false floor over a 20-foot pit. A creature that steps onto it falls in and takes 7 (2d6) bludgeoning damage ([[falling]]). Once the pit is found, jumping it is easy."
+        },
+        {
+          "heading": "The Ringers",
+          "kind": "lore",
+          "secret": false,
+          "body": "The founders' bell-ringers, buried below, rose when the bell fell silent. They are trying to ring it: they climb the stair, stop at the pit or at the [[bell-warden]], and go back down. They attack anything living that stands between them and the tower. If the bell rings, they lie down where they stand and do not rise again."
+        },
+        {
+          "heading": "The Crypt Door",
+          "kind": "lore",
+          "secret": false,
+          "body": "At the foot of the stair, a bronze door carries the founders' seal. Beyond it is the sealed crypt ([[L2 area 1]]). The seal holds, for now."
+        }
+      ],
+      "skillChecks": [
+        {
+          "ability": "Wisdom (Perception)",
+          "dc": 13,
+          "purpose": "Notice the sagging false floor over the pit in the passage."
+        }
+      ],
+      "creatures": [
+        { "ref": "skeleton", "count": 3, "note": "The old bell-ringers, at the head of the stair." }
+      ],
+      "exits": [
+        { "to": "area 3a", "note": "The passage north, and the door to the nave." },
+        { "to": "L2 area 1", "note": "The stair down to the sealed crypt." }
+      ]
+    }
+  ]
+}

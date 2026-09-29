@@ -1,0 +1,63 @@
+@* Full text for one extracted spell (DungeonTable.Core.Stats.SpellEntry): the same tier the
+   reference drawer and the Battle tab's combatant detail pane both render, so a spell link from
+   either surface opens the identical view. *@
+
+<div class="spell-detail">
+    <p class="spell-subline">
+        @SpellLevelLabel(Spell.Level, Spell.School)
+        @if (Spell.Ritual)
+        {
+            <span class="spell-tag">ritual</span>
+        }
+        @if (Spell.Concentration)
+        {
+            <span class="spell-tag">concentration</span>
+        }
+    </p>
+
+    <dl class="spell-facts">
+        <dt>Casting Time</dt>
+        <dd>@Spell.CastingTime</dd>
+        <dt>Range</dt>
+        <dd>@Spell.Range</dd>
+        <dt>Components</dt>
+        <dd>@Spell.Components</dd>
+        <dt>Duration</dt>
+        <dd>@Spell.Duration</dd>
+    </dl>
+
+    <p class="spell-text">@Spell.Text</p>
+
+    @if (!string.IsNullOrWhiteSpace(Spell.HigherLevels))
+    {
+        <p class="spell-higher"><strong>At Higher Levels.</strong> @Spell.HigherLevels</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Citation))
+    {
+        <p class="reference-citation">@Citation</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(Spell.Source))
+    {
+        <p class="reference-citation">@Spell.Source @Spell.SourceLocation</p>
+    }
+</div>
+
+@code {
+    /// <summary>The spell to render.</summary>
+    [Parameter]
+    public SpellEntry Spell { get; set; } = new SpellEntry();
+
+    /// <summary>
+    /// Where the spell is printed, by the book's title ("SRD 5.1 p.254"), as the cards cite it. When
+    /// blank, the spell's own source file and page are shown instead.
+    /// </summary>
+    [Parameter]
+    public string Citation { get; set; } = string.Empty;
+
+    private static string SpellLevelLabel(int level, string school)
+    {
+        string schoolText = string.IsNullOrWhiteSpace(school) ? string.Empty : school;
+        return level == 0 ? $"{schoolText} cantrip".Trim() : $"Level {level} {schoolText}".TrimEnd();
+    }
+}

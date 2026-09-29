@@ -1,0 +1,34 @@
+{
+  "members": [
+    {
+      "name": "Maren",
+      "playerName": "Robin",
+      "class": "Cleric",
+      "level": 2,
+      "armourClass": 18,
+      "maxHp": 17,
+      "passivePerception": 13,
+      "initiativeModifier": 0
+    },
+    {
+      "name": "Oswin Tull",
+      "playerName": "Alex",
+      "class": "Rogue",
+      "level": 2,
+      "armourClass": 14,
+      "maxHp": 15,
+      "passivePerception": 15,
+      "initiativeModifier": 3
+    },
+    {
+      "name": "Hild",
+      "playerName": "Sam",
+      "class": "Fighter",
+      "level": 2,
+      "armourClass": 18,
+      "maxHp": 22,
+      "passivePerception": 13,
+      "initiativeModifier": 0
+    }
+  ]
+}

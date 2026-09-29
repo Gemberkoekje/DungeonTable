@@ -1,0 +1,400 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+@*
+    Renders a fully-vector map (parsed from a Dungeon Scrawl .ds) as a single self-contained SVG.
+    The DM and player views share this component:
+      - Pannable wraps the map in a bounded box with drag-pan / wheel-zoom.
+      - ShowPlayerBox overlays the aspect-locked "player view" rectangle the DM moves/resizes.
+      - ViewBox restricts the SVG to a world-unit region (the player view shows only that box).
+*@
+
+<style>
+    /* Non-scoped: the SVG is injected via MarkupString and never receives the scope attribute. */
+    .vector-map-host { width: 100%; }
+    .vector-map-host svg { width: 100%; height: auto; display: block; }
+
+    .vector-map-box {
+        position: relative;
+        width: 100%;
+        height: var(--vector-map-height, 72vh);
+        overflow: hidden;
+        border: 1px solid #3a3a3a;
+        border-radius: 8px;
+        background: #ffffff;
+        cursor: grab;
+        touch-action: none;
+    }
+    .vector-map-box.dragging { cursor: grabbing; }
+    .vector-map-box .vector-map-pan { width: 100%; height: 100%; }
+    .vector-map-box .vector-map-pan svg { width: 100%; height: 100%; display: block; transform-origin: 0 0; }
+
+    .vector-map-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 3; }
+    .vector-map-tools button {
+        width: 30px; height: 30px; font-size: 15px; line-height: 1;
+        border: 1px solid #3a3a3a; border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9); color: #1b1b1b; cursor: pointer;
+    }
+    .vector-map-tools button:hover { border-color: #b8860b; }
+    .vector-map-tools button.wide { width: auto; padding: 0 10px; }
+
+    /* The player-view rectangle the DM drags/resizes. The interior is click-through
+       (pointer-events: none) so the DM can still select the region underneath; the box is moved
+       and resized by its interactive frame (edges, corners, label bar). */
+    .dt-player-box {
+        position: absolute; box-sizing: border-box; z-index: 2;
+        border: 2px solid #b8860b; background: rgba(184, 134, 11, 0.12);
+        pointer-events: none; touch-action: none;
+    }
+    .dt-player-box-label {
+        position: absolute; top: -20px; left: 0; white-space: nowrap;
+        font: 600 11px/1.4 system-ui, sans-serif; color: #7a5a06;
+        background: rgba(255, 255, 255, 0.85); padding: 0 5px; border-radius: 3px;
+        pointer-events: auto; cursor: move;
+    }
+    .dt-handle { position: absolute; width: 12px; height: 12px; background: #b8860b; border: 1px solid #fff; border-radius: 2px; pointer-events: auto; }
+    .dt-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+    .dt-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+    .dt-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+    .dt-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+    /* Draggable frame edges (leave the corners to the resize handles). */
+    .dt-edge { position: absolute; pointer-events: auto; cursor: move; }
+    .dt-edge-n { top: -4px; left: 10px; right: 10px; height: 9px; }
+    .dt-edge-s { bottom: -4px; left: 10px; right: 10px; height: 9px; }
+    .dt-edge-w { left: -4px; top: 10px; bottom: 10px; width: 9px; }
+    .dt-edge-e { right: -4px; top: 10px; bottom: 10px; width: 9px; }
+</style>
+
+@if (Pannable)
+{
+    <div class="vector-map-box" @ref="boxRef">
+        <div class="vector-map-pan">
+            @((MarkupString)svg)
+        </div>
+        <div class="vector-map-tools">
+            <button type="button" title="Zoom in" @onclick="ZoomIn">+</button>
+            <button type="button" title="Zoom out" @onclick="ZoomOut">&minus;</button>
+            <button type="button" class="wide" title="Reset view" @onclick="ResetView">Reset</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="vector-map-host @CssClass">
+        @((MarkupString)svg)
+    </div>
+}
+
+@code {
+    /// <summary>The vector map to render.</summary>
+    [Parameter]
+    [EditorRequired]
+    public VectorMap Map { get; set; } = new VectorMap();
+
+    /// <summary>When true, draws the calibrated grid (clipped to the floor).</summary>
+    [Parameter]
+    public bool ShowGrid { get; set; } = true;
+
+    /// <summary>When true, draws the door/stair object pass.</summary>
+    [Parameter]
+    public bool ShowObjects { get; set; } = true;
+
+    /// <summary>When true, wraps the map in a bounded box with drag-pan and wheel-zoom.</summary>
+    [Parameter]
+    public bool Pannable { get; set; }
+
+    /// <summary>Restricts the SVG viewBox to this world-unit region (empty = full map).</summary>
+    [Parameter]
+    public MapBounds ViewBox { get; set; }
+
+    /// <summary>When true (with <see cref="Pannable"/>), overlays the movable player-view box.</summary>
+    [Parameter]
+    public bool ShowPlayerBox { get; set; }
+
+    /// <summary>The player-view rectangle, in world units.</summary>
+    [Parameter]
+    public MapBounds PlayerViewport { get; set; }
+
+    /// <summary>The player screen aspect ratio the box is locked to.</summary>
+    [Parameter]
+    public double PlayerAspect { get; set; } = 16.0 / 9.0;
+
+    /// <summary>Raised when the DM moves or resizes the player-view box.</summary>
+    [Parameter]
+    public EventCallback<MapBounds> PlayerViewportChanged { get; set; }
+
+    /// <summary>Extra CSS class applied to the host element so callers can control layout.</summary>
+    [Parameter]
+    public string CssClass { get; set; } = string.Empty;
+
+    /// <summary>The editor annotation overlay to draw on top of the map (Room Editor only).</summary>
+    [Parameter]
+    public EditorOverlay Overlay { get; set; } = EditorOverlay.None;
+
+    /// <summary>Ids of doors marked secret; each renders as a wall instead of a door glyph.</summary>
+    [Parameter]
+    public IReadOnlyCollection<string> SecretDoorIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>When true (DM view), secret doors carry an "S" mark; the player view leaves this false.</summary>
+    [Parameter]
+    public bool MarkSecretDoors { get; set; }
+
+    /// <summary>Ids of individually-revealed features/objects; a revealed secret door renders as a door,
+    /// and a revealed concealed object stops being hidden.</summary>
+    [Parameter]
+    public IReadOnlyCollection<string> RevealedFeatureIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Ids of stairs/decorations marked concealed; each is ghosted on a DM view and omitted
+    /// from the player projector until it appears in <see cref="RevealedFeatureIds"/>.</summary>
+    [Parameter]
+    public IReadOnlyCollection<string> ConcealedObjectIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Ids of doors currently open; each renders as an open door instead of a closed one.</summary>
+    [Parameter]
+    public IReadOnlyCollection<string> OpenDoorIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Ids of doors drawn as double doors (a pair of leaves) rather than a single leaf.</summary>
+    [Parameter]
+    public IReadOnlyCollection<string> DoubleDoorIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>The fog-of-war layer drawn over the map (empty = no fog).</summary>
+    [Parameter]
+    public FogOverlay Fog { get; set; } = FogOverlay.None;
+
+    /// <summary>Raised when the DM paints or erases with the fog brush, in world units.</summary>
+    [Parameter]
+    public EventCallback<FogPaint> FogPainted { get; set; }
+
+    /// <summary>
+    /// When true (with <see cref="Pannable"/>), attaches the editor input layer so map clicks are
+    /// reported via <see cref="CanvasClicked"/> and rectangle drags via <see cref="RegionDragged"/>.
+    /// </summary>
+    [Parameter]
+    public bool EnableEditor { get; set; }
+
+    /// <summary>
+    /// The active editor tool: <c>"select"</c>, <c>"marker"</c>, <c>"draw-poly"</c>,
+    /// <c>"draw-rect"</c>, <c>"fog"</c> or <c>"measure"</c>. The last three each pause drag-panning
+    /// so a drag does its own thing instead of panning; <c>"draw-poly"</c> reports clicks as corners
+    /// and leaves panning on.
+    /// </summary>
+    [Parameter]
+    public string EditorTool { get; set; } = "select";
+
+    /// <summary>Raised when the DM clicks the map in editor mode, with world coordinates + hit info.</summary>
+    [Parameter]
+    public EventCallback<CanvasClick> CanvasClicked { get; set; }
+
+    /// <summary>Raised when the DM drags out a rectangle with the draw tool, in world units.</summary>
+    [Parameter]
+    public EventCallback<CanvasRect> RegionDragged { get; set; }
+
+    /// <summary>Raised when the DM finishes a drag with the measuring tool, in world units.</summary>
+    [Parameter]
+    public EventCallback<CanvasSegment> Measured { get; set; }
+
+    private ElementReference boxRef;
+    private DotNetObjectReference<VectorMapCanvas> selfRef;
+    private string svg = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        var doors = new DoorRenderState
+        {
+            SecretDoorIds = SecretDoorIds,
+            DiscoveredDoorIds = RevealedFeatureIds,
+            OpenDoorIds = OpenDoorIds,
+            DoubleDoorIds = DoubleDoorIds,
+        };
+
+        // Concealed objects ride the same reveal set secret doors use, so one DM click both discovers
+        // a secret door and unconceals a statue.
+        var conceal = new ConcealState
+        {
+            ConcealedIds = ConcealedObjectIds,
+            RevealedIds = RevealedFeatureIds,
+        };
+
+        // The player projector gets a reveal-windowed render: a still-secret door reads as wall and
+        // blocks the peek; only a discovered door renders as a normal (open/closed) door. A concealed
+        // object is left out of that render entirely.
+        if (Fog.BookEdge)
+        {
+            svg = VectorMapSvgRenderer.RenderRevealed(
+                Map, ViewBox, Fog.RevealedPolygons, Fog.RevealedCells, Fog.RevealedMarkers, doors, conceal);
+            return;
+        }
+
+        var options = new VectorMapRenderOptions
+        {
+            ShowGrid = ShowGrid,
+            ShowObjects = ShowObjects,
+            ViewBox = ViewBox,
+            Overlay = Overlay,
+            Doors = doors,
+            MarkSecretDoors = MarkSecretDoors,
+            Conceal = conceal,
+            Fog = Fog,
+        };
+        svg = VectorMapSvgRenderer.Render(Map, options);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!Pannable)
+        {
+            return;
+        }
+
+        // The circuit can drop mid-render (browser closed / navigated away); post-disconnect
+        // interop then throws. It is a no-op at that point, so swallow the teardown exceptions.
+        try
+        {
+            if (firstRender)
+            {
+                await JS.InvokeVoidAsync("dtPanZoom.attach", boxRef);
+                if (ShowPlayerBox)
+                {
+                    selfRef ??= DotNetObjectReference.Create(this);
+                    await JS.InvokeVoidAsync(
+                        "dtPlayerBox.init", boxRef, selfRef,
+                        new { x = PlayerViewport.MinX, y = PlayerViewport.MinY, w = PlayerViewport.Width, h = PlayerViewport.Height },
+                        PlayerAspect);
+                }
+
+                if (EnableEditor)
+                {
+                    selfRef ??= DotNetObjectReference.Create(this);
+                    await JS.InvokeVoidAsync("dtEditor.attach", boxRef, selfRef);
+                }
+            }
+
+            await JS.InvokeVoidAsync("dtPanZoom.apply", boxRef);
+            if (ShowPlayerBox)
+            {
+                await JS.InvokeVoidAsync(
+                    "dtPlayerBox.update", boxRef,
+                    PlayerViewport.MinX, PlayerViewport.MinY, PlayerViewport.Width, PlayerViewport.Height, PlayerAspect);
+            }
+
+            if (EnableEditor)
+            {
+                // The grid origin goes over with the cell size so the measuring tool's live figure
+                // is computed against the same absolute cells the server counts — see dt-editor.js.
+                await JS.InvokeVoidAsync(
+                    "dtEditor.setTool", boxRef, EditorTool, Overlay.UnitSize, Map.Grid.OriginX, Map.Grid.OriginY);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; nothing to update.
+        }
+        catch (OperationCanceledException)
+        {
+            // The render was cancelled during teardown; nothing to update.
+        }
+    }
+
+    /// <summary>Invoked from JS when the DM clicks the map in editor mode.</summary>
+    /// <param name="worldX">Click X in world units.</param>
+    /// <param name="worldY">Click Y in world units.</param>
+    /// <param name="hitKind">"region", "feature", "door", "stairs", "decoration", or an empty string.</param>
+    /// <param name="hitId">Id of the hit element, or an empty string.</param>
+    [JSInvokable]
+    public Task OnCanvasClick(double worldX, double worldY, string hitKind, string hitId) =>
+        CanvasClicked.InvokeAsync(new CanvasClick(worldX, worldY, hitKind, hitId));
+
+    /// <summary>Invoked from JS when the DM drags out a region rectangle in editor mode.</summary>
+    /// <param name="x">Left edge in world units.</param>
+    /// <param name="y">Top edge in world units.</param>
+    /// <param name="w">Width in world units.</param>
+    /// <param name="h">Height in world units.</param>
+    [JSInvokable]
+    public Task OnRegionDragged(double x, double y, double w, double h) =>
+        RegionDragged.InvokeAsync(new CanvasRect(x, y, w, h));
+
+    /// <summary>Invoked from JS when the DM finishes a measuring drag.</summary>
+    /// <param name="fromX">Drag start X in world units.</param>
+    /// <param name="fromY">Drag start Y in world units.</param>
+    /// <param name="toX">Drag end X in world units.</param>
+    /// <param name="toY">Drag end Y in world units.</param>
+    [JSInvokable]
+    public Task OnMeasured(double fromX, double fromY, double toX, double toY) =>
+        Measured.InvokeAsync(new CanvasSegment(fromX, fromY, toX, toY));
+
+    /// <summary>Invoked from JS as the DM paints/erases with the fog brush.</summary>
+    /// <param name="worldX">Pointer X in world units.</param>
+    /// <param name="worldY">Pointer Y in world units.</param>
+    /// <param name="erase">True when the gesture hides cells again.</param>
+    [JSInvokable]
+    public Task OnFogPaint(double worldX, double worldY, bool erase) =>
+        FogPainted.InvokeAsync(new FogPaint(worldX, worldY, erase));
+
+    /// <summary>Invoked from JS when the DM moves or resizes the box.</summary>
+    /// <param name="x">Left edge in world units.</param>
+    /// <param name="y">Top edge in world units.</param>
+    /// <param name="w">Width in world units.</param>
+    /// <param name="h">Height in world units.</param>
+    [JSInvokable]
+    public Task OnPlayerBoxChanged(double x, double y, double w, double h) =>
+        PlayerViewportChanged.InvokeAsync(new MapBounds(x, y, x + w, y + h));
+
+    /// <summary>
+    /// Pans the view so a world point sits at the centre of the box, optionally zooming about it.
+    /// Only meaningful on a <see cref="Pannable"/> canvas that is currently visible — a hidden
+    /// (<c>display:none</c>) panel has no layout for the browser to measure against, so the call is
+    /// a no-op there.
+    /// </summary>
+    /// <param name="worldX">Target X in world units.</param>
+    /// <param name="worldY">Target Y in world units.</param>
+    /// <param name="zoomFactor">Zoom to apply about the centre afterwards; 1 leaves the zoom alone.</param>
+    /// <returns>A task that completes once the view has been moved.</returns>
+    public async Task CenterOnAsync(double worldX, double worldY, double zoomFactor)
+    {
+        if (!Pannable)
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("dtPanZoom.centerOn", boxRef, worldX, worldY, zoomFactor);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; there is no view left to move.
+        }
+        catch (OperationCanceledException)
+        {
+            // The call was cancelled during teardown.
+        }
+    }
+
+    private async Task ZoomIn() => await JS.InvokeVoidAsync("dtPanZoom.zoom", boxRef, 1.3);
+
+    private async Task ZoomOut() => await JS.InvokeVoidAsync("dtPanZoom.zoom", boxRef, 1.0 / 1.3);
+
+    private async Task ResetView() => await JS.InvokeVoidAsync("dtPanZoom.reset", boxRef);
+
+    /// <summary>Releases the .NET object reference handed to the JS interop modules.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (EnableEditor)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("dtEditor.detach", boxRef);
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is already gone; the DOM (and its box state) went with it.
+            }
+            catch (InvalidOperationException)
+            {
+                // Disposed during (pre)static rendering, before the circuit could accept interop — the
+                // editor was never attached in that pass, so there is nothing to detach.
+            }
+        }
+
+        selfRef?.Dispose();
+    }
+}

@@ -1,0 +1,59 @@
+@* Renders a block of dossier prose with its cross-references turned into in-place links. The
+   resolver-produced spans are interleaved with plain text (see CrossRefText.Split); each link opens
+   the target's reference (a monster / spell / item / NPC card, or an area in the panel) via a single
+   activate callback, coloured by kind. Whitespace is preserved by the caller's `white-space` rule.
+
+   An authored [[...]] link shows its words, never its brackets. One that names nothing is marked
+   rather than hidden, with the markup in its tooltip, so a typo in the content is visible at the
+   table instead of silently becoming plain text. One to a floor nobody has authored yet is muted
+   instead: it is early, not wrong. *@
+
+@foreach (CrossRefText.Segment segment in Segments())
+{
+    @if (segment.IsLink)
+    {
+        <button type="button" class="xref xref-@CrossRefStyle.CssClass(segment.Kind)"
+                title="@CrossRefStyle.KindName(segment.Kind) — open reference"
+                @onclick="() => Activate(segment.TargetId)">@segment.Text</button>
+    }
+    else if (segment.Kind == CrossRefKind.Unresolved)
+    {
+        <span class="xref-unresolved" title="Broken link: @segment.Source names nothing that is loaded">@segment.Text</span>
+    }
+    else if (segment.Kind == CrossRefKind.Pending)
+    {
+        <span class="xref-pending" title="Not authored yet: @segment.Source is on a floor with no dossier">@segment.Text</span>
+    }
+    else
+    {
+        @segment.Text
+    }
+}
+
+@code {
+    /// <summary>The block body to render.</summary>
+    [Parameter]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Resolves the cross-references in a block of text. When null, the prose renders as plain text,
+    /// with any authored links reduced to their words.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>
+    /// Raised with the target's id when a cross-reference link is clicked, to open its reference.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnActivate { get; set; }
+
+    private static readonly IReadOnlyList<CrossRef> NoRefs = Array.Empty<CrossRef>();
+
+    private IReadOnlyList<CrossRefText.Segment> Segments() =>
+        ResolveRefs is null
+            ? CrossRefText.Split(LinkMarkup.Plain(Text), NoRefs)
+            : CrossRefText.Split(Text, ResolveRefs(Text));
+
+    private Task Activate(string targetId) => OnActivate.InvokeAsync(targetId);
+}

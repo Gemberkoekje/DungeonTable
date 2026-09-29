@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "DungeonTable.Web", "--launch-profile", "http"],
+      "port": 5218
+    }
+  ]
+}

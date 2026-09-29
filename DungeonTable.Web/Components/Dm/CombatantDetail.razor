@@ -1,0 +1,425 @@
+@inject BattleState Fight
+@inject IStatLibrary Stats
+@inject IContentProjection Content
+@inject EncounterContext Context
+@inject LiveContent Live
+@implements IDisposable
+@*
+    One combatant, in full: everything the DM has to know on this creature's turn without reaching for
+    a rulebook — how many attacks it gets and at what bonus, all six saving throws as a plus or a
+    minus, its spells and how many slots are left, and what the room's own text says about it.
+
+    It renders StatBlockView, the same component the Info tab's reference drawer uses, so the two
+    surfaces can never disagree about a creature. What is NOT in StatBlockView is what belongs to this
+    creature rather than to its species: current hit points, the damage box, its conditions, its spent
+    slots, and the dossier blocks from the area the fight is in.
+
+    The pane is self-sufficient on purpose: damage, healing and conditions are
+    repeated here, so a DM who has opened a monster to read its tactics does not have to aim back at
+    the row behind it to apply the hit.
+*@
+
+<aside class="battle-detail kind-@Who.Kind.ToString().ToLowerInvariant()"
+       aria-label="@($"{Who.Name} in detail")">
+    <header class="detail-head">
+        <div class="detail-titles">
+            <span class="detail-kind">@KindLabel</span>
+            <h3 class="detail-name">@Who.Name</h3>
+        </div>
+        <button type="button" class="detail-close" title="Close the detail pane (Esc)"
+                aria-label="Close the detail pane" @onclick="() => OnClose.InvokeAsync()">&times;</button>
+    </header>
+
+    @* The fight-side numbers, kept at the top: this is the part read on the creature's turn. *@
+    <div class="detail-vitals @HealthClass">
+        <span class="detail-hp" title="Current / maximum hit points">@Hp</span>
+
+        @if (Who.Down)
+        {
+            <span class="battle-state down" title="At 0 hit points — skipped in the turn order until healed">down</span>
+        }
+        else if (Who.Bloodied)
+        {
+            <span class="battle-state bloodied" title="At or below half hit points">bloodied</span>
+        }
+
+        @if (Who.ArmourClass > 0)
+        {
+            <span class="battle-ac">AC @Who.ArmourClass</span>
+        }
+        @if (Who.PassivePerception > 0)
+        {
+            <span class="battle-pp">pp @Who.PassivePerception</span>
+        }
+
+        <span class="combatant-damage">
+            <input type="number" class="dmg-box" min="0" max="999" placeholder="dmg"
+                   aria-label="@($"Damage or healing for {Who.Name}")"
+                   title="Type a number: Enter takes that much damage, Shift+Enter heals it"
+                   @bind="damage" @bind:event="oninput" @onkeydown="OnDamageKey" />
+            <button type="button" disabled="@(Amount <= 0)" title="Take that much damage"
+                    @onclick="() => Apply(false)">&minus;</button>
+            <button type="button" disabled="@(Amount <= 0)" title="Heal that much"
+                    @onclick="() => Apply(true)">+</button>
+        </span>
+    </div>
+
+    <div class="detail-conditions" role="group" aria-label="@($"Conditions on {Who.Name}")">
+        @for (int i = 0; i < ConditionPalette.All.Count; i++)
+        {
+            ConditionKind option = ConditionPalette.All[i];
+            <button type="button" class="cond-chip @(Has(option) ? "on" : string.Empty)"
+                    aria-pressed="@Flag(Has(option))"
+                    @onclick="() => Fight.ToggleCondition(Who.Id, option)">@ConditionPalette.Label(option)</button>
+        }
+    </div>
+
+    <div class="detail-conc">
+        <label class="check">
+            <input type="checkbox" checked="@Who.Concentrating"
+                   @onchange="e => Fight.SetConcentration(Who.Id, Checked(e.Value), Who.ConcentrationNote)" />
+            Concentrating on
+        </label>
+        <input value="@Who.ConcentrationNote" placeholder="hold person" disabled="@(!Who.Concentrating)"
+               aria-label="What this combatant is concentrating on"
+               @onchange="e => Fight.SetConcentration(Who.Id, true, Text(e.Value))" />
+
+        <label class="detail-note">
+            Note
+            <input value="@Who.Notes" placeholder="fled through the east door"
+                   aria-label="@($"DM note for {Who.Name}")"
+                   @onchange="e => Fight.SetNotes(Who.Id, Text(e.Value))" />
+        </label>
+    </div>
+
+    @if (spell.NodeId.Length > 0)
+    {
+        @* A spell opened from the spellcasting list stays inside the pane: jumping to the Info tab's
+           reference drawer mid-round would move the DM off the fight to read three lines. *@
+        <div class="detail-spell">
+            <button type="button" class="link-btn detail-back" @onclick="CloseSpell">&#x25C2; Back to @Who.Name</button>
+            <h4 class="detail-spell-name">@spell.Name</h4>
+            <SpellDetail Spell="spell" Citation="@CitationOf(spell.NodeId)" />
+        </div>
+    }
+    else if (HasStatBlock)
+    {
+        @* "How many attacks, at what bonus, for how much" is the question this pane exists to answer,
+           so it is lifted out of the Actions list and put first — the full sentences are still below,
+           in the stat block itself. *@
+        @if (multiattack.Text.Length > 0 || attackEntries.Count > 0)
+        {
+            <section class="detail-attacks" aria-label="Attacks">
+                @if (multiattack.Text.Length > 0)
+                {
+                    <p class="detail-multiattack"><strong>Multiattack.</strong> @multiattack.Text</p>
+                }
+
+                @foreach (StatBlockEntry entry in attackEntries)
+                {
+                    @foreach (AttackLine attack in entry.Attacks)
+                    {
+                        <p class="detail-attack" title="@entry.Text">
+                            <span class="attack-name">@(attack.Name.Length > 0 ? attack.Name : entry.Name)</span>
+                            <span class="attack-hit">@StatBlockMath.FormatModifier(attack.ToHit) to hit</span>
+                            @if (ReachLine(attack).Length > 0)
+                            {
+                                <span class="attack-reach">@ReachLine(attack)</span>
+                            }
+                            @if (DamageLine(attack).Length > 0)
+                            {
+                                <span class="attack-damage">@DamageLine(attack)</span>
+                            }
+                        </p>
+                    }
+                }
+            </section>
+        }
+
+        @if (Block.Spellcasting.Slots.Count > 0)
+        {
+            <section class="detail-slots" aria-label="Spell slots">
+                <span class="detail-slots-head">Slots</span>
+                @foreach (SpellSlotLevel slots in Block.Spellcasting.Slots)
+                {
+                    SpellSlotLevel level = slots;
+                    <span class="slot-level">
+                        <span class="slot-level-name">L@level.Level</span>
+                        @* A tally, not addressable boxes: any empty box spends one, any full box gives
+                           one back, exactly like ticking off a paper tracker. *@
+                        @for (int box = 1; box <= level.Total; box++)
+                        {
+                            bool used = box <= Spent(level.Level);
+                            <button type="button" class="slot-box @(used ? "spent" : string.Empty)"
+                                    aria-pressed="@Flag(used)"
+                                    title="@SlotTitle(level, used)"
+                                    @onclick="() => Slot(level.Level, used)">@(used ? "◼" : "◻")</button>
+                        }
+                        <span class="slot-left">@Left(level) left</span>
+                    </span>
+                }
+            </section>
+        }
+
+        <StatBlockView Block="Block" Citation="@blockCitation" OnOpenReference="OpenSpell" />
+    }
+    else
+    {
+        <p class="muted detail-nostats">
+            No stat block is extracted for this combatant, so its hit points and AC are whatever was
+            typed in. Everything above still works.
+        </p>
+    }
+
+    @if (notes.Count > 0)
+    {
+        <section class="detail-context" aria-label="What this area says">
+            <h4 class="stat-section">In @(AreaTitle.Length > 0 ? AreaTitle : "this area")</h4>
+            @foreach (EncounterNote note in notes)
+            {
+                <article class="context-note @(note.Secret ? "secret" : string.Empty)">
+                    <h5 class="context-heading">
+                        @(note.Heading.Length > 0 ? note.Heading : "Read-aloud")
+                        <span class="context-section">@note.Section</span>
+                        @if (note.Secret)
+                        {
+                            <span class="secret-badge">DM only</span>
+                        }
+                    </h5>
+                    <p class="context-body">@note.Body</p>
+                </article>
+            }
+        </section>
+    }
+</aside>
+
+@code {
+    /// <summary>The combatant this pane describes — a snapshot, never the live object.</summary>
+    [Parameter]
+    public Combatant Who { get; set; } = new Combatant();
+
+    /// <summary>The node id of the area the fight is in, for the encounter context blocks.</summary>
+    [Parameter]
+    public string AreaNodeId { get; set; } = string.Empty;
+
+    /// <summary>The area's display title, for the encounter context heading.</summary>
+    [Parameter]
+    public string AreaTitle { get; set; } = string.Empty;
+
+    /// <summary>Raised when the DM closes the pane (the × or Esc).</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private StatBlock Block = new StatBlock();
+    private string blockCitation = string.Empty;
+    private SpellEntry spell = new SpellEntry();
+    private IReadOnlyList<EncounterNote> notes = Array.Empty<EncounterNote>();
+
+    // Pulled out of the block once, not per render: the pane re-renders on every point of damage.
+    private StatBlockEntry multiattack = new StatBlockEntry();
+    private IReadOnlyList<StatBlockEntry> attackEntries = Array.Empty<StatBlockEntry>();
+
+    private string damage = string.Empty;
+
+    // Which combatant the cached stat block and context blocks were loaded for. The pane re-renders on
+    // every point of damage anywhere in the fight, and scanning the area's prose per render would be
+    // wasteful, so both are reloaded only when the pane actually changes creature.
+    private string loadedFor = string.Empty;
+
+    protected override void OnInitialized() => Live.Changed += OnContentChanged;
+
+    /// <summary>Stops listening for content changes.</summary>
+    public void Dispose() => Live.Changed -= OnContentChanged;
+
+    protected override void OnParametersSet()
+    {
+        string key = Who.Id + "@" + AreaNodeId;
+        if (string.Equals(loadedFor, key, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        loadedFor = key;
+        damage = string.Empty;
+        spell = new SpellEntry();
+        LoadFromContent();
+    }
+
+    // The documents changed on disk: the block, its citation and the area's notes on this creature are
+    // read again, for the same creature. What the fight has done to it lives on the combatant and stays.
+    private void OnContentChanged(ContentChanges changes)
+    {
+        if (changes.HasFlag(ContentChanges.Documents))
+        {
+            _ = InvokeAsync(() =>
+            {
+                LoadFromContent();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void LoadFromContent()
+    {
+        var found = Stats.GetMonster(Who.StatBlockNodeId);
+        Block = found.IsValid ? found.Value : new StatBlock();
+        blockCitation = CitationOf(Block.NodeId);
+        notes = Context.For(AreaNodeId, Who.StatBlockNodeId, Who.Name);
+
+        multiattack = Block.Actions
+            .FirstOrDefault(entry => string.Equals(entry.Name, "Multiattack", StringComparison.OrdinalIgnoreCase))
+            ?? new StatBlockEntry();
+
+        // Every action the extractor managed to parse an attack out of. One it could not parse is not
+        // lost: it still reads as a full sentence in the stat block below.
+        attackEntries = Block.Actions.Where(entry => entry.Attacks.Count > 0).ToArray();
+    }
+
+    private bool HasStatBlock => Block.NodeId.Length > 0;
+
+    private string KindLabel => Who.Kind == CombatantKind.None ? "combatant" : Who.Kind.ToString().ToLowerInvariant();
+
+    private string Hp => Who.MaxHp > 0 ? $"{Who.CurrentHp}/{Who.MaxHp}" : "—";
+
+    private int Amount => Number(damage);
+
+    private string HealthClass
+    {
+        get
+        {
+            if (Who.Down)
+            {
+                return "is-down";
+            }
+
+            return Who.Bloodied ? "is-bloodied" : string.Empty;
+        }
+    }
+
+    // ---- Attacks ----------------------------------------------------------------------------
+
+    private static string ReachLine(AttackLine attack)
+    {
+        if (attack.Reach > 0 && attack.RangeNormal > 0)
+        {
+            return $"reach {attack.Reach} ft. or range {RangeText(attack)}";
+        }
+
+        if (attack.Reach > 0)
+        {
+            return $"reach {attack.Reach} ft.";
+        }
+
+        return attack.RangeNormal > 0 ? $"range {RangeText(attack)}" : string.Empty;
+    }
+
+    private static string RangeText(AttackLine attack) =>
+        attack.RangeLong > 0 ? $"{attack.RangeNormal}/{attack.RangeLong} ft." : $"{attack.RangeNormal} ft.";
+
+    // "11 (2d8 + 2) piercing + 7 (2d6) poison" — the average first, because that is the number a DM
+    // who is not rolling reads out.
+    private static string DamageLine(AttackLine attack)
+    {
+        var parts = new List<string>();
+        if (attack.DamageDice.Length > 0)
+        {
+            parts.Add($"{attack.DamageAverage} ({attack.DamageDice}) {attack.DamageType}".TrimEnd());
+        }
+
+        parts.AddRange(attack.ExtraDamage.Select(rider =>
+            $"+ {rider.DamageAverage} ({rider.DamageDice}) {rider.DamageType}".TrimEnd()));
+
+        return string.Join(" ", parts);
+    }
+
+    // ---- Spell slots ------------------------------------------------------------------------
+
+    private int Spent(int level) => StatBlockMath.SlotsSpent(Who.SpentSlots, level);
+
+    private int Left(SpellSlotLevel slots) => Math.Max(0, slots.Total - Spent(slots.Level));
+
+    private string SlotTitle(SpellSlotLevel slots, bool used) => used
+        ? $"Give a level {slots.Level} slot back ({Left(slots)} of {slots.Total} left)"
+        : $"Spend a level {slots.Level} slot ({Left(slots)} of {slots.Total} left)";
+
+    private void Slot(int level, bool used)
+    {
+        if (used)
+        {
+            Fight.RestoreSlot(Who.Id, level);
+        }
+        else
+        {
+            Fight.SpendSlot(Who.Id, level);
+        }
+    }
+
+    // ---- Spells -----------------------------------------------------------------------------
+
+    // Where a stat block or spell is printed, by the book's title, as its card cites it ("SRD 5.1
+    // p.266"); empty when there is no card to ask.
+    private string CitationOf(string nodeId)
+    {
+        if (string.IsNullOrEmpty(nodeId))
+        {
+            return string.Empty;
+        }
+
+        var card = Content.GetReferenceCard(nodeId);
+        return card.IsValid ? card.Value.Citation : string.Empty;
+    }
+
+    private void OpenSpell(string nodeId)
+    {
+        var found = Stats.GetSpell(nodeId);
+        if (found.IsValid)
+        {
+            spell = found.Value;
+        }
+    }
+
+    private void CloseSpell() => spell = new SpellEntry();
+
+    // ---- Hit points and conditions ----------------------------------------------------------
+
+    private void OnDamageKey(KeyboardEventArgs e)
+    {
+        if (string.Equals(e.Key, "Enter", StringComparison.Ordinal))
+        {
+            Apply(e.ShiftKey);
+        }
+    }
+
+    private void Apply(bool healing)
+    {
+        int amount = Amount;
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        if (healing)
+        {
+            Fight.Heal(Who.Id, amount);
+        }
+        else
+        {
+            Fight.ApplyDamage(Who.Id, amount);
+        }
+
+        damage = string.Empty;
+    }
+
+    private bool Has(ConditionKind condition) => Who.Conditions.Contains(condition);
+
+    private static string Flag(bool on) => on ? "true" : "false";
+
+    private static string Text(object value) => value as string ?? string.Empty;
+
+    private static bool Checked(object value) => value is bool flag && flag;
+
+    private static int Number(object value) =>
+        int.TryParse(Text(value), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int parsed)
+            ? parsed
+            : 0;
+}

@@ -1,0 +1,101 @@
+# Publishes the app image when a version tag is pushed: tag v1.2.3 becomes
+# ghcr.io/gemberkoekje/dungeontable-app:1.2.3, so an image tag always names a source tag. The tag has
+# to match <Version> in DungeonTable.Web.csproj, and the tests run first. There is no `latest`: pin a
+# version, as an image built FROM this one should.
+#
+# To release: set <Version> in DungeonTable.Web.csproj, commit, then tag that commit and push the tag:
+#   git tag v1.2.3
+#   git push origin v1.2.3
+#
+# The image holds no content. Run it with a campaign mounted (see the README), or build an image of
+# your own FROM it that copies one in.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: gemberkoekje/dungeontable-app
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  image:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Check out
+      uses: actions/checkout@v4
+
+    - name: The tag matches the project's version
+      id: version
+      run: |
+        tag="${GITHUB_REF_NAME#v}"
+        version=$(grep -oPm1 "(?<=<Version>)[^<]+" DungeonTable.Web/DungeonTable.Web.csproj)
+        if [ "$tag" != "$version" ]; then
+          echo "::error::The tag says $tag, but DungeonTable.Web.csproj says $version."
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version" >> "$GITHUB_OUTPUT"
+        echo "## Image" >> "$GITHUB_STEP_SUMMARY"
+        echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version" >> "$GITHUB_STEP_SUMMARY"
+
+    # The source label links the package to this repository on GitHub.
+    - name: Build the image
+      run: >
+        docker build
+        --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}"
+        --label "org.opencontainers.image.revision=${{ github.sha }}"
+        --label "org.opencontainers.image.version=${{ steps.version.outputs.version }}"
+        --label "org.opencontainers.image.licenses=MIT"
+        --label "org.opencontainers.image.description=A DM screen and a projector view for running a dungeon at the table. Holds no content: mount a campaign."
+        -t "${{ steps.version.outputs.image }}"
+        .
+
+    - name: The image holds no content
+      run: |
+        docker run --rm --entrypoint sh "${{ steps.version.outputs.image }}" -c '
+          for path in /app/Maps /app/data /app/samples; do
+            if [ -e "$path" ]; then
+              echo "::error::$path is in the image"
+              exit 1
+            fi
+          done'
+
+    - name: The image runs the sample pack, mounted
+      run: |
+        docker run -d --name app -p 8080:8080 \
+          -e Auth__Passphrase=ci-smoke -e Content__Root=/content \
+          -v "$PWD/samples/demo:/content:ro" "${{ steps.version.outputs.image }}"
+        for attempt in $(seq 1 30); do
+          if curl -fsS http://localhost:8080/healthz; then break; fi
+          sleep 2
+        done
+        curl -fsS http://localhost:8080/healthz
+        curl -fsS -u dm:ci-smoke http://localhost:8080/dm -o dm.html
+        grep -q '(Level 1, Area 1)' dm.html
+
+    - name: App log
+      if: always()
+      run: docker logs app || true
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push the image
+      run: docker push "${{ steps.version.outputs.image }}"

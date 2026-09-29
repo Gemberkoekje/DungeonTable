@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>DungeonTable.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DungeonTable.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../DungeonTable.Core/DungeonTable.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Qowaiv.Validation.Abstractions" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,27 @@
+# The build context is this folder. The image needs only what `dotnet publish` of the web project
+# reads: the sources, the project and props files, the lock files, NuGet.config and global.json.
+
+# Build output (restored and published inside the image).
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+
+# Content never goes into the app image, not even the sample pack: an image built FROM this one adds
+# a campaign, and must not be able to mix the two.
+samples/
+
+# Documentation and tooling state.
+*.md
+docs/
+.claude/
+
+# Secrets and local IDE/VCS state.
+.env
+.git/
+.gitattributes
+.github/
+.gitignore
+.vs/
+.vscode/
+**/*.user

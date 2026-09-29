@@ -1,0 +1,412 @@
+@page "/dm"
+@rendermode InteractiveServer
+@inject DmWorkspace Workspace
+@inject SessionState Session
+@inject TablePersistence Persistence
+@inject LiveContent Live
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+@*
+    The DM screen's shell. It owns what all three tabs share — which tab is on top, the loaded map,
+    and the player-view status bar — and nothing else: the map tools live in MapTab, the briefing in
+    InfoTab, the fight in BattleTab, and every piece of state they share lives in the scoped
+    DmWorkspace rather than in parameters threaded through here.
+
+    All three panels stay mounted; the inactive ones are hidden with CSS. That is deliberate: the map
+    canvas keeps its pan/zoom in JS (dt-pan-zoom / dt-editor), so unmounting it on a tab switch would
+    both reset the DM's view and cost a full re-render of a large SVG. It looks like an accident
+    otherwise — it is not.
+*@
+
+<PageTitle>DM view &mdash; DungeonTable</PageTitle>
+
+<div class="dm-shell">
+    <header class="dm-shell-head">
+        <nav class="dm-tabs" role="tablist" aria-label="DM screen">
+            @foreach ((DmTab tab, string label) in Tabs)
+            {
+                DmTab candidate = tab;
+                <button type="button" role="tab" id="dm-tab-@candidate"
+                        class="dm-tab @(activeTab == candidate ? "active" : string.Empty)"
+                        aria-selected="@(activeTab == candidate ? "true" : "false")"
+                        aria-controls="dm-panel-@candidate"
+                        title="@($"{label} (Ctrl+{TabIndex(candidate)})")"
+                        @onclick="() => SetTab(candidate)">
+                    @label
+                    <span class="dm-tab-key" aria-hidden="true">@TabIndex(candidate)</span>
+                </button>
+            }
+        </nav>
+
+        <label class="map-picker">
+            Map
+            <select @bind="selectedMapId" @bind:after="LoadMap">
+                @foreach (string id in Workspace.MapIds)
+                {
+                    <option value="@id">@Workspace.MapLabel(id)</option>
+                }
+            </select>
+        </label>
+    </header>
+
+    @* The reveal status bar belongs to the shell, not the Map tab: the DM must be able to see and
+       reframe what the projector shows without leaving whichever tab they are working in. *@
+    <div class="dm-player-bar">
+        <span class="players-see @(PlayersSeeAnything ? "live" : string.Empty)"
+              title="What the player projector is currently showing">
+            <span class="see-dot" aria-hidden="true">&#x25CF;</span>
+            Players see @Count(RevealedRegionCount, "region") &middot; @Count(FogCellCount, "cell")
+        </span>
+
+        <span class="viewport-at" title="The region under the centre of the player viewport">
+            <span aria-hidden="true">&#x2922;</span>
+            Viewport: @(ViewportName.Length > 0 ? ViewportName : "unmapped")
+        </span>
+
+        <button type="button" class="frame-btn" title="Move the player viewport onto the shown area"
+                disabled="@(!Workspace.MapLoaded)" @onclick="FrameSelected">Frame</button>
+
+        @* The picture on the projector belongs in the bar for the same reason the reveal counts do:
+           a DM on the Battle tab must be able to see that a vampire is still on the beamer, and
+           take it down, without going to find the tab that put it there. *@
+        @if (Session.ShownArtImageId.Length > 0)
+        {
+            <span class="art-live @(Session.ShownArtVisible ? "live" : string.Empty)"
+                  title="The picture staged for the projector">
+                <span aria-hidden="true">&#x1F5BC;</span>
+                @(Session.ShownArtVisible ? "Art shown" : "Art hidden")
+            </span>
+
+            @* Its own class, not .frame-btn: that one carries margin-left:auto to take the bar's
+               slack, and a second one would fight it for the same space. *@
+            <button type="button" class="art-btn"
+                    title="@(Session.ShownArtVisible ? "Take the picture off the projector (h)" : "Put the staged picture back (h)")"
+                    @onclick="ToggleArt">@(Session.ShownArtVisible ? "Hide art" : "Show art")</button>
+        }
+
+        @* Whether the evening is being saved. A DM should never have to guess, and finding out after
+           a restart that nothing was persisted is exactly the surprise persistence exists to remove. *@
+        <span class="table-saved @SaveClass" title="@SaveTitle">
+            <span aria-hidden="true">@SaveGlyph</span>
+            @SaveLabel
+        </span>
+    </div>
+
+    <div class="dm-panels">
+        <div class="dm-panel @PanelClass(DmTab.Map)" role="tabpanel" id="dm-panel-Map"
+             aria-labelledby="dm-tab-Map" aria-hidden="@Hidden(DmTab.Map)">
+            <MapTab @ref="mapTab" OnOpenInfo="() => SetTab(DmTab.Info)" />
+        </div>
+
+        <div class="dm-panel @PanelClass(DmTab.Info)" role="tabpanel" id="dm-panel-Info"
+             aria-labelledby="dm-tab-Info" aria-hidden="@Hidden(DmTab.Info)">
+            <InfoTab Active="@(activeTab == DmTab.Info)" OnShowOnMap="ShowOnMap" />
+        </div>
+
+        <div class="dm-panel @PanelClass(DmTab.Battle)" role="tabpanel" id="dm-panel-Battle"
+             aria-labelledby="dm-tab-Battle" aria-hidden="@Hidden(DmTab.Battle)">
+            <BattleTab @ref="battleTab" />
+        </div>
+
+        <div class="dm-panel @PanelClass(DmTab.Art)" role="tabpanel" id="dm-panel-Art"
+             aria-labelledby="dm-tab-Art" aria-hidden="@Hidden(DmTab.Art)">
+            <ArtTab @ref="artTab" />
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly (DmTab Tab, string Label)[] Tabs =
+    {
+        (DmTab.Map, "Map"),
+        (DmTab.Info, "Info"),
+        (DmTab.Battle, "Battle"),
+        (DmTab.Art, "Art"),
+    };
+
+    // How far the Map tab zooms in when the Info tab's mini map jumps to an area. Modest on purpose:
+    // the DM keeps their bearings better than a hard zoom to the room's own bounds would allow.
+    private const double ShowOnMapZoom = 1.6;
+
+    private DmTab activeTab = DmTab.Map;
+    private MapTab mapTab;
+    private BattleTab battleTab;
+    private ArtTab artTab;
+    private string selectedMapId = string.Empty;
+
+    private DotNetObjectReference<DmView> selfRef;
+
+    // A mini-map jump can only centre the canvas once the Map panel is actually on screen (a hidden
+    // panel has no layout), so the request is parked here and served from OnAfterRenderAsync.
+    private bool centreRequested;
+    private MapPoint centreTarget;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnStateChanged;
+        Workspace.Changed += OnStateChanged;
+        Persistence.Changed += OnStateChanged;
+        Live.Changed += OnContentChanged;
+
+        await Workspace.InitialiseAsync(CancellationToken.None);
+        selectedMapId = Workspace.CurrentMapId;
+    }
+
+    // A document, a map or the art catalogue changed on disk: the workspace reads again what it keeps,
+    // on this circuit's own dispatcher so nothing renders from it half-read, and every tab follows.
+    private void OnContentChanged(ContentChanges changes) => InvokeAsync(async () =>
+    {
+        await Workspace.RefreshAsync(changes, CancellationToken.None);
+        selectedMapId = Workspace.CurrentMapId;
+        StateHasChanged();
+    });
+
+    private async Task LoadMap()
+    {
+        await Workspace.LoadMapAsync(selectedMapId, CancellationToken.None);
+    }
+
+    private void SetTab(DmTab tab) => activeTab = tab;
+
+    private static int TabIndex(DmTab tab) => Array.FindIndex(Tabs, entry => entry.Tab == tab) + 1;
+
+    private string PanelClass(DmTab tab) => activeTab == tab ? "dm-panel-active" : "dm-panel-hidden";
+
+    private string Hidden(DmTab tab) => activeTab == tab ? "false" : "true";
+
+    private int RevealedRegionCount => Session.RevealedRegionIds().Count;
+
+    private int FogCellCount => Session.FogCells().Count;
+
+    private bool PlayersSeeAnything => RevealedRegionCount > 0 || FogCellCount > 0;
+
+    private static string Count(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
+
+    private string ViewportName => Workspace.ViewportRegionName();
+
+    // ---- The "is this being saved?" indicator ------------------------------------------------
+
+    private TableSaveStatus Save => Persistence.Status();
+
+    private string SaveClass => Save.Kind switch
+    {
+        TableSaveKind.Saved => "saved",
+        TableSaveKind.Failed => "save-failed",
+        TableSaveKind.Blocked => "save-failed",
+        _ => "save-off",
+    };
+
+    private string SaveGlyph => Save.Kind switch
+    {
+        TableSaveKind.Saved => "✔",   // check mark
+        TableSaveKind.Failed => "⚠",  // warning sign
+        TableSaveKind.Blocked => "⚠",
+        _ => "⊘",                     // circled slash: nothing is being written
+    };
+
+    // The browser's distance from UTC, asked for once the circuit is live. Until it answers, and in a
+    // static render, the server's own zone stands in.
+    private bool browserClockKnown;
+    private TimeSpan browserOffset;
+
+    private string SaveLabel => Save.Kind switch
+    {
+        // The browser's time, not the server's: the DM reads this against the clock on the wall, and
+        // the server's clock is UTC in a container.
+        TableSaveKind.Saved => $"Saved {WallClock.HoursMinutes(Save.At, ClockOffset(Save.At))}",
+        TableSaveKind.Failed => "Save failed",
+        TableSaveKind.Blocked => "Save blocked",
+        TableSaveKind.Waiting => "Not saved yet",
+        _ => "Not saved",
+    };
+
+    private string SaveTitle => Save.Message;
+
+    private TimeSpan ClockOffset(DateTimeOffset moment) =>
+        browserClockKnown ? browserOffset : TimeZoneInfo.Local.GetUtcOffset(moment);
+
+    // A browser that cannot say keeps the server's zone rather than taking the screen down with it.
+    private async Task AskBrowserClockAsync()
+    {
+        try
+        {
+            int minutes = await JS.InvokeAsync<int>("dtClock.utcOffsetMinutes");
+            browserClockKnown = WallClock.TryOffset(minutes, out browserOffset);
+        }
+        catch (JSException)
+        {
+            browserClockKnown = false;
+        }
+    }
+
+    // Move the player viewport onto the shown area (or the whole map when nothing is selected),
+    // keeping the projector's aspect ratio and staying inside the map.
+    private void FrameSelected()
+    {
+        if (!Workspace.MapLoaded)
+        {
+            return;
+        }
+
+        MapBounds target = Workspace.SelectedBounds();
+        if (target.Width <= 0 && target.Height <= 0)
+        {
+            Session.SetPlayerViewport(MapFraming.DefaultViewport(Workspace.Map.Bounds, Session.PlayerAspect));
+            return;
+        }
+
+        MapBounds padded = MapFraming.Pad(target, Workspace.UnitSize);
+        Session.SetPlayerViewport(MapFraming.Frame(padded, Session.PlayerAspect, Workspace.Map.Bounds));
+    }
+
+    // Same toggle the Art tab's own button and the "h" shortcut run, so all three agree.
+    private void ToggleArt()
+    {
+        if (Session.ShownArtVisible)
+        {
+            Session.HideArt();
+        }
+        else
+        {
+            Session.ShowStagedArt();
+        }
+    }
+
+    private void ShowOnMap(MapPoint point)
+    {
+        centreTarget = point;
+        centreRequested = true;
+        SetTab(DmTab.Map);
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    // Register the global keyboard shortcuts once the circuit is live: Alt+Left / Alt+Right for the
+    // reference history, Ctrl+1..4 for the tabs and 1-8 for the Map tab's tools.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                selfRef ??= DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("dtNavKeys.attach", selfRef);
+                await JS.InvokeVoidAsync("dtDmKeys.attach", selfRef);
+
+                await AskBrowserClockAsync();
+                if (browserClockKnown && Save.Kind == TableSaveKind.Saved)
+                {
+                    StateHasChanged();
+                }
+            }
+
+            if (centreRequested && activeTab == DmTab.Map && mapTab is not null)
+            {
+                centreRequested = false;
+                await mapTab.CenterOnAsync(centreTarget.X, centreTarget.Y, ShowOnMapZoom);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit dropped before interop could run; nothing to register or move.
+        }
+        catch (OperationCanceledException)
+        {
+            // The render was cancelled during teardown.
+        }
+    }
+
+    /// <summary>Invoked from JS for the Alt+Left / Alt+Right history shortcuts.</summary>
+    /// <param name="direction">"back" or "forward".</param>
+    /// <returns>A task that completes once the view has re-rendered.</returns>
+    [JSInvokable]
+    public Task NavKey(string direction)
+    {
+        if (string.Equals(direction, "back", StringComparison.Ordinal))
+        {
+            Workspace.NavigateBack();
+        }
+        else if (string.Equals(direction, "forward", StringComparison.Ordinal))
+        {
+            Workspace.NavigateForward();
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Invoked from JS for the DM screen's shortcuts: <c>"tab:N"</c> (Ctrl+1..4) switches the
+    /// top-level tab, <c>"tool:N"</c> (a bare 1..8) picks a Map tool, and <c>"bare:n|p|r|h|esc"</c>
+    /// goes to whichever tab is on show — the turn order on Battle, the art tray on Art. The
+    /// bare-key shortcuts only reach a tab that is actually up, which is why the routing lives here
+    /// and not in the key handler.
+    /// </summary>
+    /// <param name="key">The shortcut token.</param>
+    /// <returns>A task that completes once the view has re-rendered.</returns>
+    [JSInvokable]
+    public Task DmKey(string key)
+    {
+        if (key.StartsWith("tab:", StringComparison.Ordinal)
+            && int.TryParse(key.AsSpan(4), out int tab)
+            && tab >= 1 && tab <= Tabs.Length)
+        {
+            SetTab(Tabs[tab - 1].Tab);
+        }
+        else if (key.StartsWith("tool:", StringComparison.Ordinal)
+            && activeTab == DmTab.Map
+            && mapTab is not null
+            && int.TryParse(key.AsSpan(5), out int tool))
+        {
+            mapTab.SelectToolByIndex(tool);
+        }
+        else if (key.StartsWith("bare:", StringComparison.Ordinal))
+        {
+            // A bare letter goes to whichever tab is on show. The Battle and Art tabs both claim
+            // n and p, which is safe precisely because this is the only place that decides who
+            // gets them — dt-dm-keys.js reports the keystroke and nothing else.
+            string bare = key[5..];
+            if (activeTab == DmTab.Battle && battleTab is not null)
+            {
+                battleTab.HandleKey(bare);
+            }
+            else if (activeTab == DmTab.Art && artTab is not null)
+            {
+                artTab.HandleKey(bare);
+            }
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Detaches the global key listeners and unsubscribes from the shared state.</summary>
+    /// <returns>A task that completes once teardown is done.</returns>
+    public async ValueTask DisposeAsync()
+    {
+        Session.Changed -= OnStateChanged;
+        Workspace.Changed -= OnStateChanged;
+        Persistence.Changed -= OnStateChanged;
+        Live.Changed -= OnContentChanged;
+
+        try
+        {
+            await JS.InvokeVoidAsync("dtNavKeys.detach");
+            await JS.InvokeVoidAsync("dtDmKeys.detach");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone; the listeners went with it.
+        }
+        catch (OperationCanceledException)
+        {
+            // The interop call was cancelled as the circuit tore down.
+        }
+        catch (InvalidOperationException)
+        {
+            // Disposed during (pre)static rendering, before interop could attach.
+        }
+        finally
+        {
+            selfRef?.Dispose();
+        }
+    }
+}

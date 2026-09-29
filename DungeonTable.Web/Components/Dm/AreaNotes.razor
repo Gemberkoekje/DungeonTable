@@ -1,0 +1,98 @@
+@implements IDisposable
+@inject CampaignState Campaign
+@*
+    The DM's own note about the shown area, beside the encounter ticks it belongs with. The book says
+    what is in the room; this says what happened in it — the name the players gave the innkeeper, the
+    lie they told the doppelganger, the fact they left the door spiked open.
+
+    Saved on blur rather than per keystroke: the note goes through the same debounced write as the
+    rest of the table, and a save per character would wake both circuits and the database for a
+    half-typed word. Trimming to blank is how a note is deleted.
+*@
+
+<section class="area-notes" aria-label="Your notes on this area">
+    <header class="area-notes-head">
+        <h3>Notes</h3>
+        @if (saved.Length > 0)
+        {
+            <span class="area-notes-kept" title="Kept with the table and restored after a restart">kept</span>
+        }
+    </header>
+
+    @if (AreaNodeId.Length == 0)
+    {
+        <p class="muted">Pick an area first.</p>
+    }
+    else
+    {
+        @* The placeholder ends in a literal "…", not "&hellip;": Blazor sets an attribute through
+           setAttribute, which does no entity decoding, so the entity would show as its own source
+           text. (This comment sits OUTSIDE the tag on purpose — a Razor comment among the attributes
+           is emitted as an attribute *name*, which throws at render time and drops the circuit.) *@
+        <textarea class="area-notes-box" rows="3"
+                  aria-label="@($"Your notes on {(AreaTitle.Length > 0 ? AreaTitle : "this area")}")"
+                  placeholder="What happened here, and what they will find if they come back…"
+                  value="@draft"
+                  @onchange="Commit"></textarea>
+    }
+</section>
+
+@code {
+    /// <summary>The node id of the area the note belongs to.</summary>
+    [Parameter]
+    public string AreaNodeId { get; set; } = string.Empty;
+
+    /// <summary>The area's display title, for the box's accessible name.</summary>
+    [Parameter]
+    public string AreaTitle { get; set; } = string.Empty;
+
+    // What the box shows. Held separately from the saved note so a re-render caused by something
+    // else on the tab (a reveal, the fight) cannot stamp on half-typed text.
+    private string draft = string.Empty;
+    private string saved = string.Empty;
+    private string lastArea = string.Empty;
+
+    protected override void OnInitialized() => Campaign.Changed += OnCampaignChanged;
+
+    protected override void OnParametersSet()
+    {
+        // Only on an actual change of area: re-reading the note on every render would overwrite
+        // what the DM is typing right now.
+        if (!string.Equals(lastArea, AreaNodeId, StringComparison.Ordinal))
+        {
+            lastArea = AreaNodeId;
+            Reload();
+        }
+    }
+
+    /// <summary>Unsubscribes from the campaign, which outlives this component.</summary>
+    public void Dispose() => Campaign.Changed -= OnCampaignChanged;
+
+    private void Commit(ChangeEventArgs e)
+    {
+        draft = e.Value as string ?? string.Empty;
+        Campaign.SetNote(AreaNodeId, draft);
+        saved = Campaign.NoteFor(AreaNodeId);
+
+        // SetNote trims; show what was actually kept, so trailing whitespace does not look retained.
+        draft = saved;
+    }
+
+    private void Reload()
+    {
+        saved = Campaign.NoteFor(AreaNodeId);
+        draft = saved;
+    }
+
+    // A restore at startup, or a second DM window, changes the stored note under this one. Follow it
+    // only when nothing is half-typed here — the alternative is losing what the DM is writing.
+    private void OnCampaignChanged() => InvokeAsync(() =>
+    {
+        if (string.Equals(draft, saved, StringComparison.Ordinal))
+        {
+            Reload();
+        }
+
+        StateHasChanged();
+    });
+}

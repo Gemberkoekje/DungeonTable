@@ -1,0 +1,169 @@
+@inject IPartyRoster Roster
+@*
+    The party roster's edit screen. The roster is never hand-edited: everything data/party.json holds
+    is added, changed and removed here, and saved back atomically.
+
+    Every field except the name is optional. A row with only a name is a perfectly good roster
+    entry — the DM fills in AC and HP when they care to, and a blank one simply seeds a blank
+    combatant that they type over at the table.
+*@
+
+<section class="roster-editor" aria-label="Party roster">
+    <header class="roster-head">
+        <h3>Party</h3>
+        <span class="muted">@members.Count @(members.Count == 1 ? "character" : "characters")</span>
+        <button type="button" class="roster-close" title="Close the roster editor" @onclick="OnClose">Close</button>
+    </header>
+
+    @if (message.Length > 0)
+    {
+        <p class="@(failed ? "error" : "muted")" role="status">@message</p>
+    }
+
+    <table class="roster-table">
+        <thead>
+            <tr>
+                <th scope="col">Character</th>
+                <th scope="col">Player</th>
+                <th scope="col">Class</th>
+                <th scope="col" class="num">Lvl</th>
+                <th scope="col" class="num">AC</th>
+                <th scope="col" class="num">Max HP</th>
+                <th scope="col" class="num">Pass. Per.</th>
+                <th scope="col" class="num">Init</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (int i = 0; i < members.Count; i++)
+            {
+                int index = i;
+                PartyMember member = members[index];
+                <tr>
+                    <td><input aria-label="Character name" @bind="member.Name" @bind:event="oninput" /></td>
+                    <td><input aria-label="Player name" @bind="member.PlayerName" @bind:event="oninput" /></td>
+                    <td><input aria-label="Class" @bind="member.Class" @bind:event="oninput" /></td>
+                    <td class="num"><input type="number" min="0" max="20" aria-label="Level" @bind="member.Level" /></td>
+                    <td class="num"><input type="number" min="0" max="40" aria-label="Armour class" @bind="member.ArmourClass" /></td>
+                    <td class="num"><input type="number" min="0" max="999" aria-label="Maximum hit points" @bind="member.MaxHp" /></td>
+                    <td class="num"><input type="number" min="0" max="40" aria-label="Passive Perception" @bind="member.PassivePerception" /></td>
+                    <td class="num"><input type="number" min="-10" max="20" aria-label="Initiative modifier" @bind="member.InitiativeModifier" /></td>
+                    <td class="roster-actions">
+                        <button type="button" title="Move up" disabled="@(index == 0)" @onclick="() => Move(index, -1)">&uarr;</button>
+                        <button type="button" title="Move down" disabled="@(index == members.Count - 1)" @onclick="() => Move(index, 1)">&darr;</button>
+                        <button type="button" class="danger" title="Remove from the party" @onclick="() => Remove(index)">&times;</button>
+                    </td>
+                </tr>
+            }
+            @if (members.Count == 0)
+            {
+                <tr><td colspan="9" class="muted">No characters yet — add the party's first member.</td></tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="roster-controls">
+        <button type="button" @onclick="Add">+ Add character</button>
+        <button type="button" class="primary" @onclick="Save">Save party</button>
+        <button type="button" @onclick="Reload">Discard changes</button>
+    </div>
+</section>
+
+@code {
+    /// <summary>Raised when the DM closes the editor.</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>Raised after the roster is saved, so the caller can reflect the new party.</summary>
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    // Sane bounds for the numeric fields. They keep a typo (AC 180) out of the saved document
+    // without ever refusing a member: an out-of-range value is clamped, not rejected.
+    private const int MaxLevel = 20;
+    private const int MaxArmourClass = 40;
+    private const int MaxHitPoints = 999;
+    private const int MaxPassivePerception = 40;
+    private const int MinInitiativeModifier = -10;
+    private const int MaxInitiativeModifier = 20;
+
+    // The working copy. Bound straight to the inputs and only written to disk on Save, so a
+    // half-typed row never reaches party.json.
+    private List<PartyMember> members = new List<PartyMember>();
+    private string message = string.Empty;
+    private bool failed;
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload()
+    {
+        var saved = Roster.GetParty();
+        failed = !saved.IsValid;
+        message = failed ? string.Join(" ", saved.Messages.Select(m => m.Message)) : string.Empty;
+        members = saved.IsValid ? saved.Value.Members.Select(Copy).ToList() : new List<PartyMember>();
+    }
+
+    private void Add() => members.Add(new PartyMember());
+
+    private void Remove(int index) => members.RemoveAt(index);
+
+    private void Move(int index, int delta)
+    {
+        int to = index + delta;
+        if (to < 0 || to >= members.Count)
+        {
+            return;
+        }
+
+        (members[index], members[to]) = (members[to], members[index]);
+    }
+
+    private async Task Save()
+    {
+        // Drop rows the DM added and never named; keep everything else, clamped.
+        var party = new Party
+        {
+            Members = members
+                .Where(member => !string.IsNullOrWhiteSpace(member.Name))
+                .Select(Clamp)
+                .ToArray(),
+        };
+
+        var result = Roster.Save(party);
+        failed = !result.IsValid;
+        message = failed
+            ? string.Join(" ", result.Messages.Select(m => m.Message))
+            : $"Saved {Counted(party.Members.Count)}.";
+
+        if (!failed)
+        {
+            await OnSaved.InvokeAsync();
+        }
+    }
+
+    private static string Counted(int count) => count == 1 ? "1 character" : $"{count} characters";
+
+    private static PartyMember Copy(PartyMember member) => new PartyMember
+    {
+        Name = member.Name,
+        PlayerName = member.PlayerName,
+        Class = member.Class,
+        Level = member.Level,
+        ArmourClass = member.ArmourClass,
+        MaxHp = member.MaxHp,
+        PassivePerception = member.PassivePerception,
+        InitiativeModifier = member.InitiativeModifier,
+    };
+
+    private static PartyMember Clamp(PartyMember member) => new PartyMember
+    {
+        Name = member.Name.Trim(),
+        PlayerName = member.PlayerName.Trim(),
+        Class = member.Class.Trim(),
+        Level = Math.Clamp(member.Level, 0, MaxLevel),
+        ArmourClass = Math.Clamp(member.ArmourClass, 0, MaxArmourClass),
+        MaxHp = Math.Clamp(member.MaxHp, 0, MaxHitPoints),
+        PassivePerception = Math.Clamp(member.PassivePerception, 0, MaxPassivePerception),
+        InitiativeModifier = Math.Clamp(member.InitiativeModifier, MinInitiativeModifier, MaxInitiativeModifier),
+    };
+}

@@ -1,0 +1,323 @@
+@inject CampaignState Campaign
+@*
+    One quest: who gives it, what it pays, and the chain of beats that gets the party there.
+
+    The beats are the point. Each is a whole action the DM can call done at the table, ticked into
+    CampaignState and persisted with the reveals and the fight, so a redeploy mid-campaign does not
+    lose the evening's progress.
+
+    Nothing here blocks the DM. An unmet prerequisite styles a chip and nothing more; every beat
+    stays tickable whatever the roster says, because the party's real level lives on character
+    sheets this app has never seen.
+*@
+
+<article class="quest-card @(Offerable ? string.Empty : "locked") status-@Status.ToString().ToLowerInvariant()">
+    <header class="quest-head">
+        <button type="button" class="quest-title" aria-expanded="@(open ? "true" : "false")"
+                title="@(open ? "Collapse this quest" : "Expand this quest")" @onclick="() => open = !open">
+            <span class="quest-caret" aria-hidden="true">@(open ? "▾" : "▸")</span>
+            <span>@Quest.Title</span>
+        </button>
+
+        <span class="quest-availability avail-@Quest.Availability.ToString().ToLowerInvariant()">
+            @Quest.Availability
+        </span>
+
+        <span class="quest-progress" title="Beats ticked off">@Done / @Quest.Beats.Count</span>
+
+        @if (Quest.Pages.Length > 0)
+        {
+            <span class="quest-pages" title="Source page in the book">p.&nbsp;@Quest.Pages</span>
+        }
+    </header>
+
+    <p class="quest-giver">
+        <span class="field-label">Giver</span>
+        @if (Quest.GiverNodeId.Length > 0 && OnOpenReference.HasDelegate)
+        {
+            <button type="button" class="ref-link" title="Open this NPC's reference card"
+                    @onclick="() => OnOpenReference.InvokeAsync(Quest.GiverNodeId)">@Quest.GiverLabel</button>
+        }
+        else
+        {
+            <span class="label">@Quest.GiverLabel</span>
+        }
+    </p>
+
+    @if (Quest.Prerequisites.Count > 0)
+    {
+        <ul class="quest-prereqs">
+            @foreach (QuestPrerequisite prerequisite in Quest.Prerequisites)
+            {
+                bool met = Campaign.IsMet(prerequisite);
+                <li class="quest-prereq @(met ? "met" : "unmet")"
+                    title="@(met ? "This prerequisite is satisfied" : PrerequisiteHint(prerequisite))">
+                    <span class="prereq-mark" aria-hidden="true">@(met ? "✓" : "•")</span>@prerequisite.Text
+                </li>
+            }
+        </ul>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Quest.Hook))
+    {
+        <p class="quest-hook"><CrossRefProse Text="@Quest.Hook" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+    }
+
+    @if (open)
+    {
+        <ol class="quest-beats">
+            @foreach (QuestBeat beat in Quest.Beats)
+            {
+                QuestBeat row = beat;
+                bool done = Campaign.IsBeatDone(Quest.Id, row.Id);
+                <li class="quest-beat @(done ? "done" : string.Empty) @(row.Secret ? "secret" : string.Empty)">
+                    <div class="beat-line">
+                        <label class="beat-tick" title="@(done ? "Mark this beat as not done" : "Mark this beat as done")">
+                            <input type="checkbox" checked="@done"
+                                   @onchange="() => Campaign.ToggleBeat(Quest.Id, row.Id)" />
+                            <span class="beat-ordinal">@row.Ordinal</span>
+                        </label>
+
+                        <span class="beat-summary">
+                            <CrossRefProse Text="@row.Summary" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+                            @if (row.Secret)
+                            {
+                                <span class="secret-badge" title="DM only — don't read this aloud">DM</span>
+                            }
+                        </span>
+
+                        @* Null-checked as well as None-checked: a beat authored with "target": null
+                           deserializes to a genuinely null Target, which the list converter cannot
+                           default the way it defaults a list. *@
+                        @if (row.Target is not null && row.Target.Kind != QuestTargetKind.None)
+                        {
+                            @TargetChip(row.Target)
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(row.Detail))
+                    {
+                        <details class="beat-detail">
+                            <summary>Detail</summary>
+                            <div class="detail-body"><CrossRefProse Text="@row.Detail" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></div>
+                        </details>
+                    }
+                </li>
+            }
+        </ol>
+
+        @if (Quest.Rewards.Count > 0)
+        {
+            <div class="detail quest-rewards">
+                <h3>Reward</h3>
+                @foreach (DossierBlock reward in Quest.Rewards)
+                {
+                    @Block(reward)
+                }
+            </div>
+        }
+
+        @if (Quest.Detail.Count > 0)
+        {
+            <div class="detail">
+                <h3>Background</h3>
+                @foreach (DossierBlock block in Quest.Detail)
+                {
+                    @Block(block)
+                }
+            </div>
+        }
+
+        <div class="quest-status-row">
+            <span class="field-label">Status</span>
+            @foreach (QuestStatus option in Statuses)
+            {
+                QuestStatus choice = option;
+                <button type="button" class="quest-status @(Status == choice ? "on" : string.Empty)"
+                        title="@StatusHint(choice)"
+                        @onclick="() => Campaign.SetStatus(Quest.Id, choice)">@choice</button>
+            }
+            <button type="button" class="quest-reset" title="Forget every tick and the status for this quest"
+                    @onclick="() => Campaign.ResetQuest(Quest.Id)">Reset</button>
+        </div>
+    }
+</article>
+
+@code {
+    /// <summary>The authored quest to render.</summary>
+    [Parameter]
+    public Quest Quest { get; set; } = new Quest();
+
+    /// <summary>
+    /// Raised with a node id when the DM clicks the giver or a cross-reference in the prose,
+    /// to open its reference card.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>
+    /// Raised with an area's node id when the DM clicks a beat's destination chip. Only fires
+    /// for a target whose level has been authored — see <see cref="IsAuthored"/>.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnNavigate { get; set; }
+
+    /// <summary>Resolves cross-references in quest prose; when null, prose renders as plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>
+    /// Tests whether a beat's destination area is written yet, by its node id. Until it is, the chip is
+    /// a muted label; the day its level file writes it, the chip turns into a jump button on its own.
+    /// </summary>
+    [Parameter]
+    public Func<string, bool> IsAuthored { get; set; }
+
+    /// <summary>
+    /// Tests whether a floor is written, by its number, for a beat that happens on a floor or at a place
+    /// reached through one rather than in one area. When null, every such floor counts as unwritten.
+    /// </summary>
+    [Parameter]
+    public Func<int, bool> IsFloorAuthored { get; set; }
+
+    /// <summary>True when the card starts expanded (the log expands the quests in play).</summary>
+    [Parameter]
+    public bool StartOpen { get; set; }
+
+    // The statuses the DM can set by hand. None is deliberately absent — "never touched" is what
+    // Reset produces, not something to pick.
+    private static readonly QuestStatus[] Statuses =
+    {
+        QuestStatus.Available,
+        QuestStatus.Active,
+        QuestStatus.Complete,
+        QuestStatus.Abandoned,
+    };
+
+    private bool open;
+    private string lastQuestId = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        // Re-seed the disclosure only when the card is actually showing a different quest, so a
+        // re-render (a tick, a status change) does not slam it shut under the DM.
+        if (!string.Equals(lastQuestId, Quest.Id, StringComparison.Ordinal))
+        {
+            lastQuestId = Quest.Id;
+            open = StartOpen;
+        }
+    }
+
+    private QuestStatus Status => Campaign.Status(Quest.Id);
+
+    private int Done => Campaign.CompletedBeats(Quest);
+
+    private bool Offerable => Campaign.IsOfferable(Quest);
+
+    // The destination chip: a jump button once its level is authored, a muted label until then. The
+    // label always names the level and area, so "not authored yet" still tells the DM where to look
+    // in the book.
+    private RenderFragment TargetChip(QuestTarget target) => builder =>
+    {
+        // Kind is checked as well as NodeId: only an Area target names somewhere specific enough to
+        // jump to, and nothing on QuestTarget stops a Level/Place/Surface beat from carrying a
+        // stray node id (a copy-paste that left the field populated). Without this the chip would
+        // read "Level 20" and silently navigate to an area the label never mentions.
+        bool jumpable = target.Kind == QuestTargetKind.Area
+            && target.NodeId.Length > 0
+            && IsAuthored is not null
+            && IsAuthored(target.NodeId)
+            && OnNavigate.HasDelegate;
+
+        if (jumpable)
+        {
+            builder.OpenElement(0, "button");
+            builder.AddAttribute(1, "type", "button");
+            builder.AddAttribute(2, "class", "beat-target jumpable");
+            builder.AddAttribute(3, "title", "Jump to this area's briefing");
+            builder.AddAttribute(4, "onclick", EventCallback.Factory.Create(this, () => OnNavigate.InvokeAsync(target.NodeId)));
+            builder.AddContent(5, TargetLabel(target));
+            builder.CloseElement();
+            return;
+        }
+
+        bool pending = Pending(target);
+        builder.OpenElement(6, "span");
+        builder.AddAttribute(7, "class", "beat-target");
+        builder.AddAttribute(8, "title", ChipTitle(target, pending));
+        builder.AddContent(9, TargetLabel(target) + (pending ? " · not authored yet" : string.Empty));
+        builder.CloseElement();
+    };
+
+    // Waiting for its floor to be written: an area nothing is written under yet, or a floor, or a place
+    // reached through one, whose level file does not exist yet. The village above never becomes
+    // authored, and a place on no numbered floor has nothing to wait for.
+    private bool Pending(QuestTarget target) => target.Kind switch
+    {
+        QuestTargetKind.Area => target.NodeId.Length == 0 || IsAuthored is null || !IsAuthored(target.NodeId),
+        QuestTargetKind.Level => !FloorWritten(target.Level),
+        QuestTargetKind.Place => target.Level > 0 && !FloorWritten(target.Level),
+        _ => false,
+    };
+
+    private bool FloorWritten(int level) => IsFloorAuthored is not null && IsFloorAuthored(level);
+
+    private static string ChipTitle(QuestTarget target, bool pending)
+    {
+        if (target.Kind == QuestTargetKind.Surface)
+        {
+            return "Above ground — not a dungeon area";
+        }
+
+        if (pending)
+        {
+            return "This level has not been authored in the app yet";
+        }
+
+        return target.Level > 0 ? $"On level {target.Level}, which is written in the app" : "Not on a numbered level";
+    }
+
+    private static string TargetLabel(QuestTarget target) => target.Kind switch
+    {
+        QuestTargetKind.Area => Join($"Level {target.Level} · area {target.AreaKey}", target.PlaceLabel),
+        QuestTargetKind.Level => Join($"Level {target.Level}", target.PlaceLabel),
+        // A place is not on a numbered level, but it is still reached through one, so the level is
+        // parenthesised rather than joined with the dash the other kinds use — the label already
+        // carries one ("The Sunken Keep — the Drowned Hall").
+        QuestTargetKind.Place => (target.AreaKey.Length > 0
+            ? $"{target.PlaceLabel} · area {target.AreaKey}"
+            : target.PlaceLabel)
+            + (target.Level > 0 ? $" (via level {target.Level})" : string.Empty),
+        _ => target.PlaceLabel,
+    };
+
+    private static string Join(string head, string tail) =>
+        tail.Length > 0 ? $"{head} — {tail}" : head;
+
+    private static string StatusHint(QuestStatus status) => status switch
+    {
+        QuestStatus.Available => "Offerable, but the party has not taken it up",
+        QuestStatus.Active => "The party is working on it",
+        QuestStatus.Complete => "Finished",
+        QuestStatus.Abandoned => "Dropped, failed, or now impossible",
+        _ => string.Empty,
+    };
+
+    private string PrerequisiteHint(QuestPrerequisite prerequisite) =>
+        prerequisite.Kind == QuestPrerequisiteKind.CharacterLevel
+            ? $"The roster's highest recorded level is {Campaign.PartyLevel()} — shown, never enforced"
+            : "Not satisfied yet — shown, never enforced";
+
+    // A collapsed disclosure for a reward or background block, matching the dossier panels.
+    private RenderFragment Block(DossierBlock block) =>
+        @<details class="detail-block @(block.Secret ? "secret" : string.Empty)">
+            <summary>
+                <span class="detail-heading">@block.Heading</span>
+                @if (block.Secret)
+                {
+                    <span class="secret-badge" title="DM only — don't read this aloud">secret</span>
+                }
+            </summary>
+            <div class="detail-body"><CrossRefProse Text="@block.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></div>
+        </details>;
+}

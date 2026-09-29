@@ -1,0 +1,23 @@
+@page "/error"
+
+@* Where an unhandled error lands outside Development: Program.cs re-executes a failed request here
+   (UseExceptionHandler("/error")). Without this page the handler found nothing to render and the
+   browser got an empty 500. It renders statically, with no interactivity and nothing from the
+   content, so it cannot fail the way the page it stands in for did. *@
+
+<PageTitle>Something went wrong &mdash; DungeonTable</PageTitle>
+
+<section class="error-page">
+    <h1>Something went wrong</h1>
+    <p>
+        The app hit an error while building this page. It is still running, and the table is as you
+        left it: what was revealed, the fight and the quest log are all where they were.
+    </p>
+    <p>
+        <a href="dm">Back to the DM screen</a> &middot; <a href="player">Player view</a>
+    </p>
+    <p class="muted">
+        If it happens again, the app&rsquo;s log says what went wrong: look for
+        &ldquo;An unhandled exception has occurred&rdquo; near its end.
+    </p>
+</section>

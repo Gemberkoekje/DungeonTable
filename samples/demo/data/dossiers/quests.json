@@ -1,0 +1,148 @@
+{
+  "quests": [
+    {
+      "id": "the-millers-son",
+      "title": "The Miller's Son",
+      "availability": "starting",
+      "giverLabel": "Wenna Brask",
+      "giverNodeId": "wenna-brask",
+      "hook": "[[tam-brask|Tam Brask]] went down into the chapel undercroft to find out why the bell had stopped, and has not come back. His mother, [[wenna-brask|Wenna]], begs the party to bring him home.",
+      "prerequisites": [],
+      "beats": [
+        {
+          "id": "hear-wenna-out",
+          "ordinal": 1,
+          "summary": "Hear Wenna out at the mill.",
+          "detail": "Tam went down three days ago at dusk, with the mill's lantern. His boots have a split heel. [[brother-aldous|Brother Aldous]] told her not to worry. She has 15 gp put by, and offers all of it.",
+          "target": { "kind": "surface", "placeLabel": "The mill" }
+        },
+        {
+          "id": "find-tam",
+          "ordinal": 2,
+          "summary": "Find Tam in the undercroft.",
+          "detail": "He is chained to the anvil in the bell-founder's workshop, with [[grask]] and his crew.",
+          "target": { "kind": "area", "level": 1, "areaKey": "4", "placeLabel": "Bell-Founder's Workshop", "nodeId": "data_dossiers_level_1_area_4" }
+        },
+        {
+          "id": "bring-tam-home",
+          "ordinal": 3,
+          "summary": "Bring Tam home to the mill.",
+          "target": { "kind": "surface", "placeLabel": "The mill" }
+        }
+      ],
+      "rewards": [
+        {
+          "heading": "Wenna's Savings",
+          "kind": "loot",
+          "secret": false,
+          "body": "15 gp, everything the mill has put by, and a friend in Millbrook for life."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "What Tam Saw",
+          "kind": "secret",
+          "secret": true,
+          "body": "Tam saw the bell's clapper on [[grask]]'s anvil, and heard Grask laugh about the priest who paid him with it. That is why Grask keeps him. Freed, Tam tells whoever asks, and the whole village knows by nightfall."
+        }
+      ]
+    },
+    {
+      "id": "the-lost-hymnal",
+      "title": "The Lost Hymnal",
+      "availability": "side",
+      "giverLabel": "Old Hobb, the sexton",
+      "hook": "Old Hobb, the chapel's sexton, left the great hymnal in the undercroft the evening the bell fell silent, when a statue in the nave moved and he ran. He will not go back down for it.",
+      "prerequisites": [],
+      "beats": [
+        {
+          "id": "search-the-undercroft",
+          "ordinal": 1,
+          "summary": "Search the undercroft for the hymnal.",
+          "detail": "It lies on the bottom shelf of the vestry ([[L1 area 3b]]), under a heap of rotten robes. Hobb's sketch of the undercroft marks the spot with an X.",
+          "target": { "kind": "level", "level": 1, "placeLabel": "The Undercroft" }
+        },
+        {
+          "id": "return-the-hymnal",
+          "ordinal": 2,
+          "summary": "Return the hymnal to the chapel.",
+          "target": { "kind": "surface", "placeLabel": "The chapel" }
+        }
+      ],
+      "rewards": [
+        {
+          "heading": "Hobb's Gratitude",
+          "kind": "lore",
+          "secret": false,
+          "body": "Hobb has no money, but he knows the chapel better than anyone alive. He tells the party that the bell 'rings the dead to sleep', and where the founders' crypt door is."
+        }
+      ]
+    },
+    {
+      "id": "the-silent-bell",
+      "title": "The Silent Bell",
+      "availability": "future",
+      "giverLabel": "Wenna Brask",
+      "giverNodeId": "wenna-brask",
+      "hook": "The bell has to ring again. [[wenna-brask|Wenna]] speaks for the village: find the clapper, find out who took it, and put right whatever the silence has woken below.",
+      "prerequisites": [
+        {
+          "kind": "questComplete",
+          "anyOfQuestIds": [ "the-millers-son", "the-lost-hymnal" ],
+          "text": "Complete The Miller's Son or The Lost Hymnal."
+        },
+        {
+          "kind": "characterLevel",
+          "characterLevel": 3,
+          "text": "The characters are 3rd level."
+        }
+      ],
+      "beats": [
+        {
+          "id": "recover-the-clapper",
+          "ordinal": 1,
+          "summary": "Recover the bell's clapper.",
+          "detail": "The [[silver-clapper]] lies across the anvil in the bell-founder's workshop, its ball end slumped from the crucible.",
+          "target": { "kind": "area", "level": 1, "areaKey": "4", "placeLabel": "Bell-Founder's Workshop", "nodeId": "data_dossiers_level_1_area_4" }
+        },
+        {
+          "id": "learn-who-sold-it",
+          "ordinal": 2,
+          "summary": "Learn who sold the clapper.",
+          "detail": "[[brother-aldous|Brother Aldous]] did, to pay [[grask]] a gambling debt. The IOU in Grask's strongbox gives him away, and so does Tam, once he is free.",
+          "secret": true
+        },
+        {
+          "id": "the-sealed-crypt",
+          "ordinal": 3,
+          "summary": "Go down to the sealed crypt.",
+          "detail": "The ringers rose from it. Whatever else the silence woke is still down there.",
+          "target": { "kind": "area", "level": 2, "areaKey": "1", "placeLabel": "The Sealed Crypt", "nodeId": "data_dossiers_level_2_area_1" }
+        },
+        {
+          "id": "the-founders-ossuary",
+          "ordinal": 4,
+          "summary": "Lay the founders to rest in their ossuary.",
+          "detail": "Somewhere past the crypt, the founders' own bones lie in an ossuary of their own. Hobb has heard of it; nobody living has seen it.",
+          "target": { "kind": "place", "level": 2, "placeLabel": "The Founders' Ossuary" }
+        }
+      ],
+      "rewards": [
+        {
+          "heading": "The Village's Thanks",
+          "kind": "loot",
+          "secret": false,
+          "body": "50 gp raised by the village. And once, any character may ask Old Hobb to ring the bell for them, and gains the benefit of [[bless]] for the next hour."
+        }
+      ],
+      "detail": [
+        {
+          "heading": "Brother Aldous",
+          "kind": "secret",
+          "secret": true,
+          "body": "What happens to [[brother-aldous|Aldous]] is for the village, and the party, to decide. He is sorry, he is frightened of [[grask]], and he runs if he learns the IOU has been found."
+        }
+      ]
+    }
+  ]
+}

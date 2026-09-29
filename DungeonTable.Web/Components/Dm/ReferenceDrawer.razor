@@ -1,0 +1,242 @@
+@* A pinned reference card the DM opened by clicking a cross-reference: the link-out tier of the
+   book's "bold name, go look it up" convention. Shows the entity's label, kind, source citation and
+   description; the description itself runs through the cross-reference engine, so a card can chain
+   to further cards. Beneath it, jump links to every room that lists or mentions the entity. A card
+   with neither is the only one that reports nothing.
+
+   One of the campaign's own people (an authored [[wenna-brask]] link) shows their whole NPC or
+   character card instead, opened, since that card is already everything the app knows about them;
+   an NPC who fights also shows the stat block their entry names, beneath it.
+
+   An individual a level declares (the Bell-Warden) shows its own description and whereabouts first,
+   then the stat block it uses beneath them: the block is shared by every gargoyle, the
+   description is about this one. *@
+
+<aside class="reference-drawer kind-@CrossRefStyle.CssClass(Card.Kind)" role="complementary" aria-label="Reference card">
+    <header class="reference-head">
+        <div class="reference-titles">
+            <span class="reference-kind" title="@(Card.Kind == CrossRefKind.Book ? BookIndexNote : null)">@CrossRefStyle.KindName(Card.Kind)</span>
+            <h3 class="reference-label">@Card.Label</h3>
+        </div>
+        <button type="button" class="reference-close" title="Close reference" aria-label="Close reference"
+                @onclick="() => OnClose.InvokeAsync()">&times;</button>
+    </header>
+
+    @if (Npc.Id.Length > 0)
+    {
+        <NpcCard @key="Npc.Id" Npc="Npc" StartOpen="true"
+                 ResolveRefs="PersonRefs" OnOpenReference="OnOpenReference" />
+        @RelationsSection()
+        @BookSection()
+        @UsesSection()
+    }
+    else if (Character.Id.Length > 0)
+    {
+        <CharacterCard @key="Character.Id" Character="Character" StartOpen="true"
+                       ResolveRefs="PersonRefs" OnOpenReference="OnOpenReference" />
+        @RelationsSection()
+        @BookSection()
+    }
+    else if (StatBlock.NodeId.Length > 0 && Card.StatBlockId.Length == 0)
+    {
+        <StatBlockView Block="StatBlock" Citation="@StatBlockCitation" OnOpenReference="OnOpenReference" />
+        @BookSection()
+    }
+    else if (SpellEntry.NodeId.Length > 0)
+    {
+        <SpellDetail Spell="SpellEntry" Citation="@SpellCitation" />
+        @BookSection()
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(Card.Citation))
+        {
+            <p class="reference-citation">@Card.Citation</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Card.Summary))
+        {
+            <p class="reference-summary">
+                <CrossRefProse Text="@Card.Summary" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+            </p>
+        }
+        else if (Card.Areas.Count == 0)
+        {
+            <p class="muted">No description is recorded for this entry.</p>
+        }
+
+        @* The rooms that list or mention the entity. Offering the jumps turns even a card with no
+           description into a signpost, which is what the DM wanted from it in the first place. Every
+           area is listed, with how it names the entity, because the DM is better placed than a
+           ranking heuristic to know where they meant to go. *@
+        @if (Card.Areas.Count > 0 && OnOpenReference.HasDelegate)
+        {
+            <div class="reference-whereabouts">
+                <span class="field-label">@(string.IsNullOrWhiteSpace(Card.Summary) ? "No description — appears in" : "Appears in")</span>
+                <ul class="whereabouts-list">
+                    @foreach (AreaLink link in Card.Areas)
+                    {
+                        <li>
+                            <button type="button" class="ref-link" title="Open this area's briefing"
+                                    @onclick="() => OnOpenReference.InvokeAsync(link.NodeId)">@link.Label</button>
+                            @if (link.Relation.Length > 0)
+                            {
+                                <span class="whereabouts-relation">@link.Relation</span>
+                            }
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+
+        @RelationsSection()
+        @BookSection()
+        @UsesSection()
+    }
+</aside>
+
+@code {
+    /// <summary>The reference card to display.</summary>
+    [Parameter]
+    public ReferenceCard Card { get; set; } = new ReferenceCard();
+
+    /// <summary>
+    /// The full stat block for the card, when it describes a monster the stat library has
+    /// extracted. Empty when unavailable — the drawer then falls back to <see cref="Card"/>'s plain
+    /// link-out summary.
+    /// </summary>
+    [Parameter]
+    public StatBlock StatBlock { get; set; } = new StatBlock();
+
+    /// <summary>
+    /// The full spell entry for the card, when it describes a spell the stat library has extracted.
+    /// Empty when unavailable — the drawer then falls back to <see cref="Card"/>'s plain link-out
+    /// summary.
+    /// </summary>
+    [Parameter]
+    public SpellEntry SpellEntry { get; set; } = new SpellEntry();
+
+    /// <summary>Where <see cref="StatBlock"/> is printed, by the book's title ("SRD 5.1 p.266").</summary>
+    [Parameter]
+    public string StatBlockCitation { get; set; } = string.Empty;
+
+    /// <summary>Where <see cref="SpellEntry"/> is printed, by the book's title.</summary>
+    [Parameter]
+    public string SpellCitation { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The NPC to show in full, when the open reference is one of the roster's people. Empty (its id
+    /// blank) otherwise.
+    /// </summary>
+    [Parameter]
+    public NpcDossier Npc { get; set; } = new NpcDossier();
+
+    /// <summary>
+    /// The player character to show in full, when the open reference is one of the party. Empty (its
+    /// id blank) otherwise.
+    /// </summary>
+    [Parameter]
+    public CharacterDossier Character { get; set; } = new CharacterDossier();
+
+    /// <summary>Resolves cross-references in the card summary, so chained references stay clickable.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>
+    /// Resolves cross-references in a person's card. Their prose belongs to the campaign rather than
+    /// the shown floor, as on the NPCs and Party tabs, so it gets no floor's areas. Falls back to
+    /// <see cref="ResolveRefs"/> when not supplied.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveEntityRefs { get; set; }
+
+    /// <summary>Raised to open another entity's reference card (a chained reference in the summary, or a spell link).</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>Raised to close the drawer.</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>
+    /// Resolves a relation note's cross-references on the floor it belongs to. When null, notes
+    /// render as plain text.
+    /// </summary>
+    [Parameter]
+    public Func<string, string, IReadOnlyList<CrossRef>> ResolveRefsOn { get; set; }
+
+    private Func<string, IReadOnlyList<CrossRef>> PersonRefs => ResolveEntityRefs ?? ResolveRefs;
+
+    // An NPC's own contacts are already in the contacts table on their card; the relations section
+    // adds the ones written anywhere else.
+    private RelationLine[] ShownRelations() =>
+        Card.Relations
+            .Where(line => !line.FromContactsOf.Contains(Card.NodeId, StringComparer.Ordinal))
+            .ToArray();
+
+    private RenderFragment RelationsSection()
+    {
+        RelationLine[] lines = ShownRelations();
+        if (lines.Length == 0)
+        {
+            return null;
+        }
+
+        return @<div class="reference-relations">
+            <span class="field-label">Relations</span>
+            <RelationLines Lines="lines" OnOpenReference="OnOpenReference" ResolveRefsOn="ResolveRefsOn" />
+        </div>;
+    }
+
+    /// <summary>
+    /// What the book index says under the card's own id, when the card is the campaign's own entry
+    /// (the book's Wenna Brask, beneath the NPC card). Empty (its node id blank) otherwise.
+    /// </summary>
+    [Parameter]
+    public ReferenceCard BookCard { get; set; } = new ReferenceCard();
+
+    // The book's entry extends the campaign's own card, beneath everything the campaign says.
+    private RenderFragment BookSection()
+    {
+        if (BookCard.NodeId.Length == 0 || (string.IsNullOrWhiteSpace(BookCard.Summary) && string.IsNullOrWhiteSpace(BookCard.Citation)))
+        {
+            return null;
+        }
+
+        return @<div class="reference-book">
+            <span class="field-label" title="@BookIndexNote">In the book</span>
+            @if (!string.IsNullOrWhiteSpace(BookCard.Summary))
+            {
+                <p class="reference-book-summary">@BookCard.Summary</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(BookCard.Citation))
+            {
+                <p class="reference-citation">@BookCard.Citation</p>
+            }
+        </div>;
+    }
+
+    private const string BookIndexNote = "Machine-made from the book, so it may be thin or wrong. The campaign's own entries win.";
+
+    // The stat block an individual uses, beneath everything said about the individual: the block is
+    // shared by everyone who uses it, the card above is about this one.
+    private RenderFragment UsesSection()
+    {
+        if (Card.StatBlockId.Length == 0)
+        {
+            return null;
+        }
+
+        return @<div class="reference-uses">
+            @if (StatBlock.NodeId.Length > 0)
+            {
+                <span class="field-label">Uses the @StatBlock.Name stat block</span>
+                <StatBlockView Block="StatBlock" Citation="@StatBlockCitation" OnOpenReference="OnOpenReference" />
+            }
+            else
+            {
+                <span class="field-label">Uses a stat block that is not extracted yet</span>
+            }
+        </div>;
+    }
+}

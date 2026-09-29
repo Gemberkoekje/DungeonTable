@@ -1,0 +1,474 @@
+@page "/player"
+@rendermode InteractiveServer
+@using System.Globalization
+@inject IVectorMapStore Maps
+@inject IMapStore Annotations
+@inject SessionState Session
+@inject LiveContent Live
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Player view</PageTitle>
+
+<h1 class="visually-hidden">Player view</h1>
+
+<style>
+    .player-stage { position: fixed; inset: 0; background: #000000; overflow: hidden; }
+    .player-stage .vector-map-host,
+    .player-stage .vector-map-host svg { width: 100%; height: 100%; display: block; }
+    .player-fog { display: flex; align-items: center; justify-content: center; height: 100%; color: #cfc7b5; text-align: center; }
+
+    /* The projector is set up once and then left running for hours: the mouse pointer parked over a
+       corridor would sit there all evening, so it fades out with the button when nothing moves. */
+    .player-stage.cursor-idle { cursor: none; }
+
+    .projector-btn {
+        position: absolute;
+        right: 0.75rem;
+        bottom: 0.75rem;
+        padding: 0.3rem 0.7rem;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #3a332c;
+        border-radius: 0.35rem;
+        color: #cfc7b5;
+        font: inherit;
+        font-size: 0.8rem;
+        cursor: pointer;
+        opacity: 1;
+        transition: opacity 0.4s ease;
+    }
+
+    .player-stage.cursor-idle .projector-btn { opacity: 0; }
+
+    .projector-btn:hover { border-color: #c9a227; }
+
+    /* The DM's pointer. Its own SVG element laid over the map with the SAME viewBox and
+       preserveAspectRatio, so a world point lands in exactly the same place on both without this
+       having to know anything about the letterboxing. (No angle brackets in these comments: Razor
+       parses the style block as markup and would read one as an unclosed tag.) */
+    .player-ping-layer {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+
+    /* Three pulses, then gone. Nothing here re-triggers on its own: the group is keyed on the
+       ping's sequence number, so Blazor keeps the same element through the re-renders the DM's
+       reveals cause (which would otherwise restart the animation every few seconds) and replaces
+       it only when the DM actually points again. */
+    @@keyframes dt-ping-ring {
+        from { transform: scale(0.18); opacity: 0.95; }
+        to { transform: scale(1); opacity: 0; }
+    }
+
+    @@keyframes dt-ping-dot {
+        0% { opacity: 1; }
+        70% { opacity: 1; }
+        100% { opacity: 0; }
+    }
+
+    .player-ping .ping-ring {
+        animation: dt-ping-ring 1.3s ease-out 3 forwards;
+    }
+
+    .player-ping .ping-dot {
+        animation: dt-ping-dot 3.9s linear 1 forwards;
+    }
+
+    /* A projector in a lit room flattens everything, and the pointer has to read over black fog and
+       over parchment floor alike. Prefers-reduced-motion gets a still marker rather than nothing:
+       the DM is pointing at something, and dropping the mark would lose the message. */
+    @@media (prefers-reduced-motion: reduce) {
+        .player-ping .ping-ring { animation: none; transform: scale(0.6); opacity: 0.9; }
+        .player-ping .ping-dot { animation: none; opacity: 1; }
+    }
+</style>
+
+@* The "cursor-idle" class is owned by dt-projector.js, not by this render: Blazor leaves an attribute
+   it did not change alone, so the idle state survives the re-renders the DM's reveals cause. *@
+<div class="player-stage" @ref="stageRef">
+    @if (mapLoaded)
+    {
+        <VectorMapCanvas Map="map" ViewBox="Session.PlayerViewport" CssClass="player-map"
+                         SecretDoorIds="secretDoorIds" MarkSecretDoors="false"
+                         ConcealedObjectIds="concealedObjectIds"
+                         RevealedFeatureIds="Session.RevealedFeatureIds()"
+                         OpenDoorIds="Session.OpenDoorIds()" DoubleDoorIds="doubleDoorIds"
+                         Fog="BuildFog()" />
+    }
+    else
+    {
+        <div class="player-fog">
+            <div>
+                <p>The mists have not yet parted&hellip;</p>
+                <p class="muted">@statusMessage</p>
+            </div>
+        </div>
+    }
+
+    @* Where the DM is pointing. Above the map, below the picture: art is a scene the party is
+       looking at, the pointer is about the map underneath it. *@
+    @if (mapLoaded && Session.Ping.IsSet)
+    {
+        PingMarker ping = Session.Ping;
+        <svg class="player-ping-layer" viewBox="@PingViewBox()" preserveAspectRatio="xMidYMid meet"
+             xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            @* Keyed on the sequence, which is the whole mechanism: same key, same element, animation
+               left alone; new key, new element, animation replays. *@
+            <g @key="ping.Sequence" class="player-ping" transform="@Translate(ping)">
+                <circle class="ping-ring" cx="0" cy="0" r="@N(PingRadius)" fill="none"
+                        stroke="#f5c542" stroke-width="4" vector-effect="non-scaling-stroke" />
+                <circle class="ping-dot" cx="0" cy="0" r="@N(PingRadius * 0.16)" fill="#f5c542"
+                        stroke="#1b1b1b" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+            </g>
+        </svg>
+    }
+
+    @* The DM's picture, laid over the map. Inside the stage so fullscreen covers it, and after the
+       canvas so it stacks above it without either knowing about the other. *@
+    @* ImageId needs the "@": Razor reads an unprefixed attribute value as a *literal string* for a
+       string parameter (Size, being an enum, is read as C# either way), so without it the overlay is
+       handed the text "Session.ShownArtImageId" and silently resolves nothing. *@
+    @if (Session.ShownArtVisible)
+    {
+        <PlayerArtOverlay ImageId="@Session.ShownArtImageId" Size="Session.ShownArtSize" />
+    }
+
+    @* Fullscreen has to be entered from a real user gesture, so it is a button (or the "f" key) and
+       never something the render can do on its own. It carries no game information, and fades with the
+       cursor once the projector is left alone. *@
+    <button type="button" class="projector-btn" @onclick="ToggleFullscreen"
+            title="Fill the screen (f). Press Esc or f again to leave.">
+        @(isFullscreen ? "Exit full screen" : "Full screen")
+    </button>
+</div>
+
+@code {
+    // The DM circuit drives the viewport via SessionState; this view renders only that region and
+    // reports its own screen aspect back so the DM's box can lock to it.
+    private VectorMap map = new VectorMap();
+    private bool mapLoaded;
+    private string statusMessage = "Waiting for the DM to choose a map.";
+    private readonly HashSet<string> secretDoorIds = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> doubleDoorIds = new HashSet<string>(StringComparer.Ordinal);
+    // Objects the editor marked concealed; each is omitted from this render until the DM reveals it.
+    private readonly HashSet<string> concealedObjectIds = new HashSet<string>(StringComparer.Ordinal);
+    // The full annotation geometry is held server-side; only the DM-revealed subset is ever put into
+    // the rendered SVG (see BuildFog), so hidden regions/features never reach the player DOM.
+    private readonly List<Region> regions = new List<Region>();
+    private readonly List<FeatureMarker> markers = new List<FeatureMarker>();
+
+    private ElementReference stageRef;
+    private DotNetObjectReference<PlayerView> selfRef;
+
+    private string loadedMapId = string.Empty;
+    private bool isFullscreen;
+
+    // How big the fully-expanded pulse is, in grid cells. Two cells across a 5-ft grid is about ten
+    // feet of dungeon — big enough to find on a projected map from across the table, small enough
+    // that it still points at one thing rather than a whole room.
+    private const double PingRadiusCells = 2.0;
+
+    private double PingRadius => (map.Grid.CellSizePx > 0 ? map.Grid.CellSizePx : 1) * PingRadiusCells;
+
+    // The ping layer must use the map's own viewBox, or the pointer lands somewhere else entirely.
+    // The player canvas falls back to the whole map when the DM has set no viewport, so this does too.
+    private string PingViewBox()
+    {
+        MapBounds view = Session.PlayerViewport;
+        if (view.Width <= 0 || view.Height <= 0)
+        {
+            view = map.Bounds;
+        }
+
+        return $"{N(view.MinX)} {N(view.MinY)} {N(view.Width)} {N(view.Height)}";
+    }
+
+    private static string Translate(PingMarker ping) => $"translate({N(ping.X)} {N(ping.Y)})";
+
+    private static string N(double value) =>
+        double.IsFinite(value) ? value.ToString("0.###", CultureInfo.InvariantCulture) : "0";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        Live.Changed += OnContentChanged;
+
+        // Follow the DM's chosen map when it has picked one; otherwise default to the first map.
+        string target = Session.CurrentMapId;
+        if (string.IsNullOrEmpty(target))
+        {
+            IReadOnlyList<string> ids = Maps.ListMapIds();
+            if (ids.Count == 0)
+            {
+                statusMessage = "No maps are available yet.";
+                return;
+            }
+
+            target = ids[0];
+        }
+
+        await LoadMap(target);
+    }
+
+    private async Task LoadMap(string mapId)
+    {
+        loadedMapId = mapId;
+        mapLoaded = false;
+        regions.Clear();
+        markers.Clear();
+        secretDoorIds.Clear();
+        doubleDoorIds.Clear();
+        concealedObjectIds.Clear();
+
+        var result = await Maps.LoadAsync(mapId, CancellationToken.None);
+        if (!result.IsValid)
+        {
+            map = new VectorMap();
+            statusMessage = string.Join(" ", result.Messages.Select(message => message.Message));
+            return;
+        }
+
+        map = result.Value;
+        await LoadAnnotations(mapId);
+    }
+
+    // The annotation geometry is loaded server-side and held on the circuit, but never rendered
+    // wholesale: secret doors draw as walls, and only DM-revealed regions/markers are composited
+    // into the SVG by BuildFog. Nothing hidden is ever serialized to the player DOM.
+    //
+    // Integrity: a door's SECRET status (and an object's CONCEALED status) lives only in the
+    // annotations, while the geometry comes from the base map. So if the annotations file EXISTS but
+    // fails to parse, we cannot trust which doors are secret or which objects are concealed — fail
+    // CLOSED and refuse to render the map, rather than leak every one of them. A simply-absent
+    // annotations file means nothing is hidden, which is safe to render.
+    private async Task LoadAnnotations(string mapId)
+    {
+        var result = await Annotations.LoadAsync(mapId, CancellationToken.None);
+        if (result.IsValid)
+        {
+            regions.AddRange(result.Value.Regions);
+            markers.AddRange(result.Value.Features);
+            foreach (ObjectAnnotation annotation in result.Value.Objects)
+            {
+                // A concealed stair or decoration is dropped from this render until the DM reveals
+                // it. A door hides as a SECRET door instead, which draws it as wall rather than
+                // removing it from the map.
+                if (annotation.IsConcealed && annotation.Kind != MapObjectKind.Door)
+                {
+                    concealedObjectIds.Add(annotation.ObjectId);
+                }
+
+                if (annotation.Kind != MapObjectKind.Door)
+                {
+                    continue;
+                }
+
+                if (annotation.IsSecret)
+                {
+                    secretDoorIds.Add(annotation.ObjectId);
+                }
+
+                if (annotation.DoubleDoors)
+                {
+                    doubleDoorIds.Add(annotation.ObjectId);
+                }
+            }
+
+            mapLoaded = true;
+        }
+        else if (Annotations.Exists(mapId))
+        {
+            // The document is there but unreadable: hide the map so no secret door can slip through.
+            mapLoaded = false;
+            statusMessage = "The map notes could not be read. The map stays hidden until this is fixed.";
+        }
+        else
+        {
+            // No annotations authored yet: no regions to reveal and no secret doors, so the bare map
+            // is safe to show (it will be fully fogged until the DM reveals with the fog brush).
+            mapLoaded = true;
+        }
+    }
+
+    // The reveal mask sent to the player: opaque fog everywhere except the regions and grid cells the
+    // DM has revealed, plus the individually-revealed markers. Built fresh each render from the
+    // shared reveal state so it stays in sync as the DM reveals more.
+    private FogOverlay BuildFog()
+    {
+        if (!mapLoaded)
+        {
+            return FogOverlay.None;
+        }
+
+        var revealedRegions = new HashSet<string>(Session.RevealedRegionIds(), StringComparer.Ordinal);
+        var revealedFeatures = new HashSet<string>(Session.RevealedFeatureIds(), StringComparer.Ordinal);
+
+        var polygons = new List<IReadOnlyList<MapPoint>>();
+        foreach (Region region in regions)
+        {
+            if (revealedRegions.Contains(region.RegionId) && region.Polygon.Count >= 3)
+            {
+                polygons.Add(region.Polygon);
+            }
+        }
+
+        var cells = new List<MapBounds>();
+        foreach ((int col, int row) in Session.FogCells())
+        {
+            cells.Add(GridCells.CellBounds(map.Grid, col, row));
+        }
+
+        var revealedMarkers = markers
+            .Where(marker => revealedFeatures.Contains(marker.FeatureId))
+            .ToList();
+
+        return new FogOverlay
+        {
+            Enabled = true,
+            BookEdge = true,
+            FogColour = "#05060a",
+            FogOpacity = 1,
+            RevealedPolygons = polygons,
+            RevealedCells = cells,
+            RevealedMarkers = revealedMarkers,
+            UnitSize = map.Grid.CellSizePx > 0 ? map.Grid.CellSizePx : 1,
+        };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dtAspect.watch", stageRef, selfRef);
+            await JS.InvokeVoidAsync("dtProjector.attach", stageRef, selfRef);
+        }
+    }
+
+    /// <summary>Invoked from JS with the player screen's live aspect ratio.</summary>
+    /// <param name="aspect">Width divided by height.</param>
+    [JSInvokable]
+    public void OnPlayerAspect(double aspect) => Session.SetPlayerAspect(aspect);
+
+    /// <summary>
+    /// Invoked from JS whenever the fullscreen state changes, including when the browser leaves
+    /// fullscreen by itself (Esc, or the window losing the display) — which is why the button's label
+    /// follows this callback rather than what it last asked for.
+    /// </summary>
+    /// <param name="fullscreen">True while the page fills the screen.</param>
+    [JSInvokable]
+    public void OnFullscreenChanged(bool fullscreen)
+    {
+        if (isFullscreen != fullscreen)
+        {
+            isFullscreen = fullscreen;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Fullscreen must be requested inside the user gesture, so this hands straight over to JS.
+    private async Task ToggleFullscreen()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dtProjector.toggleFullscreen");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit dropped between the click and the call; nothing to toggle.
+        }
+    }
+
+    private bool syncingMap;
+
+    // The map on show changed on disk (the Room Editor saved it, or its drawing was replaced): read it
+    // again, in place, so the projector shows the new rooms and doors under the same reveals. The same
+    // guard as a map switch keeps two loads from interleaving.
+    private void OnContentChanged(ContentChanges changes)
+    {
+        if (!changes.HasFlag(ContentChanges.Maps))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            if (syncingMap || loadedMapId.Length == 0)
+            {
+                return;
+            }
+
+            syncingMap = true;
+            try
+            {
+                await LoadMap(loadedMapId);
+            }
+            finally
+            {
+                syncingMap = false;
+            }
+
+            await SyncMap();
+            StateHasChanged();
+        });
+    }
+
+    // The DM may switch maps mid-session (SetCurrentMap). Reload the player's geometry when that
+    // happens; otherwise this is a reveal/viewport change and a re-render is enough.
+    private void OnSessionChanged() => InvokeAsync(async () =>
+    {
+        await SyncMap();
+        StateHasChanged();
+    });
+
+    // Follow the DM's chosen map, serialized with a flag + loop so rapid map switches (each awaits an
+    // async load) can't interleave two LoadMap calls over the shared geometry. A switch that arrives
+    // mid-load is picked up when the current load finishes; a non-map change just re-renders.
+    private async Task SyncMap()
+    {
+        if (syncingMap)
+        {
+            return;
+        }
+
+        syncingMap = true;
+        try
+        {
+            string target = Session.CurrentMapId;
+            while (!string.IsNullOrEmpty(target) && !string.Equals(target, loadedMapId, StringComparison.Ordinal))
+            {
+                await LoadMap(target);
+                target = Session.CurrentMapId;
+            }
+        }
+        finally
+        {
+            syncingMap = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Session.Changed -= OnSessionChanged;
+        Live.Changed -= OnContentChanged;
+        try
+        {
+            await JS.InvokeVoidAsync("dtAspect.unwatch", stageRef);
+            await JS.InvokeVoidAsync("dtProjector.detach");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone; nothing to tear down.
+        }
+        catch (InvalidOperationException)
+        {
+            // Disposed during (pre)static rendering, before the circuit could accept interop — the
+            // watcher was never attached in that pass, so there is nothing to tear down.
+        }
+
+        selfRef?.Dispose();
+    }
+}

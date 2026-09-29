@@ -1,0 +1,299 @@
+@implements IDisposable
+@inject BattleState Fight
+@inject CampaignState Campaign
+@*
+    The Info tab's "what's in this room, and put it in a fight" strip. Its rows are the area's
+    authored creatures with their authored counts. The count is a pre-fill on a stepper, never
+    authoritative.
+
+    Adding never fails: a creature with no extracted stat block still joins the fight with a name and
+    editable numbers, because a missing extraction must not stop the DM running the encounter.
+
+    Each row also ticks off. A campaign that runs for months keeps asking "have we been here, and did
+    we kill the things in it?", and nothing else in the app can answer: the dossier says what the book
+    puts in the room, the fight says what is happening now, and neither remembers three sessions ago.
+    "Area cleared" is read off the ticks rather than stored beside them, so the two cannot disagree.
+*@
+
+<section class="encounter @(AllCleared ? "encounter-cleared" : string.Empty)" aria-label="Encounter">
+    <header class="encounter-head">
+        <h3>Encounter</h3>
+
+        @if (Monsters.Count > 0)
+        {
+            <span class="encounter-progress @(AllCleared ? "all-clear" : string.Empty)" role="status">
+                @if (AllCleared)
+                {
+                    @* The gap is inside the span: Razor trims the whitespace around a <text> block,
+                       so a plain space between the two would be swallowed and read "✔Area cleared". *@
+                    <span aria-hidden="true">&#x2714;&nbsp;</span>
+                    <text>Area cleared</text>
+                }
+                else
+                {
+                    @($"{ClearedCount} of {Monsters.Count} dealt with")
+                }
+            </span>
+
+            <button type="button" class="encounter-clear-all"
+                    title="@(AllCleared ? "Put every creature back on the board" : "Tick every creature here off as dealt with")"
+                    @onclick="ToggleAllCleared">@(AllCleared ? "Reopen area" : "Mark all dealt with")</button>
+
+            <button type="button" class="encounter-add-all" title="Put every creature listed here into the battle"
+                    @onclick="AddAll">Add all to battle</button>
+        }
+    </header>
+
+    @if (Monsters.Count == 0)
+    {
+        <p class="muted">Nobody is listed in this area.</p>
+    }
+    else
+    {
+        <ul class="encounter-list">
+            @foreach (EncounterMonster monster in Monsters)
+            {
+                EncounterMonster row = monster;
+                bool cleared = Campaign.IsCreatureCleared(AreaNodeId, row.NodeId);
+                <li class="encounter-row @(cleared ? "cleared" : string.Empty)">
+                    @* A checkbox, not a button: this is a record of what happened, and it is the one
+                       control on the row a DM might tab through a list of. *@
+                    <label class="encounter-done" title="@(cleared ? "Put these back on the board" : "These have been dealt with")">
+                        <input type="checkbox" checked="@cleared"
+                               aria-label="@($"{row.Name} dealt with")"
+                               @onchange="() => Campaign.ToggleCreatureCleared(AreaNodeId, row.NodeId)" />
+                    </label>
+
+                    <button type="button" class="encounter-name ref-link" title="Open the stat block"
+                            @onclick="() => OnOpenReference.InvokeAsync(row.NodeId)">@row.Name</button>
+
+                    @if (row.Citation.Length > 0)
+                    {
+                        <span class="encounter-cite">@row.Citation</span>
+                    }
+                    @if (!row.HasStatBlock)
+                    {
+                        <span class="encounter-warn" title="No stat block is extracted — it still adds, with blank HP and AC">no stat block</span>
+                    }
+                    @if (row.Secret)
+                    {
+                        <span class="secret-badge" title="DM only — the players don't know these are here">DM</span>
+                    }
+
+                    <span class="encounter-context" title="@row.Context">@row.Context</span>
+
+                    @if (row.CountExpression.Length > 0)
+                    {
+                        <span class="encounter-dice" title="The book rolls for this — roll it and type the result">@row.CountExpression</span>
+                    }
+
+                    <span class="encounter-stepper">
+                        <button type="button" title="One fewer" @onclick="() => Step(row.NodeId, -1)">&minus;</button>
+                        <input type="number" min="1" max="99" aria-label="@($"How many {row.Name}")"
+                               value="@CountOf(row)" @onchange="e => SetCount(row.NodeId, e.Value)" />
+                        <button type="button" title="One more" @onclick="() => Step(row.NodeId, 1)">+</button>
+                    </span>
+
+                    <button type="button" class="encounter-add" title="Add these to the battle"
+                            @onclick="() => Add(row)">Add</button>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (confirming)
+    {
+        <div class="encounter-confirm" role="alertdialog" aria-label="Replace the running battle">
+            <p>
+                A battle is already running in <strong>@RunningIn</strong>. Adding from here starts a new
+                one &mdash; the current initiative order and all combatant state are lost.
+            </p>
+            <button type="button" class="danger" @onclick="ConfirmReplace">Start a new battle</button>
+            <button type="button" @onclick="CancelReplace">Keep the current battle</button>
+            <button type="button" @onclick="AddToRunning">Add to the running battle instead</button>
+        </div>
+    }
+</section>
+
+@code {
+    /// <summary>The creatures this area names, from <see cref="DmWorkspace.Encounter"/>.</summary>
+    [Parameter]
+    public IReadOnlyList<EncounterMonster> Monsters { get; set; } = Array.Empty<EncounterMonster>();
+
+    /// <summary>The node id of the area a fight started from here belongs to.</summary>
+    [Parameter]
+    public string AreaNodeId { get; set; } = string.Empty;
+
+    /// <summary>The area's display title, for the Battle tab header.</summary>
+    [Parameter]
+    public string AreaTitle { get; set; } = string.Empty;
+
+    /// <summary>Raised with a node id when the DM clicks a creature's name, to open its stat block.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    // Steppers the DM has adjusted, keyed by node id. Anything absent shows the authored pre-fill, so
+    // navigating to another area and back does not strand a count from a different room.
+    private readonly Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+    // What the pending confirm will do once the DM says yes: a single row, or the whole strip.
+    private EncounterMonster pending;
+    private bool pendingAll;
+    private bool confirming;
+    private string lastArea = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        Fight.Changed += OnBattleChanged;
+
+        // The ticks are shared table state, so a second DM window (or a restore) must be seen here.
+        Campaign.Changed += OnBattleChanged;
+    }
+
+    // How many of the creatures this area lists have been ticked off, and whether that is all of
+    // them. Counted against the shown rows, never against everything stored: a tick left behind by a
+    // creature the area no longer lists must not make a room read as more cleared than it is.
+    private int ClearedCount => Campaign.ClearedCount(AreaNodeId, Monsters.Select(monster => monster.NodeId));
+
+    private bool AllCleared => Monsters.Count > 0 && ClearedCount == Monsters.Count;
+
+    private void ToggleAllCleared() =>
+        Campaign.SetAreaCleared(AreaNodeId, Monsters.Select(monster => monster.NodeId), !AllCleared);
+
+    protected override void OnParametersSet()
+    {
+        // A different room means different creatures; drop the edited counts rather than carry a
+        // "4" from the last room onto a same-named creature here.
+        if (!string.Equals(lastArea, AreaNodeId, StringComparison.Ordinal))
+        {
+            lastArea = AreaNodeId;
+            counts.Clear();
+            CancelReplace();
+        }
+    }
+
+    /// <summary>Unsubscribes from the battle and the campaign, both of which outlive this component.</summary>
+    public void Dispose()
+    {
+        Fight.Changed -= OnBattleChanged;
+        Campaign.Changed -= OnBattleChanged;
+    }
+
+    private void OnBattleChanged() => InvokeAsync(StateHasChanged);
+
+    private string RunningIn
+    {
+        get
+        {
+            Battle running = Fight.Snapshot();
+            return running.AreaTitle.Length > 0 ? running.AreaTitle : "another area";
+        }
+    }
+
+    private int CountOf(EncounterMonster monster) =>
+        counts.TryGetValue(monster.NodeId, out int edited) ? edited : monster.SuggestedCount;
+
+    private void Step(string nodeId, int delta)
+    {
+        EncounterMonster monster = Monsters.FirstOrDefault(m => string.Equals(m.NodeId, nodeId, StringComparison.Ordinal));
+        if (monster is not null)
+        {
+            counts[nodeId] = Math.Clamp(CountOf(monster) + delta, 1, 99);
+        }
+    }
+
+    private void SetCount(string nodeId, object value)
+    {
+        if (int.TryParse(value as string, out int typed))
+        {
+            counts[nodeId] = Math.Clamp(typed, 1, 99);
+        }
+    }
+
+    // Adding into a fight that is already running in a *different* area is the case worth asking
+    // about: reinforcements arriving in the same room are the normal thing to want, and silently
+    // discarding an evening's initiative order is not.
+    private void Add(EncounterMonster monster)
+    {
+        if (NeedsConfirm())
+        {
+            pending = monster;
+            pendingAll = false;
+            confirming = true;
+            return;
+        }
+
+        Commit(monster);
+    }
+
+    private void AddAll()
+    {
+        if (NeedsConfirm())
+        {
+            pending = null;
+            pendingAll = true;
+            confirming = true;
+            return;
+        }
+
+        CommitAll();
+    }
+
+    private bool NeedsConfirm() =>
+        Fight.IsActive && !string.Equals(Fight.AreaNodeId, AreaNodeId, StringComparison.Ordinal);
+
+    private void ConfirmReplace()
+    {
+        Fight.StartBattle(AreaNodeId, AreaTitle);
+        Finish();
+    }
+
+    private void AddToRunning() => Finish();
+
+    private void CancelReplace()
+    {
+        pending = null;
+        pendingAll = false;
+        confirming = false;
+    }
+
+    // Apply whatever the confirm was holding, then clear it.
+    private void Finish()
+    {
+        if (pendingAll)
+        {
+            CommitAll();
+        }
+        else if (pending is not null)
+        {
+            Commit(pending);
+        }
+
+        CancelReplace();
+    }
+
+    private void Commit(EncounterMonster monster)
+    {
+        EnsureBattle();
+        Fight.AddEncounter(monster, CountOf(monster));
+    }
+
+    private void CommitAll()
+    {
+        EnsureBattle();
+        foreach (EncounterMonster monster in Monsters)
+        {
+            Fight.AddEncounter(monster, CountOf(monster));
+        }
+    }
+
+    // A first add from an area with no fight running opens one there, seeding the party, so the DM
+    // never has to visit the Battle tab first.
+    private void EnsureBattle()
+    {
+        if (!Fight.IsActive)
+        {
+            Fight.StartBattle(AreaNodeId, AreaTitle);
+        }
+    }
+}

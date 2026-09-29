@@ -1,0 +1,57 @@
+# Runs the app on the sample pack, with a PostgreSQL 17 document store that keeps the table between runs.
+#
+#   cp .env.example .env      then fill in AUTH_PASSPHRASE and POSTGRES_PASSWORD
+#   docker compose up --build
+#
+# Open http://localhost:8080/dm and sign in with any user name and the passphrase. To run your own
+# campaign instead of the pack, set CONTENT_DIR in .env to its folder: the one that holds Maps/ and data/.
+#
+# For local development you can also run just the database (`docker compose up -d postgres`) and start
+# the app from your IDE, with Auth:Passphrase in `dotnet user-secrets` and the connection string in
+# ConnectionStrings__Postgres or user-secrets. The app also runs with no database at all: it then says
+# "Not saved" on the DM screen and forgets the table when it stops.
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  webapp:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Marten creates and updates its own schema on first use; there is nothing to migrate.
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Auth__Passphrase: ${AUTH_PASSPHRASE:?set AUTH_PASSPHRASE in .env}
+      Content__Root: /content
+      # The app reads a file again when it changes, so an edit shows at the table without a restart. A
+      # folder bind-mounted from a Windows or macOS host sends the container no change events, so the
+      # app looks for changes every few seconds instead.
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+    ports:
+      - "${WEBAPP_PORT:-8080}:8080"
+    volumes:
+      # Bind-mounted, not baked in: the image holds no content, and the app writes to it at run time.
+      # The Room Editor saves the *.regions.json beside each map, and pictures uploaded on the Art tab
+      # go to data/art/uploads/. The party and ally rosters are documents in Postgres once a database
+      # is configured, as it is here; data/party.json and data/allies.json only seed a new table.
+      - ${CONTENT_DIR:-./samples/demo}:/content
+
+volumes:
+  postgres_data:

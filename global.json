@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/global.json",
+  "comment": [
+    "The SDK the lock files were written with. CI and the Dockerfile run exactly this version, in the",
+    "sdk:10.0.302 image, and restore in locked mode.",
+    "rollForward 'feature' lets any newer .NET 10 SDK build it too, so a machine without a 10.0.3xx SDK is",
+    "not refused, and such an SDK writes the same lock files: the one package that follows the SDK's own",
+    "version, the implicit Microsoft.AspNetCore.App.Internal.Assets, is pinned in DungeonTable.Web.csproj.",
+    "Bump this, the Dockerfile's and the workflows' SDK tags, that pin and Microsoft.AspNetCore.Mvc.Testing",
+    "together, then regenerate the lock files with `dotnet restore --force-evaluate`."
+  ],
+  "sdk": {
+    "version": "10.0.302",
+    "rollForward": "feature"
+  }
+}

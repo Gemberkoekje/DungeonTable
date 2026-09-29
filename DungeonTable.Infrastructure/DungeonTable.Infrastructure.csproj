@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>DungeonTable.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DungeonTable.Tests" />
+    <InternalsVisibleTo Include="DungeonTable.ContentTests" />
+  </ItemGroup>
+
+  <!-- The document store. Infrastructure is the only layer that knows Postgres exists; the
+       composition root sees Marten transitively for its AddMarten call. -->
+  <ItemGroup>
+    <PackageReference Include="Marten" />
+  </ItemGroup>
+
+  <!-- Art uploads are decoded and re-encoded here rather than stored as they arrived. -->
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../DungeonTable.Application/DungeonTable.Application.csproj" />
+  </ItemGroup>
+
+</Project>

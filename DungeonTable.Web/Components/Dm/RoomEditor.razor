@@ -1,0 +1,1246 @@
+@page "/editor"
+@rendermode InteractiveServer
+@inject IVectorMapStore Maps
+@inject IMapStore Annotations
+@inject IConfiguration Config
+@inject IContentProjection Content
+@inject LiveContent Live
+@implements IDisposable
+
+<PageTitle>Room editor &mdash; DungeonTable</PageTitle>
+
+@* Unsaved changes ask before they are lost. The browser's own prompt covers a reload or a closed tab;
+   a click on one of the layout's links is caught by dt-editor.js, which reads the toolbar's
+   data-unsaved: the app's router is static, so those links are followed by blazor.web.js's enhanced
+   navigation, which NavigationLock's OnBeforeInternalNavigation never sees. *@
+<NavigationLock ConfirmExternalNavigation="@dirty" />
+
+@* The app is dark throughout (app.css): the page's ink is light, so every surface here takes the
+   theme's own --panel/--ink/--border rather than a light colour of its own, on which that ink
+   cannot be read. *@
+<style>
+    .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .editor-toolbar .group { display: flex; align-items: center; gap: 6px; }
+    .editor-toolbar .modes button, .editor-hint button, .editor-panel .quiet { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; }
+    .editor-toolbar .modes button:hover, .editor-hint button:hover:not(:disabled), .editor-panel .quiet:hover { border-color: var(--accent); }
+    .editor-toolbar .modes button.active { background: #b8860b; color: #1b1b1b; border-color: #b8860b; font-weight: 600; }
+    .editor-toolbar input, .editor-toolbar select, .editor-panel input[type=text], .editor-panel select { padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); color: var(--ink); font: inherit; }
+    .editor-toolbar .save { margin-left: auto; }
+    .editor-toolbar .save button { padding: 5px 14px; border-radius: 6px; border: 1px solid #2e6f3f; background: #2e8b57; color: #fff; cursor: pointer; }
+    .editor-toolbar .save button:disabled { background: transparent; border-color: var(--border); color: var(--muted); cursor: default; }
+    .editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+    .editor-panel { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--panel); }
+    .editor-panel h3 { margin: 0 0 8px; font-size: 15px; }
+    .editor-panel hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    .editor-panel .field { display: block; margin: 8px 0; }
+    .editor-panel .field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+    .editor-panel input[type=text] { width: 100%; box-sizing: border-box; }
+    .node-results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+    .node-results li { padding: 4px 8px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .node-results li:hover, .item-list li:hover { background: rgba(201, 162, 39, 0.12); }
+    .node-results .cat { color: var(--muted); font-size: 11px; }
+    .item-list { list-style: none; margin: 6px 0 0; padding: 0; }
+    .item-list li { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+    .item-list li.sel { background: rgba(184, 134, 11, 0.3); }
+    .item-list .tag { font-size: 11px; color: var(--muted); margin-left: auto; }
+    .editor-hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+    .editor-hint button { margin-left: 6px; padding: 2px 8px; }
+    .editor-hint button:disabled { opacity: 0.45; cursor: default; }
+    .editor-toolbar input.level-name { width: 220px; }
+    .node-results li.typed-id { border-top: 1px dashed var(--border); }
+    .danger { border: 1px solid #a33; color: var(--error); background: transparent; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+    .item-list .tag.linked, .linked { color: #5fb07a; }
+    .item-list .tag.pending, .editor-hint.pending, .pending { color: #e0a040; }
+    .item-list .tag.unlinked, .unlinked { color: var(--muted); }
+    .item-list .tag.wrong, .editor-hint.wrong { color: var(--error); }
+</style>
+
+<h1>Room editor</h1>
+
+<div class="editor-toolbar" data-unsaved="@(dirty ? "true" : "false")"
+     data-unsaved-message="This map has unsaved changes. Leave without saving them?">
+    <label class="group">
+        Map
+        @* Re-created whenever a switch is held back, so it shows the map still loaded rather than the
+           one picked: a select keeps its own choice while the value it was given stays the same. *@
+        <select @key="mapPickerVersion" value="@currentMapId" @onchange="e => RequestMapAsync(AsString(e.Value))">
+            @foreach (string id in mapIds)
+            {
+                <option value="@id">@MapLabels.For(levelNames, id)</option>
+            }
+        </select>
+    </label>
+
+    <label class="group" title="What the map pickers here and on the DM screen call this map. Left empty, they show the map's id.">
+        Level name
+        <input type="text" class="level-name" value="@levelName" placeholder="@currentMapId"
+               @onchange="e => SetLevelName(AsString(e.Value))" />
+    </label>
+
+    <div class="group modes" role="group" aria-label="Editor mode">
+        <button class="@ModeClass(EditorMode.Select)" @onclick="() => SetMode(EditorMode.Select)">Select</button>
+        <button class="@ModeClass(EditorMode.DrawRegion)" title="Drag a rectangle over a room"
+                @onclick="() => SetMode(EditorMode.DrawRegion)">Draw rectangle</button>
+        <button class="@ModeClass(EditorMode.DrawPolygon)" title="Click a room's corners one by one: for caves and diagonal walls"
+                @onclick="() => SetMode(EditorMode.DrawPolygon)">Draw polygon</button>
+        <button class="@ModeClass(EditorMode.PlaceMarker)" @onclick="() => SetMode(EditorMode.PlaceMarker)">Place marker</button>
+    </div>
+
+    @if (mode == EditorMode.PlaceMarker)
+    {
+        <label class="group">
+            Kind
+            <select @bind="markerKind">
+                <option value="@FeatureKind.Trap">Trap</option>
+                <option value="@FeatureKind.HiddenDoor">Hidden door</option>
+                <option value="@FeatureKind.Secret">Secret</option>
+                <option value="@FeatureKind.Hazard">Hazard</option>
+            </select>
+        </label>
+    }
+
+    <label class="group"><input type="checkbox" @bind="showGrid" /> Grid</label>
+    <label class="group"><input type="checkbox" @bind="snapToGrid" /> Snap</label>
+    <label class="group" title="Make decorations (statues, pillars, pits) clickable. Turn off while tagging regions.">
+        <input type="checkbox" @bind="clickDecorations" /> Decorations
+    </label>
+
+    <div class="group save">
+        @if (!string.IsNullOrEmpty(saveStatus))
+        {
+            <span class="muted">@saveStatus</span>
+        }
+        <button @onclick="SaveAsync" disabled="@(!dirty || annotationsError.Length > 0)">@(dirty ? "Save*" : "Saved")</button>
+    </div>
+</div>
+
+@if (pendingMapId.Length > 0)
+{
+    <p class="editor-hint pending" role="alert">
+        This map has unsaved changes. Switch to @MapLabels.For(levelNames, pendingMapId) anyway?
+        <button @onclick="SaveAndSwitchAsync" disabled="@(annotationsError.Length > 0)">Save and switch</button>
+        <button @onclick="SwitchToPendingAsync">Discard them and switch</button>
+        <button @onclick="StayOnMap">Stay</button>
+    </p>
+}
+
+@if (annotationsError.Length > 0)
+{
+    <p class="error" role="alert">@annotationsError Saving is disabled so the existing file is not overwritten.</p>
+}
+
+<div class="editor-layout">
+    <section aria-label="Map">
+        @if (!string.IsNullOrEmpty(mapError))
+        {
+            <p class="error" role="alert">@mapError</p>
+        }
+        else if (mapLoaded)
+        {
+            <VectorMapCanvas Map="map" ShowGrid="showGrid" ShowObjects="true" Pannable="true"
+                             EnableEditor="true" EditorTool="@CurrentTool" Overlay="BuildOverlay()"
+                             SecretDoorIds="SecretDoorIds" MarkSecretDoors="true"
+                             ConcealedObjectIds="ConcealedObjectIds"
+                             CanvasClicked="OnCanvasClick" RegionDragged="OnRegionDragged" />
+
+            @if (mode == EditorMode.DrawRegion)
+            {
+                <p class="editor-hint">Drag a rectangle over the room (panning is paused while drawing), then tag it in the panel.</p>
+            }
+            else if (mode == EditorMode.DrawPolygon)
+            {
+                <p class="editor-hint">
+                    Click the room's corners in order (drag to pan). Click the first corner again, or
+                    double-click the last one, to close the outline.
+                    <button @onclick="FinishDraft" disabled="@(!draft.CanClose)">Finish</button>
+                    <button @onclick="UndoDraftCorner" disabled="@draft.IsEmpty">Undo corner</button>
+                    <button @onclick="ClearDraft" disabled="@draft.IsEmpty">Clear</button>
+                </p>
+            }
+            else if (mode == EditorMode.PlaceMarker)
+            {
+                <p class="editor-hint">@MarkerHint</p>
+            }
+            else
+            {
+                <p class="editor-hint">Click a region, marker, door/stair, or decoration (statue, pillar, pit&hellip;) to select and edit it.</p>
+            }
+
+            @if (IsDrawing && pendingLinkNodeId.Length > 0)
+            {
+                <p class="editor-hint">
+                    The next region you draw also links to <strong>@PendingLinkName</strong>.
+                    <button @onclick="ClearPendingLink">Don't link it</button>
+                </p>
+            }
+        }
+        else
+        {
+            <p class="muted">Loading map&hellip;</p>
+        }
+    </section>
+
+    <aside class="editor-panel">
+        @if (SelectedRegion is not null)
+        {
+            <h3>Region</h3>
+            <label class="field"><span>Label</span>
+                <input type="text" value="@SelectedRegion.Label"
+                       @onchange="e => SetRegionLabel(AsString(e.Value))" />
+            </label>
+            @NodeLink(SelectedRegion.GraphNodeId)
+            @if (SelectedRegion.GraphNodeId.Length > 0)
+            {
+                int sharing = RegionsLinkedTo(SelectedRegion.GraphNodeId);
+                if (sharing > 1)
+                {
+                    <p class="editor-hint">One of @sharing regions on this map for this area. Reveal room shows them all.</p>
+                }
+                <p>
+                    <button class="quiet" title="For a room no one shape fits: the next region you draw links to the same area"
+                            @onclick="DrawAnotherForArea">Add another region for this area</button>
+                </p>
+            }
+            <p><button class="danger" @onclick="DeleteSelectedRegion">Delete region</button></p>
+        }
+        else if (SelectedFeature is not null)
+        {
+            <h3>Feature marker</h3>
+            <label class="field"><span>Kind</span>
+                <select value="@SelectedFeature.Kind" @onchange="e => SetFeatureKind(AsString(e.Value))">
+                    <option value="@FeatureKind.Trap">Trap</option>
+                    <option value="@FeatureKind.HiddenDoor">Hidden door</option>
+                    <option value="@FeatureKind.Secret">Secret</option>
+                    <option value="@FeatureKind.Hazard">Hazard</option>
+                </select>
+            </label>
+            <label class="field"><span>Label</span>
+                <input type="text" value="@SelectedFeature.Label"
+                       @onchange="e => SetFeatureLabel(AsString(e.Value))" />
+            </label>
+            @NodeLink(SelectedFeature.GraphNodeId)
+            <p><button class="danger" @onclick="DeleteSelectedFeature">Delete marker</button></p>
+        }
+        else if (selectedObjectId.Length > 0)
+        {
+            <h3>@SelectedObjectTitle</h3>
+            @if (SelectedObjectKind == MapObjectKind.Decoration)
+            {
+                <p class="muted">@SelectedDecorationName</p>
+            }
+            <label class="field"><span>Label</span>
+                <input type="text" value="@SelectedObjectValue(o => o.Label)"
+                       @onchange="e => SetObjectLabel(AsString(e.Value))" />
+            </label>
+            @if (SelectedObjectKind == MapObjectKind.Door)
+            {
+                <label class="field"><input type="checkbox" checked="@SelectedObjectFlag(o => o.IsSecret)"
+                                            @onchange="e => SetObjectSecret((bool)e.Value)" /> Secret door</label>
+                <label class="field"><input type="checkbox" checked="@SelectedObjectFlag(o => o.DefaultOpen)"
+                                            @onchange="e => SetObjectDefaultOpen((bool)e.Value)" /> Open by default</label>
+                <label class="field"><input type="checkbox" checked="@SelectedObjectFlag(o => o.DoubleDoors)"
+                                            @onchange="e => SetObjectDoubleDoors((bool)e.Value)" /> Double doors</label>
+            }
+            else
+            {
+                <label class="field"><input type="checkbox" checked="@SelectedObjectFlag(o => o.IsConcealed)"
+                                            @onchange="e => SetObjectConcealed((bool)e.Value)" /> Concealed</label>
+                <p class="editor-hint">Concealed objects start hidden: the players never see them, and
+                    the DM's map draws them ghosted until they are revealed in Conceal mode on the DM view.</p>
+            }
+            @NodeLink(SelectedObjectValue(o => o.GraphNodeId))
+            @if (SelectedObjectIsAnnotated)
+            {
+                <p><button class="danger" @onclick="ClearSelectedObject">Clear annotation</button></p>
+            }
+        }
+        else
+        {
+            <h3>Nothing selected</h3>
+            <p class="muted">Pick a mode, or select an item on the map.</p>
+        }
+
+        <hr />
+        <h3>Regions (@regions.Count)</h3>
+        <ul class="item-list">
+            @foreach (Region r in regions)
+            {
+                <li class="@(r.RegionId == selectedRegionId ? "sel" : "")" @onclick="() => SelectRegion(r.RegionId)">
+                    <span>@(string.IsNullOrEmpty(r.Label) ? r.RegionId : r.Label)</span>
+                    <span class="tag @RegionLinkState(r)" title="@RegionLinkTitle(r)">@RegionLinkTag(r)</span>
+                </li>
+            }
+        </ul>
+
+        <h3>Markers (@markers.Count)</h3>
+        <ul class="item-list">
+            @foreach (FeatureMarker f in markers)
+            {
+                <li class="@(f.FeatureId == selectedFeatureId ? "sel" : "")" @onclick="() => SelectFeature(f.FeatureId)">
+                    <span>@(string.IsNullOrEmpty(f.Label) ? f.Kind.ToString() : f.Label)</span>
+                    <span class="tag">@f.Kind</span>
+                </li>
+            }
+        </ul>
+
+        @if (objects.Count > 0)
+        {
+            <h3>Tagged objects (@objects.Count)</h3>
+            <ul class="item-list">
+                @foreach (ObjectAnnotation o in objects)
+                {
+                    <li class="@(o.ObjectId == selectedObjectId ? "sel" : "")" @onclick="() => SelectObject(o.ObjectId)">
+                        <span>@(string.IsNullOrEmpty(o.Label) ? ObjectFallbackLabel(o) : o.Label)@ObjectStateSuffix(o)</span>
+                        <span class="tag @(o.GraphNodeId.Length > 0 ? "linked" : "unlinked")">@o.Kind</span>
+                    </li>
+                }
+            </ul>
+        }
+    </aside>
+</div>
+
+@code {
+    private enum EditorMode { None, Select, DrawRegion, DrawPolygon, PlaceMarker }
+
+    private sealed record ObjectRef(MapObjectKind Kind, MapBounds Bounds, string Name);
+
+    // How near a corner of the outline being drawn, as a share of a grid square, a click counts as
+    // a click on that corner (which closes the outline).
+    private const double CornerTolerance = 0.35;
+
+    private IReadOnlyList<string> mapIds = Array.Empty<string>();
+    private string currentMapId = string.Empty;
+    private VectorMap map = new VectorMap();
+    private bool mapLoaded;
+    private string mapError = string.Empty;
+    private string levelName = string.Empty;
+
+    // Every map's level name, for the picker; kept in step with this map's on save.
+    private Dictionary<string, string> levelNames = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    // A map picked while this one had unsaved changes, waiting for the DM to say what happens to
+    // them; and the picker's @key, bumped to show the loaded map again while it waits.
+    private string pendingMapId = string.Empty;
+    private int mapPickerVersion;
+
+    // The outline the polygon tool is drawing, one corner per click.
+    private readonly RegionDraft draft = new RegionDraft();
+
+    // Set by "Add another region for this area": the next region drawn links to this area too.
+    private string pendingLinkNodeId = string.Empty;
+    private string pendingLinkLabel = string.Empty;
+
+    // What the loaded content has under an id (None: nothing yet), looked up once per id and forgotten
+    // when the content changes on disk.
+    private readonly Dictionary<string, CrossRefKind> writtenKinds = new Dictionary<string, CrossRefKind>(StringComparer.Ordinal);
+
+    private readonly List<Region> regions = new List<Region>();
+    private readonly List<FeatureMarker> markers = new List<FeatureMarker>();
+    private readonly List<ObjectAnnotation> objects = new List<ObjectAnnotation>();
+    private Dictionary<string, ObjectRef> objectIndex = new Dictionary<string, ObjectRef>(StringComparer.Ordinal);
+
+    private EditorMode mode = EditorMode.Select;
+    private FeatureKind markerKind = FeatureKind.Trap;
+    private bool showGrid = true;
+    private bool snapToGrid;
+    private bool clickDecorations = true;
+
+    private string selectedRegionId = string.Empty;
+    private string selectedFeatureId = string.Empty;
+    private string selectedObjectId = string.Empty;
+
+    private const int NodeResultLimit = 12;
+
+    // How many search results a region's link box looks through for the areas among them: people and
+    // stat blocks that match the name as well must not crowd the areas out.
+    private const int AreaSearchPool = 200;
+
+    private string nodeQuery = string.Empty;
+    private IReadOnlyList<SearchMatch> nodeMatches = Array.Empty<SearchMatch>();
+
+    private bool dirty;
+    private string saveStatus = string.Empty;
+
+    // Whether Maps/ survives a restart where this app is running. True everywhere the directory is a
+    // real one (local dev, and the docker-compose bind mount); set Maps:Durable=false wherever it is
+    // baked into a read-only image, so a save there says so instead of silently reporting success.
+    // Regions are authored content, meant to be committed with the campaign.
+    private bool MapsAreDurable => Config.GetValue<bool>("Maps:Durable", true);
+    private string annotationsError = string.Empty;
+
+    private string CurrentTool => mode switch
+    {
+        EditorMode.DrawRegion => "draw-rect",
+        EditorMode.DrawPolygon => "draw-poly",
+        EditorMode.PlaceMarker => "marker",
+        _ => "select",
+    };
+
+    private bool IsDrawing => mode is EditorMode.DrawRegion or EditorMode.DrawPolygon;
+
+    private string MarkerHint => snapToGrid
+        ? $"Click the map to drop a {markerKind} marker in the middle of the square."
+        : $"Click the map to drop a {markerKind} marker.";
+
+    private string PendingLinkName => pendingLinkLabel.Length > 0 ? pendingLinkLabel : pendingLinkNodeId;
+
+    private IReadOnlyCollection<string> SecretDoorIds =>
+        objects.Where(o => o.IsSecret && o.Kind == MapObjectKind.Door)
+            .Select(o => o.ObjectId)
+            .ToHashSet(StringComparer.Ordinal);
+
+    // Nothing is "revealed" in the editor (that is live session state on the DM view), so a concealed
+    // object always draws ghosted here — which is exactly the preview the author wants.
+    private IReadOnlyCollection<string> ConcealedObjectIds =>
+        objects.Where(o => o.IsConcealed)
+            .Select(o => o.ObjectId)
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Stops listening for content changes.</summary>
+    public void Dispose() => Live.Changed -= OnContentChanged;
+
+    // The content changed on disk. A document: what an id names may be different now, so the cached
+    // answers go. A map: the picker lists what is there now, but the map being edited is left alone,
+    // since this editor's own save is what most often changed it, and reading it again would drop
+    // the selection and any edits made since.
+    private void OnContentChanged(ContentChanges changes) => InvokeAsync(async () =>
+    {
+        if (changes.HasFlag(ContentChanges.Documents))
+        {
+            writtenKinds.Clear();
+        }
+
+        if (changes.HasFlag(ContentChanges.Maps))
+        {
+            mapIds = Maps.ListMapIds();
+            levelNames = new Dictionary<string, string>(
+                await MapLabels.LoadAsync(Annotations, mapIds, CancellationToken.None), StringComparer.Ordinal);
+        }
+
+        StateHasChanged();
+    });
+
+    protected override async Task OnInitializedAsync()
+    {
+        Live.Changed += OnContentChanged;
+        mapIds = Maps.ListMapIds();
+        currentMapId = mapIds.Count > 0 ? mapIds[0] : string.Empty;
+        levelNames = new Dictionary<string, string>(
+            await MapLabels.LoadAsync(Annotations, mapIds, CancellationToken.None), StringComparer.Ordinal);
+        await LoadMap();
+    }
+
+    private async Task LoadMap()
+    {
+        ResetState();
+
+        if (string.IsNullOrEmpty(currentMapId))
+        {
+            mapLoaded = false;
+            mapError = "No maps are available.";
+            return;
+        }
+
+        var result = await Maps.LoadAsync(currentMapId, CancellationToken.None);
+        if (!result.IsValid)
+        {
+            map = new VectorMap();
+            mapLoaded = false;
+            mapError = string.Join(" ", result.Messages.Select(message => message.Message));
+            return;
+        }
+
+        map = result.Value;
+        mapLoaded = true;
+        mapError = string.Empty;
+
+        objectIndex = new Dictionary<string, ObjectRef>(StringComparer.Ordinal);
+        foreach (MapDecoration decoration in map.Decorations)
+        {
+            objectIndex[decoration.Id] = new ObjectRef(MapObjectKind.Decoration, decoration.Bounds, decoration.Name);
+        }
+
+        foreach (DoorFeature door in map.Doors)
+        {
+            objectIndex[door.Id] = new ObjectRef(MapObjectKind.Door, door.Bounds, door.Id);
+        }
+
+        foreach (StairFeature stair in map.Stairs)
+        {
+            objectIndex[stair.Id] = new ObjectRef(MapObjectKind.Stairs, stair.Bounds, stair.Id);
+        }
+
+        await LoadAnnotations();
+    }
+
+    private async Task LoadAnnotations()
+    {
+        annotationsError = string.Empty;
+        var result = await Annotations.LoadAsync(currentMapId, CancellationToken.None);
+        if (result.IsValid)
+        {
+            MapDefinition def = result.Value;
+            levelName = def.LevelName;
+            regions.AddRange(def.Regions);
+            markers.AddRange(def.Features);
+            objects.AddRange(def.Objects);
+            return;
+        }
+
+        if (Annotations.Exists(currentMapId))
+        {
+            // The file is present but failed to load (corrupt / unreadable). Do NOT start empty and
+            // let a later Save overwrite it — surface the error and keep saving disabled.
+            annotationsError = "This map's annotations exist but could not be read: "
+                + string.Join(" ", result.Messages.Select(message => message.Message));
+            levelName = map.LevelName;
+            return;
+        }
+
+        // No annotations authored yet: start empty, seeding the level name from the source.
+        levelName = map.LevelName;
+    }
+
+    private void ResetState()
+    {
+        regions.Clear();
+        markers.Clear();
+        objects.Clear();
+        selectedRegionId = string.Empty;
+        selectedFeatureId = string.Empty;
+        selectedObjectId = string.Empty;
+        nodeQuery = string.Empty;
+        nodeMatches = Array.Empty<SearchMatch>();
+        mode = EditorMode.Select;
+        draft.Clear();
+        ClearPendingLink();
+        pendingMapId = string.Empty;
+        dirty = false;
+        saveStatus = string.Empty;
+        annotationsError = string.Empty;
+    }
+
+    private double UnitSize()
+    {
+        if (map.Grid.CellSizePx > 0)
+        {
+            return map.Grid.CellSizePx;
+        }
+
+        return map.Bounds.Width > 0 ? map.Bounds.Width / 40 : 1;
+    }
+
+    private EditorOverlay BuildOverlay() => new EditorOverlay
+    {
+        Regions = regions,
+        Markers = markers,
+        Objects = BuildObjectHighlights(),
+        HitTargets = BuildHitTargets(),
+        SelectedRegionId = selectedRegionId,
+        SelectedFeatureId = selectedFeatureId,
+        SelectedObjectId = selectedObjectId,
+        Draft = draft.Corners.ToArray(),
+        DraftSnaps = snapToGrid && map.Grid.CellSizePx > 0,
+        UnitSize = UnitSize(),
+    };
+
+    // Transparent, id-tagged rectangles that keep every object clickable through the region fills.
+    // Decorations come FIRST so the (smaller, structural) door and stair targets are drawn over them
+    // and win a click where a statue happens to sit in a doorway. They are also the only optional
+    // ones: 150+ sprite boxes over a decorated level would otherwise swallow the region clicks that
+    // region tagging depends on, so the DM can switch them off while working on regions.
+    private IReadOnlyList<ObjectHighlight> BuildHitTargets()
+    {
+        var list = new List<ObjectHighlight>(objectIndex.Count);
+        if (clickDecorations)
+        {
+            AddHitTargets(list, MapObjectKind.Decoration);
+        }
+
+        AddHitTargets(list, MapObjectKind.Door);
+        AddHitTargets(list, MapObjectKind.Stairs);
+        return list;
+    }
+
+    private void AddHitTargets(List<ObjectHighlight> list, MapObjectKind kind)
+    {
+        foreach (KeyValuePair<string, ObjectRef> entry in objectIndex.Where(entry => entry.Value.Kind == kind))
+        {
+            list.Add(new ObjectHighlight { Id = entry.Key, Kind = kind, Bounds = entry.Value.Bounds });
+        }
+    }
+
+    private IReadOnlyList<ObjectHighlight> BuildObjectHighlights()
+    {
+        var list = new List<ObjectHighlight>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ObjectAnnotation annotation in objects)
+        {
+            if (!objectIndex.TryGetValue(annotation.ObjectId, out ObjectRef reference))
+            {
+                continue;
+            }
+
+            list.Add(new ObjectHighlight
+            {
+                Id = annotation.ObjectId,
+                Kind = annotation.Kind,
+                Bounds = reference.Bounds,
+                IsSecret = annotation.IsSecret,
+                IsConcealed = annotation.IsConcealed,
+                Linked = annotation.GraphNodeId.Length > 0,
+            });
+            seen.Add(annotation.ObjectId);
+        }
+
+        if (selectedObjectId.Length > 0 && !seen.Contains(selectedObjectId)
+            && objectIndex.TryGetValue(selectedObjectId, out ObjectRef selectedReference))
+        {
+            list.Add(new ObjectHighlight { Id = selectedObjectId, Kind = selectedReference.Kind, Bounds = selectedReference.Bounds });
+        }
+
+        return list;
+    }
+
+    private void OnCanvasClick(CanvasClick click)
+    {
+        // The draw-rect tool never reports clicks (it reports drags via OnRegionDragged), so a
+        // click here is a polygon corner, a marker drop or a selection.
+        if (mode == EditorMode.DrawPolygon)
+        {
+            // Whatever is under the click (a region beside this one, a door) is ignored: a corner
+            // goes wherever the room's outline does.
+            AddDraftCorner(click.WorldX, click.WorldY);
+            return;
+        }
+
+        if (mode == EditorMode.PlaceMarker)
+        {
+            var marker = new FeatureMarker
+            {
+                FeatureId = NewId("f"),
+                Kind = markerKind,
+                Position = SnapMarker(click.WorldX, click.WorldY),
+            };
+            markers.Add(marker);
+            SelectFeature(marker.FeatureId);
+            dirty = true;
+            return;
+        }
+
+        SelectHit(click.HitKind, click.HitId);
+    }
+
+    private void OnRegionDragged(CanvasRect rect)
+    {
+        MapPoint topLeft = SnapCorner(rect.X, rect.Y);
+        MapPoint bottomRight = SnapCorner(rect.X + rect.Width, rect.Y + rect.Height);
+        if (Math.Abs(bottomRight.X - topLeft.X) < 1e-6 || Math.Abs(bottomRight.Y - topLeft.Y) < 1e-6)
+        {
+            // Snapping collapsed the rectangle to a line/point; ignore it.
+            return;
+        }
+
+        AddRegion(new[]
+        {
+            new MapPoint(topLeft.X, topLeft.Y),
+            new MapPoint(bottomRight.X, topLeft.Y),
+            new MapPoint(bottomRight.X, bottomRight.Y),
+            new MapPoint(topLeft.X, bottomRight.Y),
+        });
+    }
+
+    // A new region, drawn either way, selected so it can be tagged at once. After "Add another
+    // region for this area" it starts out linked to that area, under the same label.
+    private void AddRegion(IReadOnlyList<MapPoint> polygon)
+    {
+        var region = new Region
+        {
+            RegionId = NewId("r"),
+            Polygon = polygon,
+            GraphNodeId = pendingLinkNodeId,
+            Label = pendingLinkLabel,
+        };
+        ClearPendingLink();
+        regions.Add(region);
+        dirty = true;
+        mode = EditorMode.Select;
+        SelectRegion(region.RegionId);
+    }
+
+    // ---- Polygon tool --------------------------------------------------------------------------
+
+    private void AddDraftCorner(double x, double y)
+    {
+        if (draft.Add(SnapCorner(x, y), UnitSize() * CornerTolerance) == RegionDraftStep.Closed)
+        {
+            FinishDraft();
+        }
+    }
+
+    private void FinishDraft()
+    {
+        IReadOnlyList<MapPoint> outline = draft.Close();
+        if (outline.Count >= 3)
+        {
+            AddRegion(outline);
+        }
+    }
+
+    private void UndoDraftCorner() => draft.Undo();
+
+    private void ClearDraft() => draft.Clear();
+
+    // ---- Another region for the same area ------------------------------------------------------
+
+    private int RegionsLinkedTo(string nodeId) =>
+        regions.Count(r => string.Equals(r.GraphNodeId, nodeId, StringComparison.Ordinal));
+
+    private void DrawAnotherForArea()
+    {
+        Region region = SelectedRegion;
+        if (region is null || region.GraphNodeId.Length == 0)
+        {
+            return;
+        }
+
+        string nodeId = region.GraphNodeId;
+        string label = region.Label;
+        SetMode(EditorMode.DrawRegion);
+        pendingLinkNodeId = nodeId;
+        pendingLinkLabel = label;
+    }
+
+    private void ClearPendingLink()
+    {
+        pendingLinkNodeId = string.Empty;
+        pendingLinkLabel = string.Empty;
+    }
+
+    private void SelectHit(string kind, string id)
+    {
+        switch (kind)
+        {
+            case "region":
+                SelectRegion(id);
+                break;
+            case "feature":
+                SelectFeature(id);
+                break;
+            case "door":
+            case "stairs":
+            case "decoration":
+                SelectObject(id);
+                break;
+            default:
+                ClearSelection();
+                break;
+        }
+    }
+
+    // Leaving the polygon tool drops an unfinished outline, and leaving both drawing tools drops a
+    // pending "another region for this area": each belongs to the gesture that was abandoned.
+    private void SetMode(EditorMode next)
+    {
+        if (next != EditorMode.DrawPolygon)
+        {
+            draft.Clear();
+        }
+
+        if (next is not (EditorMode.DrawRegion or EditorMode.DrawPolygon))
+        {
+            ClearPendingLink();
+        }
+
+        mode = next;
+    }
+
+    private string ModeClass(EditorMode value) => mode == value ? "active" : string.Empty;
+
+    // ---- Selection -----------------------------------------------------------------------------
+
+    private Region SelectedRegion => regions.Find(r => r.RegionId == selectedRegionId);
+
+    private FeatureMarker SelectedFeature => markers.Find(f => f.FeatureId == selectedFeatureId);
+
+    private MapObjectKind SelectedObjectKind =>
+        objectIndex.TryGetValue(selectedObjectId, out ObjectRef reference) ? reference.Kind : MapObjectKind.None;
+
+    private string SelectedObjectTitle => SelectedObjectKind == MapObjectKind.Decoration
+        ? "Decoration"
+        : SelectedObjectKind + " object";
+
+    // The source sprite's own name (for example "Statue1x1"), so the DM can tell which of a room's
+    // statues is selected before it has been given a label.
+    private string SelectedDecorationName =>
+        objectIndex.TryGetValue(selectedObjectId, out ObjectRef reference) ? reference.Name : string.Empty;
+
+    private bool SelectedObjectIsAnnotated => objects.Exists(o => o.ObjectId == selectedObjectId);
+
+    private void ClearSelection()
+    {
+        selectedRegionId = string.Empty;
+        selectedFeatureId = string.Empty;
+        selectedObjectId = string.Empty;
+        nodeQuery = string.Empty;
+        nodeMatches = Array.Empty<SearchMatch>();
+    }
+
+    private void SelectRegion(string id)
+    {
+        ClearSelection();
+        selectedRegionId = id;
+    }
+
+    private void SelectFeature(string id)
+    {
+        ClearSelection();
+        selectedFeatureId = id;
+    }
+
+    private void SelectObject(string id)
+    {
+        ClearSelection();
+        selectedObjectId = id;
+    }
+
+    // ---- Edits (immutable rebuild) -------------------------------------------------------------
+
+    private void SetRegionLabel(string label) =>
+        UpdateRegion(r => new Region { RegionId = r.RegionId, Label = label, Polygon = r.Polygon, GraphNodeId = r.GraphNodeId });
+
+    private void DeleteSelectedRegion()
+    {
+        regions.RemoveAll(r => r.RegionId == selectedRegionId);
+        ClearSelection();
+        dirty = true;
+    }
+
+    private void SetFeatureLabel(string label) =>
+        UpdateFeature(f => new FeatureMarker { FeatureId = f.FeatureId, Kind = f.Kind, Position = f.Position, Label = label, GraphNodeId = f.GraphNodeId });
+
+    private void SetFeatureKind(string kind) =>
+        UpdateFeature(f => new FeatureMarker { FeatureId = f.FeatureId, Kind = ParseKind(kind), Position = f.Position, Label = f.Label, GraphNodeId = f.GraphNodeId });
+
+    private void DeleteSelectedFeature()
+    {
+        markers.RemoveAll(f => f.FeatureId == selectedFeatureId);
+        ClearSelection();
+        dirty = true;
+    }
+
+    private string SelectedObjectValue(Func<ObjectAnnotation, string> read)
+    {
+        ObjectAnnotation existing = objects.Find(o => o.ObjectId == selectedObjectId);
+        return existing is null ? string.Empty : read(existing);
+    }
+
+    private bool SelectedObjectFlag(Func<ObjectAnnotation, bool> read)
+    {
+        ObjectAnnotation existing = objects.Find(o => o.ObjectId == selectedObjectId);
+        return existing is not null && read(existing);
+    }
+
+    private void SetObjectLabel(string label) =>
+        UpdateObject(o => new ObjectAnnotation { ObjectId = o.ObjectId, Kind = o.Kind, Label = label, IsSecret = o.IsSecret, IsConcealed = o.IsConcealed, DefaultOpen = o.DefaultOpen, DoubleDoors = o.DoubleDoors, GraphNodeId = o.GraphNodeId });
+
+    private void SetObjectSecret(bool secret) =>
+        UpdateObject(o => new ObjectAnnotation { ObjectId = o.ObjectId, Kind = o.Kind, Label = o.Label, IsSecret = secret, IsConcealed = o.IsConcealed, DefaultOpen = o.DefaultOpen, DoubleDoors = o.DoubleDoors, GraphNodeId = o.GraphNodeId });
+
+    private void SetObjectConcealed(bool concealed) =>
+        UpdateObject(o => new ObjectAnnotation { ObjectId = o.ObjectId, Kind = o.Kind, Label = o.Label, IsSecret = o.IsSecret, IsConcealed = concealed, DefaultOpen = o.DefaultOpen, DoubleDoors = o.DoubleDoors, GraphNodeId = o.GraphNodeId });
+
+    private void SetObjectDefaultOpen(bool open) =>
+        UpdateObject(o => new ObjectAnnotation { ObjectId = o.ObjectId, Kind = o.Kind, Label = o.Label, IsSecret = o.IsSecret, IsConcealed = o.IsConcealed, DefaultOpen = open, DoubleDoors = o.DoubleDoors, GraphNodeId = o.GraphNodeId });
+
+    private void SetObjectDoubleDoors(bool doubleDoors) =>
+        UpdateObject(o => new ObjectAnnotation { ObjectId = o.ObjectId, Kind = o.Kind, Label = o.Label, IsSecret = o.IsSecret, IsConcealed = o.IsConcealed, DefaultOpen = o.DefaultOpen, DoubleDoors = doubleDoors, GraphNodeId = o.GraphNodeId });
+
+    private void ClearSelectedObject()
+    {
+        objects.RemoveAll(o => o.ObjectId == selectedObjectId);
+        dirty = true;
+    }
+
+    private void UpdateRegion(Func<Region, Region> edit)
+    {
+        int index = regions.FindIndex(r => r.RegionId == selectedRegionId);
+        if (index >= 0)
+        {
+            regions[index] = edit(regions[index]);
+            dirty = true;
+        }
+    }
+
+    private void UpdateFeature(Func<FeatureMarker, FeatureMarker> edit)
+    {
+        int index = markers.FindIndex(f => f.FeatureId == selectedFeatureId);
+        if (index >= 0)
+        {
+            markers[index] = edit(markers[index]);
+            dirty = true;
+        }
+    }
+
+    private void UpdateObject(Func<ObjectAnnotation, ObjectAnnotation> edit)
+    {
+        int index = objects.FindIndex(o => o.ObjectId == selectedObjectId);
+        if (index < 0)
+        {
+            MapObjectKind kind = SelectedObjectKind;
+            objects.Add(new ObjectAnnotation { ObjectId = selectedObjectId, Kind = kind });
+            index = objects.Count - 1;
+        }
+
+        objects[index] = edit(objects[index]);
+        dirty = true;
+    }
+
+    // ---- Node linking --------------------------------------------------------------------------
+
+    private RenderFragment<string> NodeLink => linkedNodeId =>
+        @<div class="field">
+            <span>Links to</span>
+            @if (linkedNodeId.Length > 0)
+            {
+                <div><code>@linkedNodeId</code> <button class="danger" @onclick="Unlink">Unlink</button></div>
+                @if (selectedRegionId.Length > 0 && !IsWritten(linkedNodeId))
+                {
+                    <p class="editor-hint pending">Nothing is written with this id yet. The region opens its
+                        area once a level file gives an area this id.</p>
+                }
+                else if (selectedRegionId.Length > 0 && RegionLink.IsSomethingElse(WrittenAs(linkedNodeId)))
+                {
+                    <p class="editor-hint wrong">This is @RegionLink.What(WrittenAs(linkedNodeId)), not an area: a
+                        region opens an area when it is clicked. Unlink it and link the area it is in.</p>
+                }
+            }
+            else
+            {
+                <input type="text" placeholder="@(selectedRegionId.Length > 0 ? "search areas by name, or type an area id…" : "search by name, or type an area id…")" value="@nodeQuery"
+                       @oninput="e => OnNodeQuery(AsString(e.Value))" />
+                @if (nodeMatches.Count > 0 || TypedOffer.Length > 0)
+                {
+                    <ul class="node-results">
+                        @foreach (SearchMatch match in nodeMatches)
+                        {
+                            <li @key="match.Id" @onclick="() => LinkNode(match)">
+                                <span>@(match.Label.Length > 0 ? match.Label : match.Id)</span>
+                                @if (match.Category.Length > 0)
+                                {
+                                    <span class="cat"> @match.Category</span>
+                                }
+                            </li>
+                        }
+                        @if (TypedOffer.Length > 0)
+                        {
+                            <li class="typed-id" @onclick="LinkTyped">
+                                <span>Link to <code>@TypedOffer</code></span>
+                                <span class="cat"> @WrittenLabel(TypedOffer)</span>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                @if (TypedRefusal.Length > 0)
+                {
+                    <p class="editor-hint wrong">@TypedRefusal</p>
+                }
+                else if (nodeMatches.Count == 0 && TypedOffer.Length == 0 && nodeQuery.Trim().Length > 0)
+                {
+                    <p class="editor-hint">@(selectedRegionId.Length > 0 ? "No area has that name." : "Nothing written has that name.")
+                        To link an area that is not written yet, type its id in full.</p>
+                }
+            }
+        </div>;
+
+    private void OnNodeQuery(string query)
+    {
+        nodeQuery = query;
+
+        // The same search as the DM panel's Search tab, so the two cannot drift apart. A hit on one of
+        // an area's block headings is labelled with the area's title, which is what a region is named
+        // after when it links. A region opens an area when it is clicked, so its box offers areas only;
+        // a marker or an object may link to anything.
+        nodeMatches = selectedRegionId.Length > 0
+            ? RegionLink.Areas(Content.SearchNodes(query, AreaSearchPool), NodeResultLimit)
+            : Content.SearchNodes(query, NodeResultLimit);
+    }
+
+    private void LinkNode(SearchMatch match)
+    {
+        if (selectedRegionId.Length > 0)
+        {
+            UpdateRegion(r => new Region { RegionId = r.RegionId, Label = LabelAfterLink(r.Label, match), Polygon = r.Polygon, GraphNodeId = match.Id });
+        }
+        else if (selectedFeatureId.Length > 0)
+        {
+            UpdateFeature(f => new FeatureMarker { FeatureId = f.FeatureId, Kind = f.Kind, Position = f.Position, Label = LabelAfterLink(f.Label, match), GraphNodeId = match.Id });
+        }
+        else if (selectedObjectId.Length > 0)
+        {
+            UpdateObject(o => new ObjectAnnotation { ObjectId = o.ObjectId, Kind = o.Kind, Label = LabelAfterLink(o.Label, match), IsSecret = o.IsSecret, IsConcealed = o.IsConcealed, DefaultOpen = o.DefaultOpen, DoubleDoors = o.DoubleDoors, GraphNodeId = match.Id });
+        }
+
+        nodeQuery = string.Empty;
+        nodeMatches = Array.Empty<SearchMatch>();
+    }
+
+    // The id typed into the link box, when the search did not find something with exactly that id. A
+    // region's box does not offer an id something other than an area is written under.
+    private string TypedOffer => selectedRegionId.Length > 0
+        ? RegionLink.Offer(nodeQuery, nodeMatches, WrittenAs)
+        : TypedNodeId.Offer(nodeQuery, nodeMatches);
+
+    // Why a region's box does not offer the id typed into it, or an empty string.
+    private string TypedRefusal => selectedRegionId.Length > 0
+        ? RegionLink.Refusal(nodeQuery, nodeMatches, WrittenAs)
+        : string.Empty;
+
+    // Links the typed id as it stands. An id that turns out to be written (the search only shows its
+    // first few matches) takes that entry's name, like any search result.
+    private void LinkTyped()
+    {
+        string id = TypedOffer;
+        if (id.Length == 0)
+        {
+            return;
+        }
+
+        var card = Content.GetReferenceCard(id);
+        LinkNode(new SearchMatch { Id = id, Label = card.IsValid ? card.Value.Label : string.Empty });
+    }
+
+    private bool IsWritten(string id) => WrittenAs(id) != CrossRefKind.None;
+
+    private CrossRefKind WrittenAs(string id)
+    {
+        if (!writtenKinds.TryGetValue(id, out CrossRefKind kind))
+        {
+            kind = RegionLink.WrittenAs(Content, id);
+            writtenKinds[id] = kind;
+        }
+
+        return kind;
+    }
+
+    // What a typed id names: the written entry's name, or a note that nothing has it yet.
+    private string WrittenLabel(string id)
+    {
+        if (!IsWritten(id))
+        {
+            return "not written yet";
+        }
+
+        var card = Content.GetReferenceCard(id);
+        return card.IsValid ? card.Value.Label : string.Empty;
+    }
+
+    // A region's link, as the list shows it: linked to a written area, linked to an id nothing is
+    // written with yet (a typed id, or a typo), linked to something that is not an area (from before
+    // the box offered areas only, or a hand edit), or not linked at all.
+    private string RegionLinkState(Region region)
+    {
+        if (region.GraphNodeId.Length == 0)
+        {
+            return "unlinked";
+        }
+
+        CrossRefKind kind = WrittenAs(region.GraphNodeId);
+        if (kind == CrossRefKind.None)
+        {
+            return "pending";
+        }
+
+        return RegionLink.IsSomethingElse(kind) ? "wrong" : "linked";
+    }
+
+    private string RegionLinkTag(Region region) => RegionLinkState(region) switch
+    {
+        "pending" => "not written",
+        "wrong" => "not an area",
+        string state => state,
+    };
+
+    private string RegionLinkTitle(Region region) => RegionLinkState(region) switch
+    {
+        "pending" => $"Linked to {region.GraphNodeId}, which nothing is written with yet",
+        "wrong" => $"Linked to {region.GraphNodeId}, which is {RegionLink.What(WrittenAs(region.GraphNodeId))}: clicking the region opens its card, not a room",
+        "linked" => $"Linked to {region.GraphNodeId}",
+        _ => "Not linked to an area",
+    };
+
+    /// <summary>
+    /// Label to use after linking a node: an item that has no label yet inherits the node's label,
+    /// so a freshly drawn region does not stay nameless in the item list. A label that was already
+    /// authored is intentional and is never overwritten, and a node without a label leaves the
+    /// field empty rather than pasting a raw node id into it.
+    /// </summary>
+    private static string LabelAfterLink(string current, SearchMatch match) =>
+        string.IsNullOrEmpty(current) ? match.Label : current;
+
+    private void Unlink()
+    {
+        if (selectedRegionId.Length > 0)
+        {
+            UpdateRegion(r => new Region { RegionId = r.RegionId, Label = r.Label, Polygon = r.Polygon, GraphNodeId = string.Empty });
+        }
+        else if (selectedFeatureId.Length > 0)
+        {
+            UpdateFeature(f => new FeatureMarker { FeatureId = f.FeatureId, Kind = f.Kind, Position = f.Position, Label = f.Label, GraphNodeId = string.Empty });
+        }
+        else if (selectedObjectId.Length > 0)
+        {
+            UpdateObject(o => new ObjectAnnotation { ObjectId = o.ObjectId, Kind = o.Kind, Label = o.Label, IsSecret = o.IsSecret, IsConcealed = o.IsConcealed, DefaultOpen = o.DefaultOpen, DoubleDoors = o.DoubleDoors, GraphNodeId = string.Empty });
+        }
+    }
+
+    // ---- Unsaved changes -----------------------------------------------------------------------
+
+    // Picking another map loads it at once only when nothing is unsaved. Otherwise the switch waits
+    // for Save, Discard or Stay: it used to reload straight away and drop the edits without a word.
+    private async Task RequestMapAsync(string mapId)
+    {
+        if (string.Equals(mapId, currentMapId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (dirty)
+        {
+            pendingMapId = mapId;
+            mapPickerVersion++;
+            return;
+        }
+
+        currentMapId = mapId;
+        await LoadMap();
+    }
+
+    private async Task SaveAndSwitchAsync()
+    {
+        await SaveAsync();
+        if (!dirty)
+        {
+            await SwitchToPendingAsync();
+        }
+    }
+
+    private async Task SwitchToPendingAsync()
+    {
+        string mapId = pendingMapId;
+        if (mapId.Length == 0)
+        {
+            return;
+        }
+
+        currentMapId = mapId;
+        mapPickerVersion++;
+        await LoadMap();
+    }
+
+    private void StayOnMap() => pendingMapId = string.Empty;
+
+    // ---- Persistence ---------------------------------------------------------------------------
+
+    private async Task SaveAsync()
+    {
+        if (annotationsError.Length > 0)
+        {
+            // The existing annotations could not be read; refuse to overwrite them.
+            return;
+        }
+
+        var definition = new MapDefinition
+        {
+            MapId = map.MapId,
+            Adventure = map.Adventure,
+            LevelName = levelName,
+            Regions = regions.ToList(),
+            Features = markers.ToList(),
+            Objects = objects.ToList(),
+        };
+
+        var result = await Annotations.SaveAsync(definition, CancellationToken.None);
+        if (result.IsValid)
+        {
+            dirty = false;
+            saveStatus = $"Saved {regions.Count} region(s), {markers.Count} marker(s), {objects.Count} object(s).";
+
+            // The picker lists the map under the name just saved.
+            if (levelName.Length > 0)
+            {
+                levelNames[currentMapId] = levelName;
+            }
+            else
+            {
+                levelNames.Remove(currentMapId);
+            }
+
+            if (!MapsAreDurable)
+            {
+                saveStatus += " WARNING: not durable here. This server reads Maps/ from its container"
+                    + " image, so this write is lost on the next restart. Redo it locally and commit"
+                    + " the .regions.json.";
+            }
+        }
+        else
+        {
+            saveStatus = string.Join(" ", result.Messages.Select(message => message.Message));
+        }
+    }
+
+    // ---- Helpers -------------------------------------------------------------------------------
+
+    // With Snap on, a region's corners go to the nearest grid intersection, so its outline runs along
+    // the printed grid lines, and a marker goes to the middle of the square it was dropped in, so a
+    // trap sits in its square instead of on the corner four squares share.
+    private MapPoint SnapCorner(double x, double y) =>
+        snapToGrid ? GridCells.NearestCorner(map.Grid, x, y) : new MapPoint(x, y);
+
+    private MapPoint SnapMarker(double x, double y) =>
+        snapToGrid ? GridCells.CellCentre(map.Grid, x, y) : new MapPoint(x, y);
+
+    private void SetLevelName(string name)
+    {
+        string trimmed = name.Trim();
+        if (string.Equals(trimmed, levelName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        levelName = trimmed;
+        dirty = true;
+    }
+
+    // An unlabelled annotation lists under something recognisable: a decoration falls back to its
+    // source sprite name ("Statue1x1"), anything else to its kind.
+    private string ObjectFallbackLabel(ObjectAnnotation annotation)
+    {
+        if (annotation.Kind == MapObjectKind.Decoration
+            && objectIndex.TryGetValue(annotation.ObjectId, out ObjectRef reference)
+            && reference.Name.Length > 0)
+        {
+            return reference.Name;
+        }
+
+        return annotation.Kind.ToString();
+    }
+
+    private static string ObjectStateSuffix(ObjectAnnotation annotation)
+    {
+        if (annotation.IsSecret)
+        {
+            return " (secret)";
+        }
+
+        return annotation.IsConcealed ? " (concealed)" : string.Empty;
+    }
+
+    private static FeatureKind ParseKind(string value) =>
+        Enum.TryParse(value, out FeatureKind kind) ? kind : FeatureKind.None;
+
+    private static string NewId(string prefix) => prefix + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+
+    private static string AsString(object value) => value is string text ? text : string.Empty;
+}

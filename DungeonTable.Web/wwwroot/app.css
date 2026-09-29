@@ -1,0 +1,3664 @@
+:root {
+    color-scheme: light dark;
+    --bg: #14110f;
+    --panel: #1e1a17;
+    --ink: #e8e0d5;
+    --muted: #9a8f80;
+    --accent: #c9a227;
+    --error: #e06c5a;
+    --border: #3a332c;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+}
+
+.page {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 0 1rem 3rem;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+}
+
+.topbar .brand {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.topbar nav {
+    display: flex;
+    gap: 1rem;
+}
+
+a {
+    color: var(--accent);
+}
+
+.muted {
+    color: var(--muted);
+}
+
+.error {
+    color: var(--error);
+    font-weight: 600;
+}
+
+code {
+    background: var(--panel);
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.25rem;
+}
+
+.node-picker {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0 1.5rem;
+}
+
+.node-picker input {
+    flex: 1;
+    padding: 0.5rem 0.65rem;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+}
+
+.node-picker button {
+    padding: 0.5rem 1rem;
+    background: var(--accent);
+    color: #1a1508;
+    border: none;
+    border-radius: 0.35rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.briefing {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 1.25rem 1.5rem;
+}
+
+.briefing h2 {
+    margin: 0;
+}
+
+.briefing .room-id {
+    margin: 0.15rem 0 1rem;
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+}
+
+.read-aloud {
+    margin: 0 0 1.25rem;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--accent);
+    background: rgba(201, 162, 39, 0.08);
+    font-style: italic;
+}
+
+.briefing section {
+    margin-top: 1rem;
+}
+
+.briefing h3 {
+    margin: 0 0 0.35rem;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.briefing ul {
+    margin: 0;
+    padding-left: 1.1rem;
+}
+
+.briefing .ref {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-left: 0.4rem;
+}
+
+/* ---- Briefing panel interactions ---- */
+
+/* Connections render as in-text links that jump the panel to that room. */
+.briefing .nav-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--accent);
+    cursor: pointer;
+    text-align: left;
+}
+
+.briefing .nav-link:hover,
+.briefing .nav-link:focus-visible {
+    text-decoration: underline;
+}
+
+/* Back / reveal-room controls above the briefing. */
+.briefing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.briefing-actions button {
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    background: var(--panel);
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.briefing-actions button:hover {
+    border-color: #b8860b;
+}
+
+.briefing-actions .reveal-room.on {
+    background: #b8860b;
+    border-color: #b8860b;
+    color: #1b1b1b;
+    font-weight: 600;
+}
+
+/* ---- Area dossier: the room's prose ---- */
+
+.dossier {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Boxed read-aloud may carry paragraph breaks from the source. */
+.dossier .read-aloud {
+    white-space: pre-line;
+}
+
+/* Compact ability-check pills, the most-referenced mechanical bits. */
+.dc-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 1rem;
+}
+
+.dc-pill {
+    padding: 0.1rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(201, 162, 39, 0.1);
+    border: 1px solid rgba(201, 162, 39, 0.45);
+    border-radius: 0.8rem;
+    cursor: help;
+    white-space: nowrap;
+}
+
+/* At-a-glance feature bullets: the scannable summary the DM reads first. */
+.glance-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.glance-item {
+    padding: 0.25rem 0 0.25rem 0.65rem;
+    border-left: 2px solid var(--border);
+}
+
+.glance-heading {
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.glance-heading::after {
+    content: ".";
+    color: var(--muted);
+}
+
+.glance-body {
+    margin-left: 0.35rem;
+    color: var(--muted);
+    white-space: pre-line;
+}
+
+/* Expanded detail: collapsed by default, opened only when the party engages. */
+.detail {
+    margin-top: 1rem;
+}
+
+.detail-block {
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    margin-bottom: 0.5rem;
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.detail-block > summary {
+    padding: 0.45rem 0.7rem;
+    cursor: pointer;
+    font-weight: 600;
+    list-style-position: inside;
+}
+
+.detail-block > summary:hover {
+    color: var(--accent);
+}
+
+.detail-block .detail-body {
+    padding: 0 0.7rem 0.7rem;
+    color: var(--ink);
+    white-space: pre-line;
+}
+
+/* DM-only / secret content: flagged so it is never read aloud by accident. */
+.secret-badge {
+    margin-left: 0.5rem;
+    padding: 0.02rem 0.4rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--error);
+    border: 1px solid var(--error);
+    border-radius: 0.7rem;
+    vertical-align: middle;
+}
+
+.glance-item.secret {
+    border-left-color: var(--error);
+}
+
+.detail-block.secret {
+    border-color: rgba(224, 108, 90, 0.5);
+}
+
+.detail-block.secret > summary {
+    color: var(--error);
+}
+
+/* ---- Briefing tabs: Room / Level / Rules / Search ---- */
+
+.briefing-head {
+    margin-bottom: 0.5rem;
+}
+
+.briefing-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0 0 1.1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.briefing-tab {
+    padding: 0.4rem 0.85rem;
+    margin-bottom: -1px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.briefing-tab:hover,
+.briefing-tab:focus-visible {
+    color: var(--ink);
+}
+
+.briefing-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+}
+
+/* Level tab: the floor's "what dwells here" overview. */
+.level-dossier .level-title {
+    margin: 0 0 0.6rem;
+    font-size: 1.1rem;
+}
+
+.designed-for {
+    margin: 0 0 0.85rem;
+    color: var(--muted);
+}
+
+.field-label {
+    margin-right: 0.4rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+}
+
+.what-dwells {
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    white-space: pre-line;
+}
+
+/* The floor's Aftermath, and the campaign-wide background under it. */
+.aftermath {
+    margin: 0;
+    white-space: pre-line;
+}
+
+.campaign-dossier {
+    margin-top: 1.6rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.level-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.level-table th,
+.level-table td {
+    padding: 0.15rem 0.5rem 0.15rem 0;
+    text-align: left;
+    vertical-align: baseline;
+}
+
+.level-table th {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+}
+
+.level-table td:first-child {
+    width: 3rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* The one floor that exists in the app today reads differently from the twenty-two that do not. */
+.level-table tr.authored td {
+    color: var(--ink);
+}
+
+.level-table tr:not(.authored) td {
+    color: var(--muted);
+}
+
+/* ---- Quests tab: the campaign's adventure hooks ----
+   Everything here is scoped under .quest-* rather than a bare element selector: the panel sits
+   inside .briefing, whose `ul` and `h3` rules would otherwise indent the beat chain and shout the
+   reward heading. */
+
+.quest-log {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.quest-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.quest-filter {
+    padding: 0.25rem 0.7rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.quest-filter:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+
+.quest-filter.on {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.quest-card {
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 0.4rem;
+    background: rgba(255, 255, 255, 0.015);
+}
+
+/* Not offerable yet: dimmed, never disabled — the DM can still tick every beat. */
+.quest-card.locked {
+    opacity: 0.72;
+}
+
+.quest-card.status-active {
+    border-left-color: var(--accent);
+}
+
+.quest-card.status-complete {
+    border-left-color: #5f8f5f;
+}
+
+.quest-card.status-abandoned {
+    border-left-color: var(--muted);
+}
+
+.quest-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.quest-title {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.quest-title:hover,
+.quest-title:focus-visible {
+    color: var(--accent);
+}
+
+.quest-caret {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.quest-availability,
+.quest-progress,
+.quest-pages {
+    font-size: 0.7rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.quest-availability {
+    padding: 0.02rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.quest-availability.avail-starting {
+    color: var(--accent);
+    border-color: rgba(201, 162, 39, 0.5);
+}
+
+.quest-giver {
+    margin: 0.35rem 0 0;
+    font-size: 0.9rem;
+}
+
+.quest-hook {
+    margin: 0.45rem 0 0;
+    color: var(--ink);
+}
+
+.quest-prereqs {
+    list-style: none;
+    margin: 0.45rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.quest-prereq {
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.quest-prereq .prereq-mark {
+    margin-right: 0.4rem;
+    font-style: normal;
+}
+
+.quest-prereq.met {
+    color: #7faa7f;
+}
+
+.quest-prereq.unmet {
+    color: var(--muted);
+}
+
+/* The beat chain. Numbered by the authored ordinal, not by the list marker, so a filtered or
+   partially rendered chain still reads in the book's order. */
+.quest-beats {
+    list-style: none;
+    margin: 0.7rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.quest-beat {
+    padding: 0.3rem 0 0.3rem 0.1rem;
+    border-top: 1px solid var(--border);
+}
+
+.quest-beat.done .beat-summary {
+    color: var(--muted);
+}
+
+.beat-line {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.beat-tick {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+}
+
+.beat-tick input {
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.beat-ordinal {
+    min-width: 1ch;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.beat-summary {
+    flex: 1 1 14rem;
+}
+
+.quest-beat.secret .beat-summary {
+    color: var(--error);
+}
+
+/* Destination chip: a live jump once its level is authored, a muted label until then. */
+.beat-target {
+    padding: 0.02rem 0.5rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.8rem;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.beat-target.jumpable {
+    border-color: rgba(201, 162, 39, 0.5);
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.beat-target.jumpable:hover {
+    border-color: var(--accent);
+    text-decoration: underline;
+}
+
+.beat-detail {
+    margin: 0.25rem 0 0 1.9rem;
+}
+
+.beat-detail > summary {
+    font-size: 0.75rem;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.beat-detail > summary:hover {
+    color: var(--accent);
+}
+
+.beat-detail .detail-body {
+    padding: 0.3rem 0 0;
+    white-space: pre-line;
+}
+
+.quest-rewards {
+    margin-top: 0.8rem;
+}
+
+.quest-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.9rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border);
+}
+
+.quest-status,
+.quest-reset {
+    padding: 0.15rem 0.6rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.quest-status:hover,
+.quest-reset:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+
+.quest-status.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1a1508;
+    font-weight: 600;
+}
+
+.quest-reset {
+    margin-left: auto;
+}
+
+/* ---- Rules tab: the card decks ---- */
+
+.deck {
+    margin-top: 1.4rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--border);
+}
+
+.deck-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.deck-head h3 {
+    flex: 1 1 auto;
+    margin: 0;
+}
+
+.deck-draw,
+.deck-reset {
+    padding: 0.2rem 0.7rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.deck-draw {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.deck-draw:hover:not(:disabled),
+.deck-reset:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+
+.deck-draw:disabled,
+.deck-reset:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.deck-count {
+    font-size: 0.72rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.deck-usage {
+    margin: 0.4rem 0 0.7rem;
+    font-size: 0.82rem;
+}
+
+/* The just-drawn card: the one thing on this panel the DM reads out immediately. */
+.deck-drawn {
+    margin-bottom: 0.9rem;
+    padding: 0.5rem 0.8rem;
+    border: 1px solid rgba(201, 162, 39, 0.5);
+    border-radius: 0.4rem;
+    background: rgba(201, 162, 39, 0.06);
+}
+
+.deck-card > summary {
+    padding: 0.25rem 0;
+    cursor: pointer;
+    list-style-position: inside;
+}
+
+.deck-name {
+    font-weight: 600;
+}
+
+.deck-subtitle,
+.deck-spent {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.deck-subtitle {
+    font-style: italic;
+}
+
+.deck-spent {
+    padding: 0.02rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.65rem;
+}
+
+.deck-body {
+    padding: 0 0 0.5rem 1.1rem;
+    white-space: pre-line;
+}
+
+.deck-body p {
+    margin: 0 0 0.5rem;
+}
+
+.deck-effect-name {
+    margin-right: 0.35rem;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.deck-browse .detail-body {
+    white-space: normal;
+}
+
+/* Search tab: jump to anything the content or the book index names. */
+.briefing-search {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.briefing-search input {
+    padding: 0.5rem 0.65rem;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+}
+
+.search-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.search-result {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--accent);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.search-result:hover,
+.search-result:focus-visible {
+    border-color: var(--accent);
+}
+
+.search-result .search-cat {
+    margin-left: auto;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+.search-result .search-id {
+    font-family: ui-monospace, monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+/* A book index hit: badged as the book's, with where to look it up. */
+.search-result .search-book {
+    padding: 0 0.3rem;
+    border: 1px solid var(--xref-book);
+    border-radius: 0.25rem;
+    color: var(--xref-book);
+}
+
+.search-result .search-cite {
+    font-size: 0.7rem;
+    font-style: italic;
+    color: var(--xref-book);
+    white-space: nowrap;
+}
+
+/* ---- Party tab: the characters the dungeon is being run for ----
+
+   The vitals strip is the load-bearing part. It sits outside the card's disclosure because "what
+   is her AC" gets asked mid-turn, and a DM who has to expand a card to answer it is worse off than
+   with the paper sheet this replaces. */
+
+.party-panel,
+.story-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.party-summary {
+    margin: 0;
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--ink);
+}
+
+.party-table,
+.cast-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.party-table th,
+.party-table td,
+.cast-table th,
+.cast-table td {
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.party-table thead th,
+.cast-table thead th {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.party-table tbody th,
+.cast-table tbody th {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* The three numeric columns, so a row scans as numbers rather than prose. */
+.party-table td:nth-child(n + 3) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.character-card {
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 0.4rem;
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.character-card.has-secret {
+    border-left-color: var(--error);
+}
+
+.character-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.character-title {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.character-title:hover .character-name {
+    color: var(--accent);
+}
+
+.character-name {
+    font-weight: 600;
+}
+
+.character-build,
+.character-player {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.vitals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.5rem;
+    margin: 0.5rem 0 0;
+}
+
+.vital {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    padding: 0.1rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.vital.wide {
+    white-space: normal;
+}
+
+.vital dt {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+}
+
+.vital dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.character-secret {
+    margin: 0.6rem 0 0;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid rgba(224, 108, 90, 0.5);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    white-space: pre-line;
+}
+
+.character-body {
+    margin-top: 0.8rem;
+}
+
+.character-line {
+    margin: 0 0 0.35rem;
+    font-size: 0.85rem;
+}
+
+.character-section {
+    margin-top: 0.9rem;
+}
+
+.character-section h4 {
+    margin: 0 0 0.45rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+}
+
+.character-prose,
+.story-summary {
+    white-space: pre-line;
+    color: var(--ink);
+}
+
+/* ---- NPCs tab: the named people the campaign has accumulated ----
+
+   The identity strip carries WHERE and DISPOSITION instead of combat numbers: most of these people
+   will never be rolled into initiative, and "where do I find her" is the question that gets asked. */
+
+.npc-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.npc-filter {
+    width: 100%;
+    padding: 0.35rem 0.6rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.npc-filter:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.npc-card {
+    border-left-color: var(--accent);
+}
+
+.npc-disposition {
+    padding: 0.05rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    font-size: 0.7rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+/* An NPC's contact table is nested inside a card, so it needs to sit in from the card's edge. */
+.npc-card .cast-table {
+    font-size: 0.8rem;
+}
+
+/* ---- Story tab: the campaign that came before this one ---- */
+
+.story-chapters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.story-head h3 {
+    margin: 0;
+}
+
+.story-source {
+    margin: 0.15rem 0 0;
+    font-size: 0.75rem;
+}
+
+.story-summary {
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid var(--accent);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.story-chapter h4 {
+    margin: 1rem 0 0.45rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+}
+
+.cast-state {
+    color: var(--muted);
+}
+
+.cast-table tr.secret th {
+    color: var(--error);
+}
+
+/* ---- Session tab: the evening's prep and running order ---- */
+
+.session-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.session-plan h4 {
+    margin: 1rem 0 0.45rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+}
+
+/* Canon is a two-column glance table, so the fact column gets the room the prose needs. */
+.session-canon th[scope="row"] {
+    width: 28%;
+}
+
+.session-scene {
+    margin: 0 0 1rem;
+    padding: 0.55rem 0.7rem 0.3rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.session-scene-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.session-scene-head h5 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+/* The scene's position in the running order, as a numbered chip. */
+.session-ordinal {
+    flex: none;
+    min-width: 1.4rem;
+    padding: 0.05rem 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 0.2rem;
+    font-size: 0.72rem;
+    text-align: center;
+    color: var(--accent);
+}
+
+/* Who is on and how long it should take — the two facts a running order exists to carry. */
+.session-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+    margin: 0.35rem 0 0.2rem;
+    font-size: 0.78rem;
+}
+
+.session-strip dt {
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.68rem;
+    align-self: center;
+}
+
+.session-strip dd {
+    margin: 0 0.6rem 0 0;
+}
+
+.session-purpose {
+    margin: 0.2rem 0 0.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+/* ---- Cross-references + reference drawer + navigation history ---- */
+
+/* Per-kind colours, shared by prose links, breadcrumb chips and the drawer accent. */
+:root {
+    --xref-area: #7fb0c9;
+    --xref-monster: #e0765f;
+    --xref-spell: #6ea8fe;
+    --xref-item: #c9a227;
+    --xref-npc: #7bc67b;
+    --xref-faction: #c08bd8;
+    --xref-check: #9a8f80;
+    --xref-other: #9a8f80;
+    --xref-character: #e38ab3;
+    --xref-broken: #d05a5a;
+    /* The book index: parchment, and quieter than the campaign's own people and places. */
+    --xref-book: #b39b77;
+}
+
+/* An entity mention in the prose, rendered inline as a coloured, dotted-underline link. */
+.xref {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    color: var(--xref-other);
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 0.15em;
+}
+
+.xref:hover,
+.xref:focus-visible {
+    text-decoration: underline solid;
+}
+
+.xref-area { color: var(--xref-area); }
+.xref-monster { color: var(--xref-monster); }
+.xref-spell { color: var(--xref-spell); }
+.xref-item { color: var(--xref-item); }
+.xref-npc { color: var(--xref-npc); }
+.xref-faction { color: var(--xref-faction); }
+.xref-check { color: var(--xref-check); }
+.xref-other { color: var(--xref-other); }
+.xref-character { color: var(--xref-character); }
+.xref-book { color: var(--xref-book); }
+
+/* An authored [[...]] link that names nothing: its words stay readable, with a wavy underline like
+   a spelling mistake, and the markup in the tooltip. Not a button, so it cannot be clicked. */
+.xref-unresolved {
+    text-decoration: underline wavy var(--xref-broken);
+    text-underline-offset: 0.2em;
+    cursor: help;
+}
+
+/* A link or exit to a floor nobody has authored yet: early, not wrong. Muted and dotted, with no
+   error colour, like a quest destination that has not been reached. */
+.xref-pending {
+    color: var(--muted);
+    text-decoration: underline dotted var(--muted);
+    text-underline-offset: 0.2em;
+    cursor: help;
+}
+
+/* ---- Authored creatures and exits in the briefing ---- */
+
+/* "4 ×" in front of an authored occupant. */
+.briefing .occupant-count {
+    margin-right: 0.3rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+}
+
+/* The author's note on an occupant or exit, after its name. */
+.briefing .briefing-note {
+    margin-left: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+/* An occupant or exit the players do not know about, marked like a secret dossier block. */
+.briefing li.secret {
+    list-style-type: "✦ ";
+}
+
+/* Occupant labels that open a reference card. */
+.briefing .ref-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--accent);
+    cursor: pointer;
+    text-align: left;
+}
+
+.briefing .ref-link:hover,
+.briefing .ref-link:focus-visible {
+    text-decoration: underline;
+}
+
+/* Navigation history: Back / Forward + breadcrumb trail of typed chips. */
+.nav-history {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.nav-steps {
+    display: inline-flex;
+    gap: 0.25rem;
+}
+
+.nav-step {
+    padding: 0.25rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    background: var(--panel);
+    color: var(--ink);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.nav-step:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.nav-step:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.crumb-ellipsis {
+    color: var(--muted);
+}
+
+.crumb {
+    max-width: 12rem;
+    padding: 0.15rem 0.55rem;
+    border: 1px solid currentColor;
+    border-radius: 0.8rem;
+    background: none;
+    color: var(--xref-other);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.crumb:hover,
+.crumb:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.crumb.current {
+    font-weight: 600;
+}
+
+.crumb-area { color: var(--xref-area); }
+.crumb-monster { color: var(--xref-monster); }
+.crumb-spell { color: var(--xref-spell); }
+.crumb-item { color: var(--xref-item); }
+.crumb-npc { color: var(--xref-npc); }
+.crumb-faction { color: var(--xref-faction); }
+.crumb-other { color: var(--xref-other); }
+.crumb-character { color: var(--xref-character); }
+
+/* Reference drawer: the pinned link-out card a cross-reference opens. */
+.reference-drawer {
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--xref-other);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.reference-drawer.kind-area { border-left-color: var(--xref-area); }
+.reference-drawer.kind-monster { border-left-color: var(--xref-monster); }
+.reference-drawer.kind-spell { border-left-color: var(--xref-spell); }
+.reference-drawer.kind-item { border-left-color: var(--xref-item); }
+.reference-drawer.kind-npc { border-left-color: var(--xref-npc); }
+.reference-drawer.kind-faction { border-left-color: var(--xref-faction); }
+.reference-drawer.kind-character { border-left-color: var(--xref-character); }
+.reference-drawer.kind-book { border-left-color: var(--xref-book); }
+
+/* ---- The book index: what the book says, beneath the campaign's own card ---- */
+
+.reference-book {
+    margin: 0.6rem 0 0;
+    padding-top: 0.4rem;
+    border-top: 1px dashed var(--border);
+    font-size: 0.85rem;
+}
+
+.reference-book-summary {
+    margin: 0.15rem 0 0;
+    color: var(--muted);
+}
+
+.reference-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.reference-kind {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.reference-label {
+    margin: 0.1rem 0 0;
+    font-size: 1.05rem;
+}
+
+.reference-close {
+    flex: none;
+    width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    background: none;
+    color: var(--muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.reference-close:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+
+.reference-citation {
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--accent);
+}
+
+.reference-summary {
+    margin: 0.6rem 0 0;
+    white-space: pre-line;
+}
+
+.reference-whereabouts {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+}
+
+/* Every area the entity touches, so the DM picks rather than a heuristic guessing. The relation is
+   what makes the choice meaningful — "occupies" and "watches" send them to different rooms. */
+.whereabouts-list {
+    margin: 0.15rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.whereabouts-list li {
+    margin: 0.1rem 0;
+}
+
+.whereabouts-relation {
+    margin-left: 0.35rem;
+    opacity: 0.7;
+    font-style: italic;
+}
+
+/* ---- Relations: on cards, and as the briefing's "Involved with" ---- */
+
+.reference-relations {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+}
+
+.relation-list {
+    margin: 0.15rem 0 0;
+    padding-left: 1.1rem;
+}
+
+.relation-line {
+    margin: 0.1rem 0;
+}
+
+/* "rival of", "plotted against by": muted, so the name it points at carries the line. */
+.relation-phrase {
+    margin-right: 0.3rem;
+    color: var(--muted);
+    font-style: italic;
+}
+
+.relation-where {
+    margin-left: 0.3rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.relation-note {
+    margin-left: 0.4rem;
+    color: var(--muted);
+}
+
+.relation-note::before {
+    content: "— ";
+}
+
+.relation-line.secret {
+    list-style-type: "✦ ";
+}
+
+.briefing .involvement-list {
+    margin: 0;
+    padding-left: 1.1rem;
+}
+
+.briefing .involvement-subject {
+    font-weight: 600;
+}
+
+/* The stat block an authored individual uses, beneath its own description and whereabouts. */
+.reference-uses {
+    margin: 0.75rem 0 0;
+    font-size: 0.85rem;
+}
+
+.reference-uses > .field-label {
+    display: block;
+    margin-bottom: 0.35rem;
+}
+
+/* ---- Stat block / spell rendering ---- */
+
+.stat-block,
+.spell-detail {
+    margin-top: 0.6rem;
+    font-size: 0.86rem;
+}
+
+.stat-subline,
+.spell-subline {
+    margin: 0 0 0.5rem;
+    font-style: italic;
+    color: var(--muted);
+}
+
+.spell-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 0.7rem;
+    font-size: 0.7rem;
+    font-style: normal;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.stat-topline,
+.spell-facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.15rem 0.6rem;
+    margin: 0 0 0.6rem;
+}
+
+.stat-topline dt,
+.spell-facts dt {
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.stat-topline dd,
+.spell-facts dd {
+    margin: 0;
+}
+
+.stat-abilities {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.4rem;
+    margin: 0.6rem 0;
+    text-align: center;
+}
+
+.stat-ability {
+    display: flex;
+    flex-direction: column;
+    padding: 0.3rem 0.2rem;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    background: var(--panel);
+}
+
+.stat-ability-code {
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+}
+
+.stat-ability-score {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.stat-ability-mod {
+    font-size: 0.72rem;
+    color: var(--muted);
+}
+
+.stat-saves {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 0.6rem;
+}
+
+.stat-save {
+    padding: 0.1rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.7rem;
+    font-size: 0.75rem;
+}
+
+.stat-save.proficient {
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.stat-line {
+    margin: 0.35rem 0;
+    white-space: pre-line;
+}
+
+.stat-section {
+    margin: 0.8rem 0 0.3rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+}
+
+.spell-text,
+.spell-higher {
+    margin: 0.5rem 0;
+    white-space: pre-line;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.player-stage {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    color: var(--muted);
+}
+
+/* ---- DM shell: the Map / Info / Battle tabs ---- */
+
+/* The DM screen needs far more width than the 60rem reading column the rest of the app uses, so it
+   breaks out of `.page` rather than forcing every other page to be wide. */
+.dm-shell {
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(100rem, calc(100vw - 2rem));
+}
+
+.dm-shell-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+    margin-top: 0.25rem;
+}
+
+.dm-tabs {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.dm-tab {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    padding: 0.5rem 1.15rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 0.45rem 0.45rem 0 0;
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.dm-tab:hover,
+.dm-tab:focus-visible {
+    color: var(--ink);
+}
+
+.dm-tab.active {
+    background: #2a231c;
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.dm-tab-key {
+    font-size: 0.65rem;
+    opacity: 0.7;
+}
+
+.map-picker {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.35rem auto;
+    color: var(--muted);
+}
+
+.map-picker select,
+.tool-options select {
+    padding: 0.35rem 0.5rem;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+}
+
+/* The player-view status bar lives in the shell, so the DM can see and reframe what the projector
+   shows from any tab — including mid-fight, without leaving the Battle tab. */
+.dm-player-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.45rem 0.85rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.players-see .see-dot {
+    margin-right: 0.35rem;
+    color: var(--border);
+}
+
+.players-see.live .see-dot {
+    color: #7bc67b;
+}
+
+.viewport-at {
+    color: var(--ink);
+}
+
+.frame-btn {
+    margin-left: auto;
+    padding: 0.3rem 0.8rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.frame-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.frame-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* Whether the table is being persisted. Sits at the far right of the player bar, after Frame,
+   which already takes the flex slack with margin-left: auto. */
+.table-saved {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+}
+
+.table-saved.saved {
+    color: #7bc67b;
+}
+
+.table-saved.save-off {
+    color: var(--muted);
+}
+
+.table-saved.save-failed {
+    color: var(--error);
+}
+
+/* Inactive tabs are hidden, never unmounted: the map canvas keeps its pan/zoom state in JS. */
+.dm-panels {
+    margin-top: 0.9rem;
+}
+
+.dm-panel-hidden {
+    display: none;
+}
+
+/* ---- Map tab: tool rail, canvas, context rail, options strip ---- */
+
+.map-stage {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(13rem, 16rem);
+    gap: 0.9rem;
+    align-items: start;
+}
+
+.tool-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.tool-rail .tool {
+    display: grid;
+    grid-template-columns: 1.2rem 1fr auto;
+    align-items: center;
+    gap: 0.45rem;
+    width: 7.5rem;
+    padding: 0.45rem 0.55rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.tool-rail .tool:hover {
+    border-color: var(--accent);
+}
+
+.tool-rail .tool.active {
+    background: #b8860b;
+    border-color: #b8860b;
+    color: #1b1b1b;
+    font-weight: 600;
+}
+
+.tool-glyph {
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+.tool-key {
+    font-size: 0.65rem;
+    opacity: 0.7;
+}
+
+.context-rail {
+    padding: 0.75rem 0.85rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+}
+
+.context-title {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.context-id {
+    margin: 0.1rem 0 0.7rem;
+    font-family: ui-monospace, monospace;
+    font-size: 0.72rem;
+}
+
+.context-action {
+    display: block;
+    width: 100%;
+    margin-top: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.context-action:hover {
+    border-color: #b8860b;
+}
+
+.context-action.reveal-room.on {
+    background: #b8860b;
+    border-color: #b8860b;
+    color: #1b1b1b;
+    font-weight: 600;
+}
+
+.context-note {
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+}
+
+/* Only the active tool's options are shown, next to that tool's one-line hint. */
+.tool-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.6rem;
+    padding: 0.5rem 0.85rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+    font-size: 0.85rem;
+}
+
+.tool-options .grid-toggle,
+.tool-options .vision-range,
+.tool-options .brush-size,
+.tool-options .measure-readout,
+.tool-options .ping-readout {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+/* The measured distance. The rules figure is the one a DM acts on, so it is the one that is big;
+   the straight-line figure sits beside it because counting squares under-counts a diagonal by a
+   factor of root two, and reporting either alone would mislead. */
+.measure-feet {
+    color: var(--ink);
+    font-size: 1.05rem;
+}
+
+.measure-squares::before,
+.measure-straight::before {
+    content: "·";
+    margin-right: 0.35rem;
+}
+
+.ping-live {
+    color: #e0483c;
+    font-weight: 600;
+}
+
+.measure-clear {
+    margin-left: 0.2rem;
+    padding: 0.15rem 0.5rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.measure-clear:hover {
+    border-color: #b8860b;
+}
+
+.tool-options .map-hint {
+    flex: 1 1 16rem;
+    margin: 0;
+}
+
+.vision-range input {
+    width: 4rem;
+}
+
+.brush-size .brush {
+    width: 1.7rem;
+    padding: 0.15rem 0;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.brush-size .brush.active {
+    background: #b8860b;
+    border-color: #b8860b;
+    color: #1b1b1b;
+    font-weight: 600;
+}
+
+/* Clearing the reveals throws away a whole evening of fog state, so it confirms first and stays
+   undoable for one step afterwards. */
+.clear-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+}
+
+.clear-confirm {
+    color: var(--error);
+}
+
+.clear-group button {
+    padding: 0.3rem 0.7rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.clear-group button:hover {
+    border-color: #b8860b;
+}
+
+.clear-group .clear-yes {
+    border-color: var(--error);
+    color: var(--error);
+}
+
+.clear-group .clear-undo {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ---- Info tab: briefing + the orientation mini map ---- */
+
+.info-tab {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 20rem);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.info-orient {
+    position: sticky;
+    top: 0.5rem;
+}
+
+.mini-map-figure {
+    margin: 0;
+    cursor: pointer;
+}
+
+.mini-map-figure .vector-map-host {
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+}
+
+.mini-map-figure figcaption {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+}
+
+/* ---- Info tab: the encounter strip ---- */
+
+.encounter {
+    margin: 0 0 1.25rem;
+    padding: 0.75rem 1rem 0.85rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+}
+
+.encounter-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.encounter-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.encounter-add-all {
+    margin-left: auto;
+}
+
+/* ---- The checklist: what has already been dealt with in this room ---- */
+
+.encounter-progress {
+    padding: 0.05rem 0.5rem;
+    border-radius: 0.6rem;
+    background: rgba(201, 162, 39, 0.12);
+    font-size: 0.72rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.encounter-progress.all-clear {
+    background: rgba(46, 139, 87, 0.18);
+    color: #64c08a;
+    font-weight: 600;
+}
+
+.encounter-clear-all {
+    padding: 0.2rem 0.55rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.encounter-clear-all:hover {
+    border-color: #b8860b;
+}
+
+.encounter-done {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+/* A dealt-with row stays readable — it is a record, not a deletion — but drops back far enough that
+   the eye lands on what is still standing. */
+.encounter-row.cleared .encounter-name {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+.encounter-row.cleared {
+    opacity: 0.55;
+}
+
+/* A whole cleared room says so at a glance from the edge of the panel, without reading the header. */
+.encounter.encounter-cleared {
+    border-left: 3px solid rgba(46, 139, 87, 0.7);
+}
+
+/* ---- The DM's own note about the area ---- */
+
+.area-notes {
+    margin: 0 0 1.25rem;
+    padding: 0.75rem 1rem 0.85rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+}
+
+.area-notes-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.area-notes-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.area-notes-kept {
+    padding: 0.05rem 0.4rem;
+    border-radius: 0.6rem;
+    background: rgba(46, 139, 87, 0.18);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64c08a;
+}
+
+.area-notes-box {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+    resize: vertical;
+}
+
+.area-notes-box:focus {
+    outline: none;
+    border-color: #b8860b;
+}
+
+/* The same two facts on the Map tab's context rail, so "have we been here?" is answerable from the
+   map without opening the briefing. */
+.context-cleared {
+    display: inline-block;
+    margin-top: 0.4rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.6rem;
+    background: rgba(46, 139, 87, 0.18);
+    font-size: 0.72rem;
+    color: #64c08a;
+    font-weight: 600;
+}
+
+.context-noted {
+    margin: 0.5rem 0 0;
+    padding-left: 0.55rem;
+    border-left: 2px solid var(--border);
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--muted);
+    white-space: pre-wrap;
+}
+
+.encounter-list {
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.encounter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-top: 1px solid var(--border);
+}
+
+.encounter-name {
+    font-weight: 600;
+}
+
+.encounter-cite,
+.encounter-context {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+/* The prose quote takes whatever room is left and truncates rather than wrapping the row open —
+   it is a reminder of why the creature is listed, not something to read at length. */
+.encounter-context {
+    flex: 1 1 8rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-style: italic;
+}
+
+.encounter-warn,
+.encounter-dice {
+    padding: 0.05rem 0.4rem;
+    border-radius: 0.6rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.encounter-warn {
+    background: rgba(224, 108, 90, 0.15);
+    color: var(--error);
+}
+
+.encounter-dice {
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--accent);
+    font-family: ui-monospace, monospace;
+    text-transform: none;
+}
+
+.encounter-stepper {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    overflow: hidden;
+}
+
+.encounter-stepper button {
+    padding: 0 0.5rem;
+    background: none;
+    border: none;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+}
+
+.encounter-stepper button:hover {
+    background: rgba(201, 162, 39, 0.15);
+}
+
+.encounter-stepper input {
+    width: 3rem;
+    padding: 0.2rem 0.3rem;
+    background: var(--bg);
+    border: none;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    color: var(--ink);
+    text-align: center;
+    font: inherit;
+}
+
+.encounter-confirm,
+.battle-confirm {
+    margin-top: 0.75rem;
+    padding: 0.7rem 0.9rem;
+    background: rgba(224, 108, 90, 0.08);
+    border: 1px solid var(--error);
+    border-radius: 0.45rem;
+}
+
+.encounter-confirm p,
+.battle-confirm p {
+    margin: 0 0 0.6rem;
+}
+
+/* ---- Battle tab ---- */
+
+.battle-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.battle-head h2 {
+    margin: 0;
+}
+
+.battle-where {
+    color: var(--muted);
+    font-weight: 400;
+}
+
+.battle-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+}
+
+.battle-round {
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.battle-empty,
+.battle-note {
+    margin: 1rem 0;
+}
+
+.battle-order {
+    margin: 0.9rem 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.4rem;
+}
+
+.battle-entry {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 0.45rem;
+    padding: 0.45rem 0.7rem;
+}
+
+.battle-entry.kind-player {
+    border-left-color: #6fa8dc;
+}
+
+.battle-entry.kind-monster {
+    border-left-color: var(--error);
+}
+
+.battle-entry.kind-ally {
+    border-left-color: #7bc67b;
+}
+
+.battle-entry-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+/* ---- Battle tab: the turn marker, initiative column and hit points ---- */
+
+/* Whose turn it is has to be unmistakable from across the table, so it is a whole-row change of
+   background and border rather than a marker the DM has to hunt for. */
+.battle-entry.is-current {
+    background: rgba(214, 173, 96, 0.12);
+    /* Not the shorthand: the left edge stays the player/monster/ally colour. */
+    border-top-color: var(--accent);
+    border-right-color: var(--accent);
+    border-bottom-color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(214, 173, 96, 0.25);
+}
+
+.turn-marker {
+    width: 0.9rem;
+    color: var(--accent);
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.battle-order.is-dragging .battle-entry {
+    border-style: dashed;
+}
+
+/* Big and tabular: the initiative column is the one thing read from across the table, and it is
+   typed into constantly, so it is a real input rather than a number with an edit affordance. */
+input.battle-init {
+    width: 3.1rem;
+    padding: 0.1rem 0.35rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    font: inherit;
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--accent);
+}
+
+input.battle-init:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+/* The spinners eat width and are useless to a DM who is typing what was just called out. */
+input.battle-init::-webkit-outer-spin-button,
+input.battle-init::-webkit-inner-spin-button,
+.dmg-box::-webkit-outer-spin-button,
+.dmg-box::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input.battle-init,
+.dmg-box {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.battle-label {
+    font-weight: 600;
+}
+
+.battle-count,
+.battle-hp,
+.battle-ac,
+.battle-pp {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.battle-remove {
+    margin-left: auto;
+}
+
+.battle-folded {
+    margin: 0.35rem 0 0 2.8rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.battle-members {
+    margin: 0.35rem 0 0;
+    padding: 0 0 0 2.8rem;
+    list-style: none;
+    display: grid;
+    gap: 0.25rem;
+}
+
+/* ---- One combatant's line ---- */
+
+.combatant {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.9rem;
+}
+
+.combatant-name {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+}
+
+.combatant-name:disabled {
+    cursor: default;
+}
+
+.combatant-hp {
+    min-width: 3.4rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+}
+
+.combatant.is-bloodied .combatant-hp {
+    color: #e0a45a;
+    font-weight: 600;
+}
+
+.combatant.is-down {
+    opacity: 0.6;
+}
+
+.combatant.is-down .combatant-hp {
+    color: var(--error);
+    font-weight: 600;
+}
+
+.combatant-conc {
+    padding: 0.02rem 0.4rem;
+    border-radius: 0.6rem;
+    background: rgba(111, 168, 220, 0.18);
+    color: #6fa8dc;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.combatant-damage {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: auto;
+}
+
+.dmg-box {
+    width: 3.4rem;
+    padding: 0.2rem 0.35rem;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.dmg-box:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.cond-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0.3rem 0 0.1rem;
+    padding: 0.4rem 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+}
+
+.combatant-note-shown {
+    margin: 0.1rem 0 0;
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--muted);
+}
+
+.combatant-detail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.9rem;
+    margin: 0.3rem 0 0.1rem;
+    padding: 0.5rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.combatant-detail label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.combatant-detail label.wide {
+    flex: 1 1 12rem;
+}
+
+.combatant-detail input[type="text"],
+.combatant-detail input:not([type]) {
+    flex: 1 1 auto;
+    min-width: 6rem;
+}
+
+.combatant-detail input {
+    padding: 0.2rem 0.35rem;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    font: inherit;
+    font-size: 0.8rem;
+}
+
+.combatant-detail input[type="number"] {
+    width: 3.6rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.combatant-detail input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+}
+
+.combatant-detail input:disabled {
+    opacity: 0.5;
+}
+
+.battle-state {
+    padding: 0.02rem 0.4rem;
+    border-radius: 0.6rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.battle-state.bloodied {
+    background: rgba(224, 164, 90, 0.18);
+    color: #e0a45a;
+}
+
+.battle-state.down {
+    background: rgba(224, 108, 90, 0.18);
+    color: var(--error);
+}
+
+.battle-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    padding: 0.8rem 0.9rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+}
+
+.battle-add-group {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--muted);
+}
+
+.battle-add-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.battle-add-group select,
+.battle-add-group input {
+    padding: 0.3rem 0.45rem;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* ---- Party / ally roster editors ---- */
+
+.roster-editor {
+    margin-top: 1rem;
+    padding: 0.9rem 1rem 1rem;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 0.5rem;
+}
+
+.roster-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+}
+
+.roster-head h3 {
+    margin: 0;
+}
+
+.roster-close {
+    margin-left: auto;
+}
+
+.roster-table {
+    width: 100%;
+    margin-top: 0.6rem;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.roster-table th {
+    padding: 0.2rem 0.35rem;
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.roster-table td {
+    padding: 0.15rem 0.35rem;
+}
+
+.roster-table th.num,
+.roster-table td.num {
+    text-align: right;
+}
+
+.roster-table input {
+    width: 100%;
+    padding: 0.25rem 0.4rem;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.roster-table td.num input {
+    width: 4.2rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.roster-actions {
+    display: flex;
+    gap: 0.2rem;
+    white-space: nowrap;
+}
+
+.roster-fill {
+    margin-left: 0.3rem;
+    font-size: 0.7rem;
+}
+
+.roster-controls {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+}
+
+/* Shared button styling for the battle / roster surfaces, so every control on them matches. */
+.encounter button,
+.battle-tab button:not(.link-btn):not(.combatant-name),
+.roster-editor button {
+    padding: 0.25rem 0.7rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.encounter button:hover:not(:disabled),
+.battle-tab button:not(.link-btn):not(.combatant-name):hover:not(:disabled),
+.roster-editor button:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.encounter button:disabled,
+.battle-tab button:disabled,
+.roster-editor button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.encounter button.primary,
+.battle-tab button.primary,
+.roster-editor button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1a1508;
+    font-weight: 600;
+}
+
+.encounter button.danger,
+.battle-tab button.danger,
+.roster-editor button.danger {
+    border-color: rgba(224, 108, 90, 0.5);
+    color: var(--error);
+}
+
+/* The Battle tab's small controls. Each must MATCH the shared rule's specificity (three classes and
+   an element — its two :not()s each count as a class) and come after it, or the shared padding and
+   colour win. That is why they live down here and why the .battle-order in the middle is
+   load-bearing rather than decorative: drop it and every one of these silently stops applying. */
+.battle-tab .battle-order button.battle-grip {
+    padding: 0 0.15rem;
+    border: none;
+    color: var(--muted);
+    letter-spacing: -0.25em;
+    cursor: grab;
+}
+
+.battle-tab .battle-order button.battle-grip:active {
+    cursor: grabbing;
+}
+
+.battle-tab .battle-order button.battle-collapse,
+.battle-tab .battle-order button.battle-roll,
+.battle-tab .battle-order button.combatant-icon {
+    padding: 0.1rem 0.4rem;
+}
+
+.battle-tab .battle-order button.combatant-icon {
+    color: var(--muted);
+}
+
+.battle-tab .battle-order button.combatant-icon.open {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.battle-tab .battle-order button.cond-chip {
+    padding: 0.05rem 0.45rem;
+    border-radius: 0.6rem;
+    font-size: 0.7rem;
+    text-transform: lowercase;
+    color: var(--muted);
+}
+
+.battle-tab .battle-order button.cond-chip.on {
+    background: rgba(224, 108, 90, 0.18);
+    border-color: rgba(224, 108, 90, 0.5);
+    color: var(--error);
+}
+
+/* ---- Battle tab: the combatant detail pane ---- */
+
+/* One column until a creature is opened, then the initiative order plus a pane beside it. The pane is
+   sticky so it stays put while the DM scrolls a long stat block's own list behind it — the same shape
+   the Info tab's mini map uses. */
+.battle-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.battle-layout.with-detail {
+    grid-template-columns: minmax(0, 1fr) minmax(21rem, 28rem);
+}
+
+.battle-detail {
+    position: sticky;
+    top: 0.5rem;
+    max-height: calc(100vh - 1.5rem);
+    overflow-y: auto;
+    padding: 0.7rem 0.9rem 1rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 0.5rem;
+}
+
+.battle-detail.kind-player {
+    border-left-color: #6fa8dc;
+}
+
+.battle-detail.kind-monster {
+    border-left-color: var(--error);
+}
+
+.battle-detail.kind-ally {
+    border-left-color: #7bc67b;
+}
+
+.detail-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.detail-kind {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.detail-name {
+    margin: 0.1rem 0 0;
+    font-size: 1.15rem;
+}
+
+.detail-close {
+    margin-left: auto;
+}
+
+/* The numbers read on this creature's turn, so they are the largest thing in the pane. */
+.detail-vitals {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.6rem 0 0.5rem;
+}
+
+.detail-hp {
+    font-size: 1.3rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+
+.detail-vitals.is-bloodied .detail-hp {
+    color: #e0a45a;
+    font-weight: 600;
+}
+
+.detail-vitals.is-down .detail-hp {
+    color: var(--error);
+    font-weight: 600;
+}
+
+.detail-conditions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0.4rem 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+}
+
+.detail-conc {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.7rem;
+    margin: 0.5rem 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.detail-conc label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.detail-conc input {
+    padding: 0.2rem 0.35rem;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    font: inherit;
+    font-size: 0.8rem;
+}
+
+.detail-conc input[type="checkbox"] {
+    padding: 0;
+}
+
+.detail-conc input:disabled {
+    opacity: 0.5;
+}
+
+.detail-note {
+    flex: 1 1 100%;
+}
+
+.detail-note input {
+    flex: 1 1 auto;
+}
+
+/* "How many attacks, at what bonus, for how much" — lifted out of the Actions list and put first,
+   because it is the one thing looked up every single round. */
+.detail-attacks {
+    margin: 0.7rem 0;
+    padding: 0.5rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+}
+
+.detail-multiattack {
+    margin: 0 0 0.4rem;
+    font-size: 0.85rem;
+}
+
+.detail-attack {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.6rem;
+    margin: 0.2rem 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.attack-name {
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.attack-hit {
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+}
+
+.attack-damage {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Spell slots as a paper tracker: any empty box spends one, any full box gives one back. */
+.detail-slots {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.9rem;
+    margin: 0.6rem 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.detail-slots-head {
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.slot-level {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.slot-level-name {
+    min-width: 1.4rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.slot-left {
+    margin-left: 0.2rem;
+    font-size: 0.72rem;
+}
+
+.detail-spell {
+    margin-top: 0.6rem;
+}
+
+.detail-spell-name {
+    margin: 0.4rem 0 0;
+    font-size: 1rem;
+    color: var(--accent);
+}
+
+.detail-nostats {
+    margin: 0.7rem 0;
+    font-size: 0.85rem;
+}
+
+/* What the room's own text says about this creature — already loaded, so it costs nothing to show. */
+.detail-context {
+    margin-top: 0.9rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.context-note {
+    margin: 0.4rem 0;
+    padding: 0.4rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--border);
+    border-radius: 0.35rem;
+}
+
+.context-note.secret {
+    border-color: rgba(224, 108, 90, 0.5);
+}
+
+.context-heading {
+    margin: 0 0 0.25rem;
+    font-size: 0.85rem;
+}
+
+.context-section {
+    margin-left: 0.4rem;
+    font-size: 0.65rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.context-body {
+    margin: 0;
+    font-size: 0.82rem;
+    white-space: pre-line;
+}
+
+/* Which row the pane belongs to, so a fight with four bugbears in it is never ambiguous. */
+.combatant.is-open .combatant-name {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* The pane's own controls, at the shared rule's specificity and after it — see the note above the
+   .battle-order overrides. The .battle-detail in the middle is load-bearing for exactly the same
+   reason: these silently stop applying without it. */
+.battle-tab .battle-detail button.detail-close {
+    padding: 0 0.3rem;
+    border: none;
+    color: var(--muted);
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.battle-tab .battle-detail button.cond-chip {
+    padding: 0.05rem 0.45rem;
+    border-radius: 0.6rem;
+    font-size: 0.7rem;
+    text-transform: lowercase;
+    color: var(--muted);
+}
+
+.battle-tab .battle-detail button.cond-chip.on {
+    background: rgba(224, 108, 90, 0.18);
+    border-color: rgba(224, 108, 90, 0.5);
+    color: var(--error);
+}
+
+.battle-tab .battle-detail button.slot-box {
+    padding: 0 0.1rem;
+    border: none;
+    color: var(--accent);
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+.battle-tab .battle-detail button.slot-box.spent {
+    color: var(--muted);
+}
+
+/* Visually hidden but still announced: the roster tables' actions column has no visible heading. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 64rem) {
+    .map-stage {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tool-rail {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .info-tab {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .info-orient {
+        position: static;
+    }
+
+    /* Not enough width for two columns: the detail pane goes full-width under the order instead. */
+    .battle-layout.with-detail {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .battle-detail {
+        position: static;
+        max-height: none;
+    }
+}
+
+/* ---- Map rendering ---- */
+
+/* The standalone /vector map preview's small toolbar (the DM screen has its own shell header). */
+.map-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: center;
+    margin: 0.5rem 0 1rem;
+}
+
+.map-toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+}
+
+.map-toolbar select {
+    padding: 0.4rem 0.55rem;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+}
+
+.map-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #0b0906;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+}
+
+.map-canvas .region {
+    fill: rgba(201, 162, 39, 0.12);
+    stroke: var(--accent);
+    stroke-width: 2;
+    cursor: pointer;
+}
+
+.map-canvas .region:hover {
+    fill: rgba(201, 162, 39, 0.28);
+}
+
+.map-canvas .grid-line {
+    stroke: rgba(201, 162, 39, 0.35);
+    stroke-width: 0.5;
+}
+
+.map-canvas .feature-dot {
+    fill: var(--error);
+    stroke: #000;
+    stroke-width: 1;
+}
+
+/* Player view: the map fills the projector; preserveAspectRatio keeps it undistorted. */
+.map-canvas.player-map {
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    border: none;
+    border-radius: 0;
+}
+
+/* ---- The picture on the projector ---------------------------------------------------------- */
+
+/* The player bar's art chip and its toggle. Deliberately NOT .frame-btn: that rule carries
+   margin-left:auto to take the bar's slack, and two of them would fight over it. */
+.art-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+}
+
+.art-live.live {
+    color: var(--ink);
+}
+
+.art-btn {
+    padding: 0.3rem 0.8rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.art-btn:hover {
+    border-color: var(--accent);
+}
+
+.art-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 0.25rem 0 2rem;
+}
+
+.art-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 1rem;
+}
+
+.art-head h2 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.art-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-left: auto;
+}
+
+.art-showing {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.art-showing .see-dot {
+    color: var(--border);
+}
+
+.art-showing.live {
+    color: var(--ink);
+}
+
+.art-showing.live .see-dot {
+    color: #7bc67b;
+}
+
+/* Every button inside the tab, scoped at (0,2,1) so a class on the button itself still wins —
+   the (0,3,1) trap described at the Battle tab's small controls is exactly what this avoids. */
+.art-tab button {
+    padding: 0.28rem 0.7rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.art-tab button:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.art-tab button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.art-tab button.primary {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.art-sizes {
+    display: inline-flex;
+    gap: 0.2rem;
+}
+
+.art-tab button.art-size {
+    min-width: 2.2rem;
+    padding: 0.28rem 0.45rem;
+}
+
+.art-tab button.art-size.on {
+    border-color: var(--accent);
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--accent);
+}
+
+.art-tray,
+.art-picker,
+.art-upload {
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+    background: var(--panel);
+    padding: 0.75rem 0.9rem 1rem;
+}
+
+.art-tray-head,
+.art-picker-head,
+.art-upload-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.art-tray-head h3,
+.art-picker-head h3,
+.art-upload-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.art-picker-head input[type="search"] {
+    flex: 1 1 16rem;
+    padding: 0.35rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.art-picker-head input[type="search"]:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* The thumbnail grid. auto-fill rather than a fixed count so the same markup reads on a laptop
+   during prep and on the DM's big screen at the table. Small and dense on purpose: this is a
+   catalogue the DM scans for "which one is the vampire", not a gallery. */
+.art-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* The full catalogue can be 90+ images, and uploads can reach ArtUploadRules.MaxUploads (60) —
+   the same order of magnitude. Without a bound the DM scrolls the whole tab past the search box
+   and the tray to see more results. The tray itself stays unbounded — a prepared scene is a
+   handful of pictures, never enough to need this. */
+.art-picker .art-grid,
+.art-upload .art-grid {
+    max-height: 24rem;
+    overflow-y: auto;
+    padding-right: 0.2rem;
+}
+
+.art-grid li {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+.art-grid li.on {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.art-tab button.art-card {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    text-align: left;
+}
+
+.art-tab button.art-card:hover:not(:disabled) {
+    border: none;
+}
+
+.art-card img {
+    display: block;
+    width: 100%;
+    height: 5rem;
+    object-fit: cover;
+    object-position: top center;
+    background: #0c0a09;
+}
+
+/* Single line, ellipsized: a card's height must not depend on how long its title happens to be,
+   or the grid stops reading as a grid. */
+.art-card-title {
+    display: block;
+    padding: 0.25rem 0.4rem 0.3rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The corner affordance: stage (+) or drop (x). One button, two meanings, same spot. */
+.art-tab button.art-stage,
+.art-tab button.art-drop {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    line-height: 1;
+    background: rgba(20, 17, 15, 0.8);
+    border-radius: 0.3rem;
+}
+
+.art-tab button.art-stage {
+    color: var(--accent);
+}
+
+.art-upload-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.art-upload-form label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.art-upload-form input[type="text"] {
+    padding: 0.35rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.art-upload-message {
+    margin: 0 0 0.6rem;
+    font-size: 0.85rem;
+    color: var(--ink);
+}
+
+.art-upload-message.failed {
+    color: var(--error);
+}

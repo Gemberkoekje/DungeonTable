@@ -1,0 +1,93 @@
+# The tests, the content rules on the sample pack, and a build of the image, on every push to a branch
+# and every pull request. Nothing is published here: release.yml does that, from a version tag, and runs
+# this workflow first.
+#
+# The tests run INSIDE the pinned SDK image rather than on the runner with setup-dotnet, so CI builds
+# with exactly the SDK global.json names. Directory.Build.props turns on RestoreLockedMode and
+# ContinuousIntegrationBuild when GITHUB_ACTIONS is set, so a lock file that no longer matches the
+# projects fails the restore. Keep this tag, global.json and the Dockerfile's SDK tag in step.
+#
+# The Marten/Postgres cases skip unless DUNGEONTABLE_TEST_POSTGRES is set; that is expected. The content
+# rules (DungeonTable.ContentTests) run here against the sample pack, their default.
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:10.0.302
+
+    steps:
+    - name: Check out
+      uses: actions/checkout@v4
+
+    - name: Restore
+      run: dotnet restore DungeonTable.slnx
+
+    - name: Build
+      run: dotnet build DungeonTable.slnx -c Release --no-restore
+
+    # One trx file per test project: a fixed file name would have the second overwrite the first.
+    - name: Test
+      run: >
+        dotnet test DungeonTable.slnx -c Release --no-build
+        --logger trx
+        --results-directory TestResults
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: TestResults
+        if-no-files-found: ignore
+
+  image:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out
+      uses: actions/checkout@v4
+
+    - name: Build the image
+      run: docker build -t dungeontable-app:ci .
+
+    # The image carries no content, not even the sample pack, so an image built FROM it can never mix
+    # a campaign with anything else.
+    - name: The image holds no content
+      run: |
+        docker run --rm --entrypoint sh dungeontable-app:ci -c '
+          for path in /app/Maps /app/data /app/samples; do
+            if [ -e "$path" ]; then
+              echo "::error::$path is in the image"
+              exit 1
+            fi
+          done'
+
+    - name: The image runs the sample pack, mounted
+      run: |
+        docker run -d --name app -p 8080:8080 \
+          -e Auth__Passphrase=ci-smoke -e Content__Root=/content \
+          -v "$PWD/samples/demo:/content:ro" dungeontable-app:ci
+        for attempt in $(seq 1 30); do
+          if curl -fsS http://localhost:8080/healthz; then break; fi
+          sleep 2
+        done
+        curl -fsS http://localhost:8080/healthz
+        test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/dm)" = 401
+        curl -fsS -u dm:ci-smoke http://localhost:8080/dm -o dm.html
+        grep -q '(Level 1, Area 1)' dm.html
+
+    - name: App log
+      if: always()
+      run: docker logs app || true

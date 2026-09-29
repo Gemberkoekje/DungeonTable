@@ -1,0 +1,81 @@
+{
+  "title": "Session prep",
+  "summary": "The first evening's running order, from the mill at dusk to the foot of the chapel stair.",
+  "sessions": [
+    {
+      "id": "01-the-miller-at-dusk",
+      "title": "Session 1 - The Miller at Dusk",
+      "source": "Written for the demo pack",
+      "summary": "[[wenna-brask|Wenna]] asks for help as the sun goes down and the bell does not ring. The party goes up to the chapel, meets [[brother-aldous|Brother Aldous]], and goes down the stair to the landing ([[L1 area 1]]). A short evening: it ends at the carved doors or at the goblins' den, whichever the party picks.",
+      "canon": [
+        {
+          "heading": "The bell has been silent for ten days",
+          "body": "Nobody in Millbrook knows why. Brother Aldous tells anyone who asks that the bell-rope has rotted."
+        },
+        {
+          "heading": "Tam went down three days ago",
+          "body": "At dusk, with one of the mill's lanterns. Nobody has seen him since."
+        }
+      ],
+      "scenes": [
+        {
+          "id": "cold-open-at-the-mill",
+          "ordinal": 0,
+          "title": "The mill at dusk",
+          "when": "Dusk, about 10 minutes",
+          "cast": "Maren, Oswin, Hild",
+          "purpose": "[[wenna-brask|Wenna]] gives the quest, and the silence at dusk sets the mood.",
+          "beats": [
+            {
+              "heading": "No bell",
+              "body": "Dusk comes and the bell doesn't ring. Wenna stops in the middle of a sentence to listen for it."
+            },
+            {
+              "heading": "The ask",
+              "body": "She offers her 15 gp and describes Tam's boots, split heel and all."
+            }
+          ]
+        },
+        {
+          "id": "the-chapel",
+          "ordinal": 1,
+          "title": "Millbrook chapel",
+          "when": "Nightfall, about 10 minutes",
+          "cast": "Maren, Oswin, Hild",
+          "purpose": "Meet [[brother-aldous|Aldous]], and let him tell his lie.",
+          "beats": [
+            {
+              "heading": "Aldous at the door",
+              "body": "He says the undercroft is locked and the bell-rope has rotted. Neither is true."
+            },
+            {
+              "heading": "Dust on his sandals",
+              "body": "Anyone who looks down sees grey undercroft dust on his sandals."
+            }
+          ]
+        },
+        {
+          "id": "the-landing",
+          "ordinal": 2,
+          "title": "Undercroft Landing",
+          "when": "Late, as long as it takes",
+          "cast": "Maren, Oswin, Hild",
+          "purpose": "The first choice below: the goblins' den to the west, or the carved doors to the south.",
+          "beats": [
+            {
+              "heading": "Tracks",
+              "body": "Let them read the tracks and find Tam's broken lantern before they choose."
+            }
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "heading": "Does Aldous follow them down?",
+          "body": "If he sees the party go below, Aldous may slip down after them to warn Grask. Decide before the session whether he tries, and whether the warden lets him pass.",
+          "secret": true
+        }
+      ]
+    }
+  ]
+}

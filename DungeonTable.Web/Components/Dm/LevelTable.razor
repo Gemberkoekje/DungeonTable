@@ -1,0 +1,51 @@
+@*
+    The campaign's level table at the foot of the Level tab: every level, its name, and the character
+    level it is designed for, with the levels authored in the app marked. The campaign names the table
+    and may add a note on what it is for; the app names neither.
+*@
+
+@if (Campaign.Levels.Count > 0)
+{
+    <details class="detail-block">
+        <summary>
+            <span class="detail-heading">@Heading</span>
+            @if (!string.IsNullOrWhiteSpace(Campaign.LevelsNote))
+            {
+                <span class="ref">@Campaign.LevelsNote</span>
+            }
+        </summary>
+        <div class="detail-body">
+            <table class="level-table">
+                <thead>
+                    <tr><th scope="col">Level</th><th scope="col">Name</th><th scope="col">Characters</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (LevelSummary summary in Campaign.Levels)
+                    {
+                        <tr class="@(summary.Authored ? "authored" : string.Empty)">
+                            <td>@(summary.Level > 0 ? summary.Level.ToString() : "—")</td>
+                            <td>
+                                @summary.Name
+                                @if (summary.Authored)
+                                {
+                                    <span class="ref" title="This level is authored in the app">in app</span>
+                                }
+                            </td>
+                            <td>@summary.CharacterLevel</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </details>
+}
+
+@code {
+    /// <summary>The campaign dossier whose level table, heading and note to show.</summary>
+    [Parameter]
+    public CampaignDossier Campaign { get; set; } = new CampaignDossier();
+
+    // "Levels" says what the table is when the campaign gives it no name of its own.
+    private string Heading =>
+        string.IsNullOrWhiteSpace(Campaign.LevelsHeading) ? "Levels" : Campaign.LevelsHeading;
+}

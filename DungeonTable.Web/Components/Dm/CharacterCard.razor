@@ -1,0 +1,207 @@
+@*
+    One player character, as the DM needs them: the numbers first, then the abilities that change
+    how a room plays out, then the story their player wrote.
+
+    Collapsed by default and opened one at a time. Six characters' worth of prose is far more than
+    fits on a screen, and the thing the DM reaches for mid-session is the vitals strip, which stays
+    visible whether the card is open or not.
+*@
+
+<article class="character-card @(Character.DmOnly.Length > 0 ? "has-secret" : string.Empty)">
+    <header class="character-head">
+        <button type="button" class="character-title" aria-expanded="@(open ? "true" : "false")"
+                aria-controls="character-body-@Character.Id"
+                title="@(open ? "Collapse" : "Expand")" @onclick="() => open = !open">
+            <span class="quest-caret" aria-hidden="true">@(open ? "▾" : "▸")</span>
+            <span class="character-name">@Character.Name</span>
+            <span class="character-build">@Character.Build</span>
+        </button>
+
+        @if (Character.PlayerName.Length > 0)
+        {
+            <span class="character-player" title="Player">@Character.PlayerName</span>
+        }
+    </header>
+
+    @* The vitals stay out of the disclosure: "what is her AC" is the question that gets asked
+       mid-turn, and opening a card to answer it would be worse than the sheet it replaces. *@
+    <dl class="vitals">
+        @if (Character.ArmourClass > 0)
+        {
+            <div class="vital" title="@Character.ArmourNote">
+                <dt>AC</dt>
+                <dd>@Character.ArmourClass</dd>
+            </div>
+        }
+        @if (Character.MaxHp > 0)
+        {
+            <div class="vital">
+                <dt>HP</dt>
+                <dd>@Character.MaxHp</dd>
+            </div>
+        }
+        @if (Character.PassivePerception > 0)
+        {
+            <div class="vital" title="Passive Perception">
+                <dt>PP</dt>
+                <dd>@Character.PassivePerception</dd>
+            </div>
+        }
+        <div class="vital" title="Initiative modifier">
+            <dt>Init</dt>
+            <dd>@Signed(Character.InitiativeModifier)</dd>
+        </div>
+        @if (Character.Speed.Length > 0)
+        {
+            <div class="vital wide">
+                <dt>Speed</dt>
+                <dd>@Character.Speed</dd>
+            </div>
+        }
+        @if (Character.Senses.Length > 0)
+        {
+            <div class="vital wide">
+                <dt>Senses</dt>
+                <dd>@Character.Senses</dd>
+            </div>
+        }
+        @if (Character.SaveDc.Length > 0)
+        {
+            <div class="vital wide">
+                <dt>DC</dt>
+                <dd>@Character.SaveDc</dd>
+            </div>
+        }
+        @if (Character.Defences.Length > 0)
+        {
+            <div class="vital wide">
+                <dt>Defences</dt>
+                <dd>@Character.Defences</dd>
+            </div>
+        }
+    </dl>
+
+    @if (Character.DmOnly.Length > 0)
+    {
+        <p class="character-secret">
+            <span class="secret-badge" title="DM only — the rest of the table does not know this">DM</span>
+            <CrossRefProse Text="@Character.DmOnly" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+        </p>
+    }
+
+    @if (open)
+    {
+        <div class="character-body" id="character-body-@Character.Id">
+            @if (Character.Saves.Length > 0)
+            {
+                <p class="character-line"><span class="field-label">Saves</span> @Character.Saves</p>
+            }
+            @if (Character.Skills.Length > 0)
+            {
+                <p class="character-line"><span class="field-label">Skills</span> @Character.Skills</p>
+            }
+            @if (Character.Languages.Length > 0)
+            {
+                <p class="character-line"><span class="field-label">Languages</span> @Character.Languages</p>
+            }
+            @if (Character.Attacks.Length > 0)
+            {
+                <p class="character-line"><span class="field-label">Attacks</span> @Character.Attacks</p>
+            }
+            @if (Character.Kit.Length > 0)
+            {
+                <p class="character-line">
+                    <span class="field-label">Kit</span>
+                    <CrossRefProse Text="@Character.Kit" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+                </p>
+            }
+
+            @if (Character.Abilities.Count > 0)
+            {
+                <section class="character-section">
+                    <h4>What changes my encounters</h4>
+                    @foreach (DossierBlock block in Character.Abilities)
+                    {
+                        @Block(block)
+                    }
+                </section>
+            }
+
+            @if (Character.Backstory.Length > 0)
+            {
+                <section class="character-section">
+                    <h4>Backstory</h4>
+                    <div class="character-prose">
+                        <CrossRefProse Text="@Character.Backstory" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+                    </div>
+                </section>
+            }
+
+            @if (Character.Hooks.Count > 0)
+            {
+                <section class="character-section">
+                    <h4>Hooks I can pull</h4>
+                    @foreach (DossierBlock hook in Character.Hooks)
+                    {
+                        @Block(hook)
+                    }
+                </section>
+            }
+
+            @if (Character.Checks.Count > 0)
+            {
+                <section class="character-section">
+                    <h4>Ask the player</h4>
+                    @foreach (DossierBlock check in Character.Checks)
+                    {
+                        @Block(check)
+                    }
+                </section>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    /// <summary>The character to show.</summary>
+    [Parameter]
+    public CharacterDossier Character { get; set; } = new CharacterDossier();
+
+    /// <summary>
+    /// Resolves cross-references in the character's prose, so a mention of a monster or an NPC is
+    /// clickable. When null, prose renders as plain text.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with a node id to open an entity's reference card.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>
+    /// Whether the card starts opened. The Party tab lists everyone collapsed; the reference drawer
+    /// shows one character the DM asked for, so it opens them.
+    /// </summary>
+    [Parameter]
+    public bool StartOpen { get; set; }
+
+    private bool open;
+
+    protected override void OnInitialized() => open = StartOpen;
+
+    private static string Signed(int value) => value >= 0 ? $"+{value}" : value.ToString();
+
+    // Mirrors the briefing panel's detail disclosure so a character's blocks read like every other
+    // block of dossier prose in the app.
+    private RenderFragment Block(DossierBlock block) =>
+        @<details class="detail-block @(block.Secret ? "secret" : string.Empty)">
+            <summary>
+                <span class="detail-heading">@block.Heading</span>
+                @if (block.Secret)
+                {
+                    <span class="secret-badge" title="DM only — don't read this aloud">secret</span>
+                }
+            </summary>
+            <div class="detail-body"><CrossRefProse Text="@block.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></div>
+        </details>;
+}

@@ -1,0 +1,23 @@
+{
+  "title": "Rules of the undercroft",
+  "sections": [
+    {
+      "heading": "Darkness Below",
+      "kind": "lore",
+      "secret": false,
+      "body": "The undercroft has no light but what the party brings, the goblins' fire in [[L1 area 2]] and the furnace in [[L1 area 4]]. Goblins, bugbears, skeletons and the warden all see in the dark ([[vision-and-light]]). Count the lanterns."
+    },
+    {
+      "heading": "When the Bell Tolls",
+      "kind": "lore",
+      "secret": false,
+      "body": "If the clapper is hung back in the bell and the bell is rung, every creature in the undercroft hears it. The [[bell-warden]] stops whatever it is doing, returns to its plinth and sleeps, and the ringers in [[L1 area 5]] lie down and do not rise again. The bugbears and goblins are not affected, but they know what the sound means."
+    },
+    {
+      "heading": "Resting in the Undercroft",
+      "kind": "lore",
+      "secret": false,
+      "body": "A short rest on the landing or in the vestry is safe unless the goblins have been roused. A long rest below is not: check for a wandering encounter at midnight and again at dawn. Old Hobb will let the party sleep in the chapel pews above, which are safe."
+    }
+  ]
+}

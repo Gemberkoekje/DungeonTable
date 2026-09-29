@@ -1,0 +1,39 @@
+# Solution-wide analyzer severity tuning (single is_global config, per house style).
+# Each override is annotated with a title + [Justification: ...].
+is_global = true
+
+# CA1515: Consider making public types internal
+# [Justification: Core and Application are class libraries whose domain models and
+#  ports are public by design and consumed across assembly boundaries by the Web host
+#  and tests. Forcing them internal would defeat the layered architecture.]
+dotnet_diagnostic.CA1515.severity = none
+
+# S5693: Limit the content length of HTTP requests
+# [Justification: the rule looks for an MVC [RequestSizeLimit] attribute and cannot see
+#  that the one upload path in the app is a Blazor InputFile whose OpenReadStream is
+#  already given an explicit cap (Core/Art/ArtUploadRules.MaxBytes), which the adapter
+#  then re-checks before decoding. There is no unbounded request to limit.]
+dotnet_diagnostic.S5693.severity = none
+
+# --- DotNetProjectFile.Analyzers (Proj####) overrides -------------------------------
+# The analyzer is opinionated; a few of its rules conflict with this repo's documented
+# house style. The rest are satisfied in the project files.
+
+# Proj0039: Treat all warnings as errors is considered a bad practice
+# [Justification: warnings-as-errors is a deliberate, mandated house-style rule
+#  (see CLAUDE.md); analyzer severities are tuned centrally instead.]
+dotnet_diagnostic.Proj0039.severity = none
+
+# Proj0042 / Proj0044: ContinuousIntegrationBuild / RestoreLockedMode in CI
+# [Justification: both are set in a CI-only conditional PropertyGroup in
+#  Directory.Build.props; the analyzer's static check does not evaluate the condition
+#  and misfires on local builds.]
+dotnet_diagnostic.Proj0042.severity = none
+dotnet_diagnostic.Proj0044.severity = none
+
+# Proj0055: Enable nullability analysis
+# [Justification: nullable reference types are deliberately OFF for this solution
+#  (Directory.Build.props sets <Nullable>disable</Nullable>) because the codebase does
+#  not use '?' annotations - see CLAUDE.md, which also forbids '#nullable enable' as a
+#  workaround. New in DotNetProjectFile.Analyzers 1.18.0.]
+dotnet_diagnostic.Proj0055.severity = none

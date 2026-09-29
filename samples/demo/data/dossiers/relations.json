@@ -1,0 +1,7 @@
+{
+  "relations": [
+    { "a": "brother-aldous", "rel": "owes", "b": "grask", "note": "Forty gold lost at dice, part paid in candlesticks and the bell's clapper.", "secret": true },
+    { "a": "oswin-tull", "rel": "owes", "b": "grask", "note": "Ten gold lost at the same table, never paid.", "secret": true },
+    { "a": "maren", "rel": "family", "b": "wenna-brask", "note": "Maren is Wenna's niece." }
+  ]
+}

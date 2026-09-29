@@ -1,0 +1,207 @@
+@inject IAllyRoster Roster
+@inject IStatLibrary Stats
+@*
+    The ally roster's edit screen — companions, familiars and hirelings that recur across sessions.
+    Mirrors PartyEditor exactly (see its notes on why no roster is ever hand-edited), with two
+    differences: an ally can be linked to a stat block, and it names an owner rather than a player.
+
+    A one-off summon or a guest character does not belong here: those add straight to a fight as an
+    untracked ally. This roster is for the ones worth remembering.
+*@
+
+<section class="roster-editor" aria-label="Ally roster">
+    <header class="roster-head">
+        <h3>Allies</h3>
+        <span class="muted">@members.Count @(members.Count == 1 ? "ally" : "allies")</span>
+        <button type="button" class="roster-close" title="Close the roster editor" @onclick="OnClose">Close</button>
+    </header>
+
+    @if (message.Length > 0)
+    {
+        <p class="@(failed ? "error" : "muted")" role="status">@message</p>
+    }
+
+    <table class="roster-table">
+        <thead>
+            <tr>
+                <th scope="col">Ally</th>
+                <th scope="col">Belongs to</th>
+                <th scope="col">Stat block</th>
+                <th scope="col" class="num">AC</th>
+                <th scope="col" class="num">Max HP</th>
+                <th scope="col" class="num">Pass. Per.</th>
+                <th scope="col" class="num">Init</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (int i = 0; i < members.Count; i++)
+            {
+                int index = i;
+                AllyMember member = members[index];
+                <tr>
+                    <td><input aria-label="Ally name" @bind="member.Name" @bind:event="oninput" /></td>
+                    <td><input aria-label="Belongs to" placeholder="Rurik's companion" @bind="member.Owner" @bind:event="oninput" /></td>
+                    <td>
+                        <input aria-label="Stat block node id" placeholder="data_statblocks_monsters_bandit" list="ally-statblocks"
+                               @bind="member.StatBlockNodeId" @bind:event="oninput" />
+                        @if (member.StatBlockNodeId.Length > 0)
+                        {
+                            <button type="button" class="roster-fill" title="Fill AC, HP and passive Perception in from the stat block"
+                                    disabled="@(!Stats.HasMonster(member.StatBlockNodeId))"
+                                    @onclick="() => Fill(member)">Fill</button>
+                        }
+                    </td>
+                    <td class="num"><input type="number" min="0" max="40" aria-label="Armour class" @bind="member.ArmourClass" /></td>
+                    <td class="num"><input type="number" min="0" max="999" aria-label="Maximum hit points" @bind="member.MaxHp" /></td>
+                    <td class="num"><input type="number" min="0" max="40" aria-label="Passive Perception" @bind="member.PassivePerception" /></td>
+                    <td class="num"><input type="number" min="-10" max="20" aria-label="Initiative modifier" @bind="member.InitiativeModifier" /></td>
+                    <td class="roster-actions">
+                        <button type="button" title="Move up" disabled="@(index == 0)" @onclick="() => Move(index, -1)">&uarr;</button>
+                        <button type="button" title="Move down" disabled="@(index == members.Count - 1)" @onclick="() => Move(index, 1)">&darr;</button>
+                        <button type="button" class="danger" title="Remove from the roster" @onclick="() => Remove(index)">&times;</button>
+                    </td>
+                </tr>
+            }
+            @if (members.Count == 0)
+            {
+                <tr><td colspan="8" class="muted">No saved allies — add the ones that keep turning up.</td></tr>
+            }
+        </tbody>
+    </table>
+
+    @* Suggestions for the stat-block box, so the DM types a name rather than remembering node ids. *@
+    <datalist id="ally-statblocks">
+        @foreach (SearchMatch match in suggestions)
+        {
+            <option value="@match.Id">@match.Label</option>
+        }
+    </datalist>
+
+    <div class="roster-controls">
+        <button type="button" @onclick="Add">+ Add ally</button>
+        <button type="button" class="primary" @onclick="Save">Save allies</button>
+        <button type="button" @onclick="Reload">Discard changes</button>
+    </div>
+</section>
+
+@code {
+    /// <summary>Raised when the DM closes the editor.</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>Raised after the roster is saved, so the caller can reflect the new allies.</summary>
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    private const int MaxArmourClass = 40;
+    private const int MaxHitPoints = 999;
+    private const int MaxPassivePerception = 40;
+    private const int MinInitiativeModifier = -10;
+    private const int MaxInitiativeModifier = 20;
+
+    // How many stat blocks the node-id datalist offers. It is a hint list, not a browser.
+    private const int SuggestionLimit = 40;
+
+    private List<AllyMember> members = new List<AllyMember>();
+    private IReadOnlyList<SearchMatch> suggestions = Array.Empty<SearchMatch>();
+    private string message = string.Empty;
+    private bool failed;
+
+    protected override void OnInitialized()
+    {
+        Reload();
+
+        // "a" matches almost every creature name, which is exactly what a suggestion list wants.
+        suggestions = Stats.SearchMonsters("a", SuggestionLimit);
+    }
+
+    private void Reload()
+    {
+        var saved = Roster.GetAllies();
+        failed = !saved.IsValid;
+        message = failed ? string.Join(" ", saved.Messages.Select(m => m.Message)) : string.Empty;
+        members = saved.IsValid ? saved.Value.Members.Select(Copy).ToList() : new List<AllyMember>();
+    }
+
+    private void Add() => members.Add(new AllyMember());
+
+    private void Remove(int index) => members.RemoveAt(index);
+
+    private void Move(int index, int delta)
+    {
+        int to = index + delta;
+        if (to < 0 || to >= members.Count)
+        {
+            return;
+        }
+
+        (members[index], members[to]) = (members[to], members[index]);
+    }
+
+    // Copy the stat block's numbers in, so a linked ally does not have to be typed out twice.
+    private void Fill(AllyMember member)
+    {
+        var found = Stats.GetMonster(member.StatBlockNodeId);
+        if (!found.IsValid)
+        {
+            return;
+        }
+
+        StatBlock block = found.Value;
+        member.ArmourClass = block.ArmourClass;
+        member.MaxHp = block.AverageHitPoints;
+        member.PassivePerception = block.PassivePerception;
+        member.InitiativeModifier = StatBlockMath.AbilityModifier(block.Abilities.Dex);
+        if (member.Name.Length == 0)
+        {
+            member.Name = block.Name;
+        }
+    }
+
+    private async Task Save()
+    {
+        var roster = new AllyRoster
+        {
+            Members = members
+                .Where(member => !string.IsNullOrWhiteSpace(member.Name))
+                .Select(Clamp)
+                .ToArray(),
+        };
+
+        var result = Roster.Save(roster);
+        failed = !result.IsValid;
+        message = failed
+            ? string.Join(" ", result.Messages.Select(m => m.Message))
+            : $"Saved {Counted(roster.Members.Count)}.";
+
+        if (!failed)
+        {
+            await OnSaved.InvokeAsync();
+        }
+    }
+
+    private static string Counted(int count) => count == 1 ? "1 ally" : $"{count} allies";
+
+    private static AllyMember Copy(AllyMember member) => new AllyMember
+    {
+        Name = member.Name,
+        Owner = member.Owner,
+        StatBlockNodeId = member.StatBlockNodeId,
+        ArmourClass = member.ArmourClass,
+        MaxHp = member.MaxHp,
+        PassivePerception = member.PassivePerception,
+        InitiativeModifier = member.InitiativeModifier,
+    };
+
+    private static AllyMember Clamp(AllyMember member) => new AllyMember
+    {
+        Name = member.Name.Trim(),
+        Owner = member.Owner.Trim(),
+        StatBlockNodeId = member.StatBlockNodeId.Trim(),
+        ArmourClass = Math.Clamp(member.ArmourClass, 0, MaxArmourClass),
+        MaxHp = Math.Clamp(member.MaxHp, 0, MaxHitPoints),
+        PassivePerception = Math.Clamp(member.PassivePerception, 0, MaxPassivePerception),
+        InitiativeModifier = Math.Clamp(member.InitiativeModifier, MinInitiativeModifier, MaxInitiativeModifier),
+    };
+}

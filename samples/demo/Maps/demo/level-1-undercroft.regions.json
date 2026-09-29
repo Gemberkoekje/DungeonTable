@@ -1,0 +1,229 @@
+{
+  "mapId": "level-1-undercroft",
+  "adventure": "demo",
+  "levelName": "Level 1 - The Undercroft",
+  "regions": [
+    {
+      "regionId": "r-30e1bf06",
+      "label": "Landing",
+      "polygon": [
+        {
+          "x": 1298.14111328125,
+          "y": 360.1601257324219
+        },
+        {
+          "x": 1514.41650390625,
+          "y": 360.1601257324219
+        },
+        {
+          "x": 1514.41650390625,
+          "y": 569.677001953125
+        },
+        {
+          "x": 1298.14111328125,
+          "y": 569.677001953125
+        }
+      ],
+      "graphNodeId": "data_dossiers_level_1_area_1"
+    },
+    {
+      "regionId": "r-404a5088",
+      "label": "Goblin Den",
+      "polygon": [
+        {
+          "x": 936,
+          "y": 360
+        },
+        {
+          "x": 1152,
+          "y": 360
+        },
+        {
+          "x": 1152,
+          "y": 576
+        },
+        {
+          "x": 936,
+          "y": 576
+        }
+      ],
+      "graphNodeId": "data_dossiers_level_1_area_2"
+    },
+    {
+      "regionId": "r-1372a482",
+      "label": "Nave",
+      "polygon": [
+        {
+          "x": 1260,
+          "y": 576
+        },
+        {
+          "x": 1584,
+          "y": 576
+        },
+        {
+          "x": 1584,
+          "y": 828
+        },
+        {
+          "x": 1260,
+          "y": 828
+        }
+      ],
+      "graphNodeId": "data_dossiers_level_1_area_3a"
+    },
+    {
+      "regionId": "r-e249be6e",
+      "label": "Workshop",
+      "polygon": [
+        {
+          "x": 936,
+          "y": 576
+        },
+        {
+          "x": 1116,
+          "y": 576
+        },
+        {
+          "x": 1116,
+          "y": 828
+        },
+        {
+          "x": 936,
+          "y": 828
+        }
+      ],
+      "graphNodeId": "data_dossiers_level_1_area_4"
+    },
+    {
+      "regionId": "r-b5e87526",
+      "label": "Vestry",
+      "polygon": [
+        {
+          "x": 1116,
+          "y": 612
+        },
+        {
+          "x": 1260,
+          "y": 612
+        },
+        {
+          "x": 1260,
+          "y": 756
+        },
+        {
+          "x": 1116,
+          "y": 756
+        }
+      ],
+      "graphNodeId": "data_dossiers_level_1_area_3b"
+    },
+    {
+      "regionId": "r-6ee55af2",
+      "label": "Ringers\u0027 Stair",
+      "polygon": [
+        {
+          "x": 1296,
+          "y": 828
+        },
+        {
+          "x": 1512,
+          "y": 828
+        },
+        {
+          "x": 1512,
+          "y": 1080
+        },
+        {
+          "x": 1296,
+          "y": 1080
+        }
+      ],
+      "graphNodeId": "data_dossiers_level_1_area_5"
+    }
+  ],
+  "features": [
+    {
+      "featureId": "f-d6044f8f",
+      "position": {
+        "x": 990,
+        "y": 774
+      },
+      "kind": "hazard",
+      "label": "",
+      "graphNodeId": ""
+    },
+    {
+      "featureId": "f-8f8f2884",
+      "position": {
+        "x": 1422,
+        "y": 882
+      },
+      "kind": "trap",
+      "label": "",
+      "graphNodeId": ""
+    }
+  ],
+  "objects": [
+    {
+      "objectId": "1fdc3be8-d7d9-41e7-afca-219157482fea",
+      "kind": "decoration",
+      "label": "",
+      "isSecret": false,
+      "isConcealed": true,
+      "defaultOpen": false,
+      "doubleDoors": false,
+      "graphNodeId": ""
+    },
+    {
+      "objectId": "89b177ac-f6dd-449f-ad2d-77fd20eb7ece",
+      "kind": "door",
+      "label": "",
+      "isSecret": true,
+      "isConcealed": false,
+      "defaultOpen": false,
+      "doubleDoors": false,
+      "graphNodeId": ""
+    },
+    {
+      "objectId": "108a24ad-017b-4733-8124-30e04cf4f102",
+      "kind": "door",
+      "label": "",
+      "isSecret": false,
+      "isConcealed": false,
+      "defaultOpen": false,
+      "doubleDoors": true,
+      "graphNodeId": ""
+    },
+    {
+      "objectId": "06a78ea5-eee1-4a44-8a35-1885b4a1b1c3",
+      "kind": "door",
+      "label": "",
+      "isSecret": false,
+      "isConcealed": false,
+      "defaultOpen": true,
+      "doubleDoors": false,
+      "graphNodeId": ""
+    },
+    {
+      "objectId": "2af9fbbc-c965-429e-9137-add32b9423b6",
+      "kind": "decoration",
+      "label": "",
+      "isSecret": false,
+      "isConcealed": true,
+      "defaultOpen": false,
+      "doubleDoors": false,
+      "graphNodeId": ""
+    },
+    {
+      "objectId": "88728355-98b9-4531-9a9c-c5715893fdf1",
+      "kind": "decoration",
+      "label": "Hazard",
+      "isSecret": false,
+      "isConcealed": false,
+      "defaultOpen": false,
+      "doubleDoors": false,
+      "graphNodeId": ""
+    }
+  ]
+}

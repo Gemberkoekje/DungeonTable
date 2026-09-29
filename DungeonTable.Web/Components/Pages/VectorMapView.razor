@@ -1,0 +1,75 @@
+@page "/vector"
+@rendermode InteractiveServer
+@inject IVectorMapStore VectorMaps
+
+<PageTitle>Vector map &mdash; DungeonTable</PageTitle>
+
+<div class="map-toolbar">
+    <label>
+        Map
+        <select @bind="currentMapId" @bind:after="LoadMap">
+            @foreach (string id in mapIds)
+            {
+                <option value="@id">@id</option>
+            }
+        </select>
+    </label>
+    <label class="grid-toggle">
+        <input type="checkbox" @bind="showGrid" />
+        Show grid
+    </label>
+</div>
+
+@if (!string.IsNullOrEmpty(mapError))
+{
+    <p class="error" role="alert">@mapError</p>
+}
+else if (mapLoaded)
+{
+    <VectorMapCanvas Map="map" ShowGrid="showGrid" />
+}
+else
+{
+    <p class="muted">Loading map&hellip;</p>
+}
+
+@code {
+    private IReadOnlyList<string> mapIds = Array.Empty<string>();
+    private string currentMapId = string.Empty;
+    private VectorMap map = new VectorMap();
+    private bool mapLoaded;
+    private string mapError = string.Empty;
+    private bool showGrid = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        mapIds = VectorMaps.ListMapIds();
+        currentMapId = mapIds.Count > 0 ? mapIds[0] : string.Empty;
+        await LoadMap();
+    }
+
+    private async Task LoadMap()
+    {
+        if (string.IsNullOrEmpty(currentMapId))
+        {
+            map = new VectorMap();
+            mapLoaded = false;
+            mapError = "No vector maps are available.";
+            return;
+        }
+
+        var result = await VectorMaps.LoadAsync(currentMapId, CancellationToken.None);
+        if (result.IsValid)
+        {
+            map = result.Value;
+            mapLoaded = true;
+            mapError = string.Empty;
+        }
+        else
+        {
+            map = new VectorMap();
+            mapLoaded = false;
+            mapError = string.Join(" ", result.Messages.Select(message => message.Message));
+        }
+    }
+}

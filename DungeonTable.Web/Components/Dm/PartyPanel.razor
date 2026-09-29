@@ -1,0 +1,115 @@
+@*
+    The Info panel's Party sub-tab: who the DM is running the dungeon for.
+
+    A roster table across the top — the six numbers that get asked for mid-turn, all visible at
+    once without opening anything — then a card per character, then the party-wide notes that
+    belong to no single player.
+*@
+
+<section class="party-panel" aria-label="The party">
+    @if (Party.Characters.Count == 0 && Party.Notes.Count == 0)
+    {
+        <p class="muted">No party dossier is authored.</p>
+    }
+    else
+    {
+        @if (Party.Summary.Length > 0)
+        {
+            <p class="party-summary"><CrossRefProse Text="@Party.Summary" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+        }
+
+        @if (Party.Characters.Count > 0)
+        {
+            <table class="party-table">
+                <caption class="visually-hidden">The party at a glance</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Character</th>
+                        <th scope="col">Player</th>
+                        <th scope="col" title="Armour class">AC</th>
+                        <th scope="col" title="Maximum hit points">HP</th>
+                        <th scope="col" title="Passive Perception">PP</th>
+                        <th scope="col" title="Initiative modifier">Init</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (CharacterDossier character in Party.Characters)
+                    {
+                        <tr>
+                            <th scope="row">@character.Name</th>
+                            <td class="muted">@character.PlayerName</td>
+                            <td title="@character.ArmourNote">@Number(character.ArmourClass)</td>
+                            <td>@Number(character.MaxHp)</td>
+                            <td>@Number(character.PassivePerception)</td>
+                            <td>@Signed(character.InitiativeModifier)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @foreach (Keyed<CharacterDossier> character in RenderKeys.Of(Party.Characters, character => character.Id))
+            {
+                <CharacterCard @key="character.Key"
+                               Character="character.Item"
+                               ResolveRefs="ResolveRefs"
+                               OnOpenReference="OnOpenReference" />
+            }
+        }
+
+        @if (Party.Notes.Count > 0)
+        {
+            <section class="character-section">
+                <h4>What this party does to my encounters</h4>
+                @foreach (DossierBlock note in Party.Notes)
+                {
+                    @Block(note)
+                }
+            </section>
+        }
+
+        @if (Party.OpenQuestions.Count > 0)
+        {
+            <section class="character-section">
+                <h4>Settle before the next session</h4>
+                @foreach (DossierBlock question in Party.OpenQuestions)
+                {
+                    @Block(question)
+                }
+            </section>
+        }
+    }
+</section>
+
+@code {
+    /// <summary>The authored party dossier.</summary>
+    [Parameter]
+    public PartyDossier Party { get; set; } = new PartyDossier();
+
+    /// <summary>
+    /// Resolves cross-references in the party's prose. Character backstories name monsters and NPCs
+    /// from all over the campaign, never the shown floor's areas, so callers should pass the
+    /// entity-only resolver here.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with a node id to open an entity's reference card.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    private static string Number(int value) => value > 0 ? value.ToString() : "—";
+
+    private static string Signed(int value) => value >= 0 ? $"+{value}" : value.ToString();
+
+    private RenderFragment Block(DossierBlock block) =>
+        @<details class="detail-block @(block.Secret ? "secret" : string.Empty)">
+            <summary>
+                <span class="detail-heading">@block.Heading</span>
+                @if (block.Secret)
+                {
+                    <span class="secret-badge" title="DM only — don't read this aloud">secret</span>
+                }
+            </summary>
+            <div class="detail-body"><CrossRefProse Text="@block.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></div>
+        </details>;
+}

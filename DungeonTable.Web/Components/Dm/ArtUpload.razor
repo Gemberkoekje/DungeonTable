@@ -1,0 +1,165 @@
+@using System.IO
+@implements IDisposable
+@inject IArtCatalogue Art
+@inject SessionState Session
+@*
+    Adding the DM's own pictures to the catalogue.
+
+    The interesting half is what this does NOT do: it never stores the file it was given. The bytes
+    are sniffed, decoded, downscaled and re-encoded as WebP by the catalogue adapter, and only that
+    output reaches disk. Nothing here trusts the browser's file name or content type — an SVG
+    served back at /art/x.svg would be same-origin markup that can run script, so raster is decided
+    by the leading bytes and the extension is never consulted.
+*@
+
+@{
+    IReadOnlyList<ArtImage> uploads = Uploads();
+}
+
+<section class="art-upload">
+    <div class="art-upload-head">
+        <h3>Your own pictures</h3>
+        <span class="muted">
+            @ArtUploadRules.AcceptedFormats, up to @(ArtUploadRules.MaxBytes / (1024 * 1024)) MB.
+            Crop before uploading &mdash; there is no editor here.
+        </span>
+    </div>
+
+    <div class="art-upload-form">
+        <label>
+            Title
+            <input type="text" placeholder="What is it?" maxlength="80" @bind="title" @bind:event="oninput" />
+        </label>
+
+        <InputFile OnChange="OnFileChosen" accept="image/png,image/jpeg,image/webp" disabled="@busy" />
+
+        @if (busy)
+        {
+            <span class="muted">Adding&hellip;</span>
+        }
+    </div>
+
+    @if (message.Length > 0)
+    {
+        <p class="art-upload-message @(failed ? "failed" : string.Empty)" role="status">@message</p>
+    }
+
+    @if (uploads.Count > 0)
+    {
+        <ul class="art-grid">
+            @foreach (ArtImage image in uploads)
+            {
+                ArtImage candidate = image;
+                <li>
+                    <button type="button" class="art-card" title="@candidate.Title"
+                            @onclick="() => Session.ShowArt(candidate.Id)">
+                        <img src="art/@candidate.File" alt="" loading="lazy" />
+                        <span class="art-card-title">@candidate.Title</span>
+                    </button>
+                    <button type="button" class="art-drop" title="Delete this upload for good"
+                            @onclick="() => Remove(candidate)">&times;</button>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    private string title = string.Empty;
+    private string message = string.Empty;
+    private bool failed;
+    private bool busy;
+
+    private IReadOnlyList<ArtImage> Uploads() => Art.All()
+        .Where(image => image.Origin == ArtOrigin.Upload)
+        .ToList();
+
+    // This component re-renders itself after its own upload/remove, but the catalogue is a
+    // singleton shared with every other circuit: without this, a second DM window keeps listing an
+    // upload the first one just deleted.
+    protected override void OnInitialized() => Art.Changed += OnCatalogueChanged;
+
+    /// <summary>Unsubscribes from the catalogue, which outlives this component.</summary>
+    public void Dispose() => Art.Changed -= OnCatalogueChanged;
+
+    private void OnCatalogueChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task OnFileChosen(InputFileChangeEventArgs args)
+    {
+        IBrowserFile file = args.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        busy = true;
+        message = string.Empty;
+        try
+        {
+            // The cap is passed to OpenReadStream as well as checked afterwards: without it Blazor
+            // refuses anything over 512 KB, and with it a file over the limit fails here rather
+            // than after streaming megabytes of it into memory.
+            byte[] content;
+            await using (Stream stream = file.OpenReadStream(ArtUploadRules.MaxBytes))
+            {
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                content = buffer.ToArray();
+            }
+
+            var result = Art.Upload(Titled(file.Name), content);
+            failed = !result.IsValid;
+            if (result.IsValid)
+            {
+                message = $"Added “{result.Value.Title}”.";
+                title = string.Empty;
+
+                // Stage it rather than show it: an upload happens during prep, and blanking the map
+                // mid-session because the DM added a picture would be a surprise.
+                Session.AddToTray(result.Value.Id);
+            }
+            else
+            {
+                message = string.Join(" ", result.Messages.Select(entry => entry.Message));
+            }
+        }
+        catch (IOException error)
+        {
+            // What OpenReadStream throws when the file is over the cap it was given.
+            failed = true;
+            message = $"That file could not be read: {error.Message}";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void Remove(ArtImage image)
+    {
+        var result = Art.Remove(image.Id);
+        failed = !result.IsValid;
+        message = result.IsValid
+            ? $"Removed “{image.Title}”."
+            : string.Join(" ", result.Messages.Select(entry => entry.Message));
+
+        if (result.IsValid)
+        {
+            // It is gone from disk, so it must not stay staged pointing at nothing — and if it was
+            // the one on the projector, take that down too.
+            Session.RemoveFromTray(image.Id);
+            if (string.Equals(Session.ShownArtImageId, image.Id, StringComparison.Ordinal))
+            {
+                Session.ShowArt(string.Empty);
+            }
+        }
+    }
+
+    // The typed title wins; otherwise fall back to the file's own name without its extension, which
+    // is usually what the DM would have typed anyway.
+    private string Titled(string fileName)
+    {
+        string typed = title.Trim();
+        return typed.Length > 0 ? typed : System.IO.Path.GetFileNameWithoutExtension(fileName ?? string.Empty);
+    }
+}

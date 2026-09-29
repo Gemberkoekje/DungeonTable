@@ -1,0 +1,111 @@
+@inject IArtCatalogue Art
+@*
+    The picture the DM has pushed onto the projector, laid over the map.
+
+    It is a sibling div inside .player-stage, not something spliced into the SVG: the map render
+    path, the fog mask and the reveal logic are untouched by this feature, and fullscreen covers the
+    overlay because the stage is what goes fullscreen.
+
+    Deliberately NOT rendered at all when nothing is shown — an empty frame parked over the map for
+    hours is worse than no frame, and an element that is merely transparent still catches the eye
+    when the projector's own gamma drifts.
+*@
+
+<style>
+    .player-art {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 5;
+    }
+
+    /* The frame: parchment to match the map's floor fill, a dark rule to lift it off the map, and
+       a soft outer shadow so it reads as laid ON the map rather than cut into it. */
+    .player-art figure {
+        margin: 0;
+        padding: 0.7rem;
+        background: #e8e0cd;
+        border: 1px solid #6b5b3e;
+        border-radius: 0.5rem;
+        box-shadow: 0 1.4rem 3.5rem rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.35);
+        max-width: 92%;
+        max-height: 92%;
+        display: flex;
+        /* Not the default "stretch": a flex item would otherwise be pulled to the frame's height. */
+        align-items: center;
+    }
+
+    /* width/height:auto is load-bearing, not tidiness. The img carries its pixel dimensions as HTML
+       attributes (so the frame is the right shape before the picture arrives), and with those acting
+       as a used width and height the two max-* rules below clamp each axis INDEPENDENTLY — which
+       hands the element a box of the wrong shape. Auto on both puts the intrinsic ratio back in
+       charge, and CSS then applies both maxima together while preserving it. */
+    .player-art img {
+        display: block;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 0.2rem;
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+    /* Sizes are a share of the projector, not pixels: the same four steps have to mean the same
+       thing on a 1080p beamer and on a laptop screen during prep. */
+    .player-art.art-small img { max-width: 26vw; max-height: 34vh; }
+    .player-art.art-medium img { max-width: 42vw; max-height: 56vh; }
+    .player-art.art-large img { max-width: 62vw; max-height: 76vh; }
+
+    /* Full drops the frame's own margins and lets the picture take the screen. */
+    .player-art.art-full figure {
+        padding: 0.4rem;
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 0;
+    }
+
+    .player-art.art-full img { max-width: 96vw; max-height: 94vh; }
+</style>
+
+@if (image is not null)
+{
+    <div class="player-art @SizeClass">
+        <figure>
+            @* alt is empty on purpose: this is decorative-for-the-room, the players are looking at
+               a beamer, and a screen reader announcing "Vampire spawn" on the DM's own second
+               monitor would give away the bluff the picture exists to sell. *@
+            <img src="art/@image.File" alt="" width="@image.Width" height="@image.Height" />
+        </figure>
+    </div>
+}
+
+@code {
+    /// <summary>The catalogue id of the picture to show; blank or unknown shows nothing.</summary>
+    [Parameter]
+    public string ImageId { get; set; } = string.Empty;
+
+    /// <summary>How large to draw it.</summary>
+    [Parameter]
+    public ArtSize Size { get; set; } = ArtSize.Medium;
+
+    private ArtImage image;
+
+    protected override void OnParametersSet()
+    {
+        // Resolved here rather than in the player view so an id that no longer exists (a removed
+        // upload, a hand-edited snapshot) simply shows nothing instead of breaking the render.
+        var result = Art.GetImage(ImageId ?? string.Empty);
+        image = result.IsValid ? result.Value : null;
+    }
+
+    private string SizeClass => Size switch
+    {
+        ArtSize.Small => "art-small",
+        ArtSize.Large => "art-large",
+        ArtSize.Full => "art-full",
+        _ => "art-medium",
+    };
+}

@@ -1,0 +1,133 @@
+@implements IDisposable
+@inject CampaignState Campaign
+@*
+    The Info panel's Quests sub-tab: the campaign's quests, with a filter across the top and a card
+    per quest.
+
+    This is where the DM reads the chain, the prerequisites and the rewards — all of which are useful
+    from the first session, whether or not the floors the quests lead to are written yet.
+*@
+
+<section class="quest-log" aria-label="Quest log">
+    @if (Quests.Count == 0)
+    {
+        <p class="muted">No quest log is authored.</p>
+    }
+    else
+    {
+        <div class="quest-filters" role="group" aria-label="Filter quests">
+            @foreach (QuestFilter option in AllFilters)
+            {
+                QuestFilter choice = option;
+                <button type="button" class="quest-filter @(filter == choice ? "on" : string.Empty)"
+                        title="@FilterHint(choice)" @onclick="() => filter = choice">
+                    @choice (@Count(choice))
+                </button>
+            }
+        </div>
+
+        IReadOnlyList<Quest> shown = Shown();
+        @if (shown.Count == 0)
+        {
+            <p class="muted">No quests match this filter.</p>
+        }
+        else
+        {
+            @foreach (Quest quest in shown)
+            {
+                <QuestCard @key="quest.Id"
+                           Quest="quest"
+                           OnOpenReference="OnOpenReference"
+                           OnNavigate="OnNavigate"
+                           ResolveRefs="ResolveRefs"
+                           IsAuthored="IsAuthored"
+                           IsFloorAuthored="IsFloorAuthored"
+                           StartOpen="@(Campaign.Status(quest.Id) == QuestStatus.Active)" />
+            }
+        }
+    }
+</section>
+
+@code {
+    /// <summary>The authored quest log.</summary>
+    [Parameter]
+    public QuestLog Log { get; set; } = new QuestLog();
+
+    /// <summary>Raised with a node id to open a reference card (a giver, a prose mention).</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>Raised with an area node id when a beat's destination chip is a live jump.</summary>
+    [Parameter]
+    public EventCallback<string> OnNavigate { get; set; }
+
+    /// <summary>Resolves cross-references in quest prose; when null, prose renders as plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Tests whether a beat's destination area has been authored yet.</summary>
+    [Parameter]
+    public Func<string, bool> IsAuthored { get; set; }
+
+    /// <summary>Tests whether a floor is written, by its number, for a beat on a floor rather than in an area.</summary>
+    [Parameter]
+    public Func<int, bool> IsFloorAuthored { get; set; }
+
+    // What the filter segment offers. "Available" means offerable and not yet finished, which is the
+    // question the DM actually asks at the table: what can I put in front of them tonight?
+    private enum QuestFilter
+    {
+        None,
+        All,
+        Available,
+        Active,
+        Done,
+    }
+
+    private static readonly QuestFilter[] AllFilters =
+    {
+        QuestFilter.All,
+        QuestFilter.Available,
+        QuestFilter.Active,
+        QuestFilter.Done,
+    };
+
+    private QuestFilter filter = QuestFilter.All;
+
+    protected override void OnInitialized() => Campaign.Changed += OnCampaignChanged;
+
+    /// <summary>Unsubscribes from the campaign state, which outlives this component.</summary>
+    public void Dispose() => Campaign.Changed -= OnCampaignChanged;
+
+    private void OnCampaignChanged() => InvokeAsync(StateHasChanged);
+
+    private IReadOnlyList<Quest> Quests => Log.Quests;
+
+    private IReadOnlyList<Quest> Shown() => Quests.Where(Matches).ToList();
+
+    private int Count(QuestFilter option) => Quests.Count(quest => Matches(quest, option));
+
+    private bool Matches(Quest quest) => Matches(quest, filter);
+
+    private bool Matches(Quest quest, QuestFilter option)
+    {
+        QuestStatus status = Campaign.Status(quest.Id);
+        return option switch
+        {
+            QuestFilter.Available => status is not QuestStatus.Complete and not QuestStatus.Abandoned
+                && Campaign.IsOfferable(quest),
+            QuestFilter.Active => status == QuestStatus.Active,
+            QuestFilter.Done => status == QuestStatus.Complete,
+            _ => true,
+        };
+    }
+
+    private static string FilterHint(QuestFilter option) => option switch
+    {
+        QuestFilter.All => "Every quest in the log",
+        QuestFilter.Available => "Offerable now: prerequisites met, not finished or dropped",
+        QuestFilter.Active => "The party is working on it",
+        QuestFilter.Done => "Completed",
+        _ => string.Empty,
+    };
+}

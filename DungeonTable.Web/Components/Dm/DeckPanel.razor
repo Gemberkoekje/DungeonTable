@@ -1,0 +1,122 @@
+@implements IDisposable
+@inject CampaignState Campaign
+@*
+    One card deck on the Rules tab: browsable, plus a Draw button.
+
+    Decks are drawn mid-session, which is exactly the moment reaching for the book hurts. The deck
+    document says what a draw does to it. A deck drawn fresh is a plain random pick with no memory. A
+    deck whose cards are kept is a set of handouts the players take away, so a drawn card is struck off
+    until the deck is reset, and that set persists with the rest of the table.
+*@
+
+<section class="deck" aria-label="@Deck.Title">
+    <header class="deck-head">
+        <h3>@Deck.Title</h3>
+        <button type="button" class="deck-draw" title="@(DeckWording.DrawHint(Deck))" disabled="@(Remaining == 0)"
+                @onclick="Draw">&#x1F0A0; Draw</button>
+        @if (Kept)
+        {
+            <span class="deck-count" title="@(DeckWording.LeftHint(Deck))">@Remaining / @Deck.Cards.Count left</span>
+            <button type="button" class="deck-reset" title="@(DeckWording.ResetHint(Deck))"
+                    disabled="@(Remaining == Deck.Cards.Count)" @onclick="() => Campaign.ResetDeck(Deck.Id)">Reset deck</button>
+        }
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Deck.Usage))
+    {
+        <p class="deck-usage muted">@Deck.Usage</p>
+    }
+
+    @if (drawn.Length > 0)
+    {
+        <div class="deck-drawn" role="status">
+            <span class="field-label">Drawn</span>
+            @Card(Card(drawn), expanded: true)
+        </div>
+    }
+    else if (Remaining == 0)
+    {
+        <p class="muted" role="status">@(DeckWording.AllDrawn(Deck))</p>
+    }
+
+    <details class="detail-block deck-browse">
+        <summary><span class="detail-heading">All @(DeckWording.Count(Deck, Deck.Cards.Count))</span></summary>
+        <div class="detail-body">
+            @foreach (DeckCard card in Deck.Cards)
+            {
+                @Card(card, expanded: false)
+            }
+        </div>
+    </details>
+</section>
+
+@code {
+    /// <summary>The deck to render.</summary>
+    [Parameter]
+    public CardDeck Deck { get; set; } = new CardDeck();
+
+    /// <summary>Resolves cross-references in card prose; when null, prose renders as plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with a node id when a cross-reference in a card is clicked.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    private string drawn = string.Empty;
+
+    protected override void OnInitialized() => Campaign.Changed += OnCampaignChanged;
+
+    /// <summary>Unsubscribes from the campaign state, which outlives this component.</summary>
+    public void Dispose() => Campaign.Changed -= OnCampaignChanged;
+
+    private void OnCampaignChanged() => InvokeAsync(StateHasChanged);
+
+    // Only a deck whose cards are kept counts what is left and can be reset; a fresh deck always
+    // offers every card.
+    private bool Kept => Deck.DrawRule == DeckDrawRule.Kept;
+
+    private int Remaining => Campaign.Undrawn(Deck).Count;
+
+    private void Draw()
+    {
+        DeckCard card = Campaign.Draw(Deck);
+        if (card.Id.Length > 0)
+        {
+            drawn = card.Id;
+        }
+    }
+
+    private DeckCard Card(string id) =>
+        Deck.Cards.FirstOrDefault(card => string.Equals(card.Id, id, StringComparison.Ordinal)) ?? new DeckCard();
+
+    // One card. The drawn card is shown open so it can be read out at once; the browse list keeps
+    // its cards collapsed behind their names.
+    private RenderFragment Card(DeckCard card, bool expanded) =>
+        @<details class="deck-card" open="@expanded">
+            <summary>
+                <span class="deck-name">@card.Name</span>
+                @if (card.Subtitle.Length > 0)
+                {
+                    <span class="deck-subtitle">@card.Subtitle</span>
+                }
+                @if (Kept && Campaign.IsCardDrawn(Deck.Id, card.Id))
+                {
+                    <span class="deck-spent" title="Already handed to the players">drawn</span>
+                }
+            </summary>
+            <div class="deck-body">
+                @if (!string.IsNullOrWhiteSpace(card.Body))
+                {
+                    <p><CrossRefProse Text="@card.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+                }
+                @foreach (DossierBlock effect in card.Effects)
+                {
+                    <p class="deck-effect">
+                        <span class="deck-effect-name">@effect.Heading</span>
+                        <CrossRefProse Text="@effect.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" />
+                    </p>
+                }
+            </div>
+        </details>;
+}

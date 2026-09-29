@@ -1,0 +1,30 @@
+{
+  "book": "srd",
+  "title": "SRD 5.1",
+  "source": "SRD_CC_v5.1.pdf",
+  "isAdventure": false,
+  "entries": [
+    {
+      "id": "falling",
+      "kind": "rule",
+      "name": "Falling",
+      "description": "A creature takes 1d6 bludgeoning damage for every 10 feet it falls, to a maximum of 20d6, and lands prone unless it avoids the damage.",
+      "page": 86
+    },
+    {
+      "id": "vision-and-light",
+      "kind": "rule",
+      "name": "Vision and Light",
+      "description": "Lightly and heavily obscured areas, bright light, dim light and darkness, and the senses that see through them: blindsight, darkvision and truesight.",
+      "page": 86
+    },
+    {
+      "id": "surprise",
+      "kind": "rule",
+      "name": "Surprise",
+      "description": "A creature that doesn't notice a threat at the start of an encounter is surprised: it can't move or take an action on its first turn, or take a reaction until that turn ends.",
+      "page": 90
+    }
+  ],
+  "links": []
+}

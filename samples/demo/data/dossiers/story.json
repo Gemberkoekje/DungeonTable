@@ -1,0 +1,37 @@
+{
+  "chapters": [
+    {
+      "title": "Why the bell fell silent",
+      "source": "The founders' book in the chapel, and what the village remembers",
+      "summary": "How the bell came to be cast beneath the chapel, what it was for, and how [[brother-aldous|Brother Aldous]] came to sell its voice.",
+      "cast": [
+        { "name": "Grask", "role": "The bugbear who won the clapper at dice", "state": "Melting it down in the undercroft", "ref": "grask" },
+        { "name": "Brother Aldous", "role": "The acolyte who paid with it", "state": "Hiding it from the village", "ref": "brother-aldous", "secret": true },
+        { "name": "Tam Brask", "role": "The boy who went to find out why", "state": "Chained in the bell-founder's workshop", "ref": "tam-brask" },
+        { "name": "The bell-founders", "role": "Cast the bell to ring their dead to sleep", "state": "Buried in the sealed crypt, and restless", "ref": "the-bell-founders" }
+      ],
+      "sections": [
+        {
+          "heading": "The founders",
+          "kind": "lore",
+          "secret": false,
+          "body": "The [[the-bell-founders|bell-founders]] cast bells for half the valley and buried their own dead under the chapel they built. Millbrook's was their last bell. They gave it a clapper of blessed silver and cast it to ring their dead to sleep."
+        },
+        {
+          "heading": "The debt",
+          "kind": "secret",
+          "secret": true,
+          "body": "[[brother-aldous|Aldous]] met [[grask]] at the alehouse dice table in the autumn and lost forty gold he did not have. He paid in candlesticks until there were none left to take, then in the bell's clapper. The bell has not rung since."
+        }
+      ],
+      "looseEnds": [
+        {
+          "heading": "The candlesticks",
+          "kind": "lore",
+          "secret": false,
+          "body": "Two of the chapel's six silver candlesticks are in Grask's strongbox. The other four went downriver with a pedlar, and nobody in Millbrook has noticed yet."
+        }
+      ]
+    }
+  ]
+}
