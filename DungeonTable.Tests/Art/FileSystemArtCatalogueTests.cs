@@ -5,9 +5,7 @@ using System.Threading.Tasks;
 using DungeonTable.Core.Art;
 using DungeonTable.Infrastructure.Art;
 using DungeonTable.Infrastructure.Content;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace DungeonTable.Tests.Art;
 
@@ -216,11 +214,73 @@ public sealed class FileSystemArtCatalogueTests : IDisposable
         // Stored as WebP whatever came in, so the /art route's allowlist and the file agree.
         string stored = Path.Combine(tempRoot, "uploads", "upload-the-innkeeper.webp");
         Assert.True(File.Exists(stored));
-        Assert.Equal("webp", Image.DetectFormat(stored).Name.ToLowerInvariant());
+        Assert.Equal(SKEncodedImageFormat.Webp, StoredFormat(stored));
 
         // And it is immediately visible, without a restart.
         Assert.True(catalogue.GetImage(added.Value.Id).IsValid);
         Assert.Equal(3, catalogue.All().Count);
+    }
+
+    [Theory]
+    [InlineData(SKEncodedImageFormat.Png)]
+    [InlineData(SKEncodedImageFormat.Jpeg)]
+    [InlineData(SKEncodedImageFormat.Webp)]
+    public void Each_accepted_format_is_stored_as_webp(SKEncodedImageFormat format)
+    {
+        WriteBookCatalogue();
+        var catalogue = new FileSystemArtCatalogue(tempRoot);
+
+        var added = catalogue.Upload("Handout", Encoded(64, 48, format));
+
+        Assert.True(added.IsValid);
+        Assert.Equal(SKEncodedImageFormat.Webp, StoredFormat(Path.Combine(tempRoot, "uploads", "upload-handout.webp")));
+        Assert.Equal(64, added.Value.Width);
+        Assert.Equal(48, added.Value.Height);
+    }
+
+    [Fact]
+    public void An_upload_that_already_fits_is_stored_at_its_own_size_rather_than_scaled_up()
+    {
+        WriteBookCatalogue();
+        var catalogue = new FileSystemArtCatalogue(tempRoot);
+
+        var added = catalogue.Upload("Small", Png(width: 40, height: 20));
+
+        Assert.True(added.IsValid);
+        Assert.Equal(40, added.Value.Width);
+        Assert.Equal(20, added.Value.Height);
+    }
+
+    [Fact]
+    public void A_truncated_image_is_refused_rather_than_stored_half_drawn()
+    {
+        // The header is intact, so the dimension check passes and only the decode can tell. The
+        // noise keeps the compressed data long enough that cutting the file stops it mid-picture.
+        WriteBookCatalogue();
+        var catalogue = new FileSystemArtCatalogue(tempRoot);
+        byte[] whole = Noise(200, 200);
+        byte[] truncated = whole.AsSpan(0, whole.Length * 3 / 5).ToArray();
+
+        var refused = catalogue.Upload("Cut short", truncated);
+
+        Assert.False(refused.IsValid);
+        Assert.Contains("damaged", refused.Messages[0].Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(tempRoot, "uploads", "upload-cut-short.webp")));
+    }
+
+    [Fact]
+    public void Nothing_but_the_pixels_reaches_the_stored_file()
+    {
+        // A text chunk stands in for a phone photo's EXIF: the GPS tag must not survive the re-encode.
+        WriteBookCatalogue();
+        var catalogue = new FileSystemArtCatalogue(tempRoot);
+        const string Marker = "GPS 52.3731N 4.8922E";
+
+        var added = catalogue.Upload("Photo", WithTextChunk(Png(32, 32), "Comment", Marker));
+
+        Assert.True(added.IsValid);
+        byte[] stored = File.ReadAllBytes(Path.Combine(tempRoot, "uploads", "upload-photo.webp"));
+        Assert.DoesNotContain(Marker, System.Text.Encoding.Latin1.GetString(stored), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -496,12 +556,74 @@ public sealed class FileSystemArtCatalogueTests : IDisposable
 
     // ---- Fixtures ----------------------------------------------------------------------------
 
-    private static byte[] Png(int width, int height)
+    private static byte[] Png(int width, int height) => Encoded(width, height, SKEncodedImageFormat.Png);
+
+    // One plain colour, so even a picture declaring tens of megapixels compresses to almost nothing.
+    // Greyscale keeps the fixture's own pixel buffer a quarter of what RGBA would allocate.
+    private static byte[] Encoded(int width, int height, SKEncodedImageFormat format)
     {
-        using var image = new Image<Rgba32>(width, height);
-        using var buffer = new MemoryStream();
-        image.Save(buffer, new PngEncoder());
-        return buffer.ToArray();
+        using var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Gray8, SKAlphaType.Opaque));
+        bitmap.Erase(SKColors.White);
+        using SKData data = bitmap.Encode(format, 90);
+        return data.ToArray();
+    }
+
+    // Pixels that do not compress, from a fixed seed so the fixture is the same every run.
+    private static byte[] Noise(int width, int height)
+    {
+        var random = new Random(20261024);
+        var colours = new SKColor[width * height];
+        for (int index = 0; index < colours.Length; index++)
+        {
+            colours[index] = new SKColor((uint)random.Next() | 0xFF000000);
+        }
+
+        using var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul));
+        bitmap.Pixels = colours;
+        using SKData data = bitmap.Encode(SKEncodedImageFormat.Png, 90);
+        return data.ToArray();
+    }
+
+    // Inserts a tEXt chunk just before the PNG's closing IEND chunk (the last 12 bytes).
+    private static byte[] WithTextChunk(byte[] png, string keyword, string text)
+    {
+        byte[] type = System.Text.Encoding.ASCII.GetBytes("tEXt");
+        byte[] body = System.Text.Encoding.Latin1.GetBytes(keyword + "\0" + text);
+        byte[] crcInput = type.Concat(body).ToArray();
+
+        var chunk = new List<byte>();
+        chunk.AddRange(BigEndian((uint)body.Length));
+        chunk.AddRange(crcInput);
+        chunk.AddRange(BigEndian(Crc32(crcInput)));
+
+        int end = png.Length - 12;
+        return png.Take(end).Concat(chunk).Concat(png.Skip(end)).ToArray();
+    }
+
+    private static byte[] BigEndian(uint value) =>
+        new[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value };
+
+    // The CRC-32 PNG chunks carry (ISO 3309, reflected polynomial 0xEDB88320).
+    private static uint Crc32(byte[] bytes)
+    {
+        uint crc = 0xFFFFFFFF;
+        foreach (byte value in bytes)
+        {
+            crc ^= value;
+            for (int bit = 0; bit < 8; bit++)
+            {
+                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+            }
+        }
+
+        return ~crc;
+    }
+
+    private static SKEncodedImageFormat StoredFormat(string path)
+    {
+        using SKCodec codec = SKCodec.Create(path);
+        Assert.NotNull(codec);
+        return codec.EncodedFormat;
     }
 
     private void WriteBookCatalogue()

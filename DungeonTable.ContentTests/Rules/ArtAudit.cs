@@ -3,7 +3,7 @@ using System.IO;
 using DungeonTable.Application.Abstractions;
 using DungeonTable.Core.Art;
 using DungeonTable.Infrastructure.Art;
-using SixLabors.ImageSharp;
+using SkiaSharp;
 
 namespace DungeonTable.ContentTests.Rules;
 
@@ -74,21 +74,16 @@ internal static class ArtAudit
         foreach (ArtImage image in Kept(catalogue).Where(image => onDisk.Contains(image.File)))
         {
             string path = Path.Combine(artFolder, image.File.Replace('/', Path.DirectorySeparatorChar));
-            try
+
+            // Opening a codec reads the header only, which is where the size is.
+            using SKCodec codec = SKCodec.Create(path);
+            if (codec is null)
             {
-                ImageInfo info = Image.Identify(path);
-                if (info.Width != image.Width || info.Height != image.Height)
-                {
-                    faults.Add($"'{image.Id}' says {image.Width}x{image.Height}, and {image.File} is {info.Width}x{info.Height}.");
-                }
+                faults.Add($"'{image.Id}': {image.File} cannot be read as a picture: it is damaged, or not a format the app decodes.");
             }
-            catch (UnknownImageFormatException error)
+            else if (codec.Info.Width != image.Width || codec.Info.Height != image.Height)
             {
-                faults.Add($"'{image.Id}': {image.File} cannot be read as a picture: {error.Message}");
-            }
-            catch (InvalidImageContentException error)
-            {
-                faults.Add($"'{image.Id}': {image.File} is damaged: {error.Message}");
+                faults.Add($"'{image.Id}' says {image.Width}x{image.Height}, and {image.File} is {codec.Info.Width}x{codec.Info.Height}.");
             }
         }
 

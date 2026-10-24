@@ -19,7 +19,8 @@
 
   <!-- Art uploads are decoded and re-encoded here rather than stored as they arrived. -->
   <ItemGroup>
-    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
 
   <ItemGroup>

@@ -199,5 +199,5 @@ holds the house style and the traps worth knowing before changing anything.
 - Its map, and the screenshots of it in [docs/images](docs/images): Maps created with Dungeon Scrawl
   (https://dungeonscrawl.com) — used under CC BY 4.0 license.
 
-The app uses SixLabors.ImageSharp under the Apache License 2.0, and other open-source packages under
-their own licences.
+The app uses SkiaSharp under the MIT License, and other open-source packages under their own
+licences.

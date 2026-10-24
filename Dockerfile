@@ -14,7 +14,9 @@ WORKDIR /src
 
 COPY . .
 RUN dotnet restore DungeonTable.Web/DungeonTable.Web.csproj --locked-mode
-RUN dotnet publish DungeonTable.Web/DungeonTable.Web.csproj -c Release -o /app/publish --no-restore
+# For linux-x64 only, so the image carries SkiaSharp's Linux library and not the other platforms'.
+RUN dotnet publish DungeonTable.Web/DungeonTable.Web.csproj -c Release -r linux-x64 --self-contained false \
+    -p:UseAppHost=false -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.12 AS final
 WORKDIR /app

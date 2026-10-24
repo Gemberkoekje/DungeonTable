@@ -3,8 +3,7 @@ using System.IO;
 using DungeonTable.ContentTests.Rules;
 using DungeonTable.Core.Art;
 using DungeonTable.Core.Stats;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace DungeonTable.ContentTests.RuleTests;
 
@@ -166,7 +165,9 @@ public sealed class ArtAuditTests
     private static void Picture(TempContent content, string relativePath, int width, int height)
     {
         string path = content.Write(relativePath, string.Empty);
-        using var image = new Image<Rgba32>(width, height);
-        image.SaveAsPng(path);
+        using var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul));
+        bitmap.Erase(SKColors.Transparent);
+        using SKData png = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+        File.WriteAllBytes(path, png.ToArray());
     }
 }
