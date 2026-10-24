@@ -3,10 +3,7 @@ using DungeonTable.Core.Art;
 using DungeonTable.Infrastructure.Content;
 using DungeonTable.Infrastructure.Dossiers;
 using Qowaiv.Validation.Abstractions;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.Memory;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace DungeonTable.Infrastructure.Art;
 
@@ -31,8 +28,9 @@ namespace DungeonTable.Infrastructure.Art;
 /// </para>
 /// <para>
 /// Uploads are never stored as they arrived. They are decoded — which is the validation that
-/// matters — downscaled to <see cref="ArtUploadRules.MaxEdgePixels"/> and written back out as
-/// WebP, which drops EXIF along the way. The two catalogues stay separate files on purpose: the
+/// matters — downscaled to <see cref="ArtUploadRules.MaxEdgePixels"/> if they are larger, and
+/// written back out as WebP from the pixels alone, so EXIF and every other metadata block stay
+/// behind. The two catalogues stay separate files on purpose: the
 /// book art is under version control and the uploads live in the bind mount, and a single
 /// rewritten file would drag one into the other.
 /// </para>
@@ -46,6 +44,11 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
     // What a save failure is reported against; there is no method parameter to point at.
     private const string UploadsProperty = "uploads";
     internal const string UploadsDirectoryName = "uploads";
+
+    // Lossy at 75, libwebp's own default: a projector picture, not an archive copy.
+    private const float WebpQuality = 75f;
+
+    private const string Unreadable = "That file could not be read as a " + ArtUploadRules.AcceptedFormats + " image.";
 
     internal static readonly JsonSerializerOptions Options = new()
     {
@@ -250,7 +253,7 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
         // Read the declared dimensions from the header WITHOUT decoding. The byte cap above bounds
         // the download, not the decode: a near-solid-colour PNG declaring 30000x30000 is a few KB
         // and still asks for gigabytes of pixel buffer, which on this one shared process would
-        // take the whole table down with it. Identify parses the header only.
+        // take the whole table down with it. Opening a codec reads the header only.
         Result<ArtImage> measured = Measure(content, out int sourceWidth, out int sourceHeight);
         if (measured is not null)
         {
@@ -290,43 +293,18 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
         }
 
         string relative = $"{UploadsDirectoryName}/{id}.webp";
-        int width;
-        int height;
+        Result<SKSizeI> encoded = ReEncode(content, out byte[] webp);
+        if (!encoded.IsValid)
+        {
+            return ReleaseAndRefuse(id, encoded.Messages[0].Message);
+        }
+
+        int width = encoded.Value.Width;
+        int height = encoded.Value.Height;
         try
         {
             Directory.CreateDirectory(uploadsRoot);
-            using Image decoded = Image.Load(content);
-            decoded.Mutate(context => context.Resize(new ResizeOptions
-            {
-                Size = new Size(ArtUploadRules.MaxEdgePixels, ArtUploadRules.MaxEdgePixels),
-                Mode = ResizeMode.Max,
-            }));
-
-            // Metadata is dropped rather than carried over: an upload can be a phone photo, and
-            // the projector has no use for its GPS tag.
-            decoded.Metadata.ExifProfile = null;
-            decoded.Metadata.XmpProfile = null;
-            decoded.Metadata.IptcProfile = null;
-
-            decoded.Save(Path.Combine(artRoot, relative.Replace('/', Path.DirectorySeparatorChar)),
-                new WebpEncoder());
-            width = decoded.Width;
-            height = decoded.Height;
-        }
-        catch (UnknownImageFormatException)
-        {
-            return ReleaseAndRefuse(id, $"That file could not be read as a {ArtUploadRules.AcceptedFormats} image.");
-        }
-        catch (InvalidImageContentException)
-        {
-            return ReleaseAndRefuse(id, "That image is damaged and could not be read.");
-        }
-        catch (InvalidMemoryOperationException)
-        {
-            // ImageSharp refused the allocation the decode asked for. The dimension check above
-            // makes this unlikely, but an unhandled throw here would kill the DM's circuit rather
-            // than tell them the file is unusable.
-            return ReleaseAndRefuse(id, "That image is too large to process.");
+            File.WriteAllBytes(Path.Combine(artRoot, relative.Replace('/', Path.DirectorySeparatorChar)), webp);
         }
         catch (IOException error)
         {
@@ -669,20 +647,95 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
     {
         width = 0;
         height = 0;
-        try
+        using SKData data = SKData.CreateCopy(content);
+        using SKCodec codec = SKCodec.Create(data);
+        if (codec is null)
         {
-            ImageInfo info = Image.Identify(content);
-            width = info.Width;
-            height = info.Height;
-            return null;
+            return Refused(Unreadable);
         }
-        catch (UnknownImageFormatException)
+
+        width = codec.Info.Width;
+        height = codec.Info.Height;
+        return null;
+    }
+
+    /// <summary>
+    /// Decodes an upload whose header has already been measured, downscales it to fit
+    /// <see cref="ArtUploadRules.MaxEdgePixels"/> and encodes the pixels as WebP.
+    /// </summary>
+    /// <remarks>
+    /// Only the pixels are encoded, so EXIF, XMP and IPTC never reach the stored file: an upload can
+    /// be a phone photo, and the projector has no use for its GPS tag. A decode that stops short
+    /// (<see cref="SKCodecResult.IncompleteInput"/>, a truncated file) is refused rather than stored
+    /// half grey. Skia reports every failure as a result rather than an exception, which is why there
+    /// is nothing to catch here.
+    /// </remarks>
+    /// <param name="content">The uploaded bytes.</param>
+    /// <param name="webp">The encoded picture, or an empty array when it was refused.</param>
+    /// <returns>The stored size, or why the upload was refused.</returns>
+    private static Result<SKSizeI> ReEncode(byte[] content, out byte[] webp)
+    {
+        webp = Array.Empty<byte>();
+        using SKData data = SKData.CreateCopy(content);
+        using SKCodec codec = SKCodec.Create(data);
+        if (codec is null)
         {
-            return Refused($"That file could not be read as a {ArtUploadRules.AcceptedFormats} image.");
+            return Result.WithMessages<SKSizeI>(ValidationMessage.Error(Unreadable, "content"));
         }
-        catch (InvalidImageContentException)
+
+        // Opaque stays opaque (a JPEG), so the WebP carries no alpha layer it does not need.
+        SKAlphaType alpha = codec.Info.AlphaType == SKAlphaType.Opaque ? SKAlphaType.Opaque : SKAlphaType.Premul;
+        SKImageInfo full = codec.Info.WithColorType(SKColorType.Rgba8888).WithAlphaType(alpha);
+        using SKBitmap decoded = new SKBitmap();
+        if (!decoded.TryAllocPixels(full))
         {
-            return Refused("That image is damaged and could not be read.");
+            // The dimension check before this makes it unlikely, but a refused allocation has to
+            // tell the DM the file is unusable rather than fail somewhere further on.
+            return Result.WithMessages<SKSizeI>(
+                ValidationMessage.Error("That image is too large to process.", "content"));
         }
+
+        if (codec.GetPixels(full, decoded.GetPixels()) != SKCodecResult.Success)
+        {
+            return Result.WithMessages<SKSizeI>(
+                ValidationMessage.Error("That image is damaged and could not be read.", "content"));
+        }
+
+        SKSizeI size = Fit(full.Width, full.Height);
+        using SKBitmap scaled = size.Width == full.Width && size.Height == full.Height
+            ? null
+            : decoded.Resize(full.WithSize(size), new SKSamplingOptions(SKCubicResampler.Mitchell));
+        using SKPixmap pixels = (scaled ?? decoded).PeekPixels();
+        using SKData encoded = pixels?.Encode(new SKWebpEncoderOptions(SKWebpEncoderCompression.Lossy, WebpQuality));
+        if (encoded is null)
+        {
+            return Result.WithMessages<SKSizeI>(
+                ValidationMessage.Error("That image could not be converted to WebP.", "content"));
+        }
+
+        webp = encoded.ToArray();
+        return Result.For(size);
+    }
+
+    /// <summary>
+    /// The size an upload is stored at: its own when it already fits
+    /// <see cref="ArtUploadRules.MaxEdgePixels"/>, otherwise scaled down, keeping its aspect ratio,
+    /// until its longest edge does. Never scaled up.
+    /// </summary>
+    /// <param name="width">The decoded width.</param>
+    /// <param name="height">The decoded height.</param>
+    /// <returns>The size to store.</returns>
+    internal static SKSizeI Fit(int width, int height)
+    {
+        int longest = Math.Max(width, height);
+        if (longest <= ArtUploadRules.MaxEdgePixels)
+        {
+            return new SKSizeI(width, height);
+        }
+
+        double scale = (double)ArtUploadRules.MaxEdgePixels / longest;
+        return new SKSizeI(
+            Math.Max(1, (int)Math.Round(width * scale)),
+            Math.Max(1, (int)Math.Round(height * scale)));
     }
 }

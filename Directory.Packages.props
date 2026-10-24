@@ -14,25 +14,22 @@
     <!-- Decodes and re-encodes DM art uploads. An upload is never stored as it arrived:
          it is decoded (which is the real validation), downscaled and written back out as WebP,
          which also drops EXIF. System.Drawing.Common is Windows-only since .NET 7 and the app
-         runs in a Linux container, so this is the cross-platform option. -->
-    <!-- HELD at 3.1.x deliberately. 4.x looks for a Six Labors licence key at build time and warns
-         without one ("No Six Labors license found ... obtain a license from sixlabors.com/pricing").
-         3.1.x needs no key; the licence note below says under which terms it is used. -->
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+         runs in a Linux container. SkiaSharp wraps Google's Skia, whose PNG, JPEG and WebP codecs
+         are the ones Chrome ships and fuzzes; it brings the Windows and macOS natives itself, and
+         the Linux one comes from the NoDependencies package, which needs no fontconfig in the
+         runtime image. Keep the two versions equal. It replaced ImageSharp, whose 3.1.x line has
+         advisories fixed only in 4.x, and 4.x wants a licence key at build time. -->
+    <PackageVersion Include="SkiaSharp" Version="4.153.1" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
     <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.34.0.3385" />
   </ItemGroup>
   <!--
     Third-party licences this repository accepts (Proj0503, new in DotNetProjectFile.Analyzers
     1.18.0), recorded because the analyzer asks for the acknowledgement explicitly.
-    - SixLabors.ImageSharp 3.1.x is published under the Six Labors Split License 1.0, which grants the
-      Apache License 2.0 to software that is itself under an open-source licence. DungeonTable is MIT,
-      so it uses ImageSharp under Apache 2.0, and that is the licence to name wherever the project
-      mentions it, as the Split License asks.
     - SonarAnalyzer.CSharp (SONAR Source-Available License 1.0) runs at build time only, as an
       analyzer; nothing of it ships with the app.
   -->
   <ItemGroup Label="Licences">
-    <ThirdPartyLicense Include="SixLabors.ImageSharp" Hash="C3au3cYr2n3QFmhQ3SSmTQ" />
     <ThirdPartyLicense Include="SonarAnalyzer.CSharp" Hash="IBM9yngU7omFyJOMSFSy0w" />
   </ItemGroup>
 

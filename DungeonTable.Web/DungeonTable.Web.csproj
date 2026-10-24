@@ -13,6 +13,11 @@
          id to have somewhere outside the repo to put it. Production still
          passes it as the Auth__Passphrase environment variable. -->
     <UserSecretsId>dungeontable-web</UserSecretsId>
+    <!-- The image publishes for linux-x64 only (see the Dockerfile): SkiaSharp brings native
+         libraries for every platform, and a portable publish copies all of them, about 450 MB. The
+         restore needs the runtime listed here to write it into the lock file. A plain build or
+         `dotnet run` stays portable. -->
+    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
