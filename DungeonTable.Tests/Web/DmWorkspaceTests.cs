@@ -293,7 +293,8 @@ public sealed class DmWorkspaceTests
     [Fact]
     public async Task A_new_dm_window_opens_the_map_the_table_is_on()
     {
-        // It opened the first map, and pointing the shared session at it cleared the other map's reveals.
+        // It opened the first map, and pointing the shared session at it moved the projector off the
+        // map in play.
         Harness harness = Harness.Build();
         harness.Maps.Maps["level-2"] = new VectorMap { MapId = "level-2", Bounds = new MapBounds(0, 0, 500, 400), Grid = new Grid { CellSizePx = 10 } };
         harness.Annotations.Definitions["level-2"] = new MapDefinition { MapId = "level-2" };
@@ -343,10 +344,33 @@ public sealed class DmWorkspaceTests
     }
 
     [Fact]
+    public async Task Going_back_to_a_map_keeps_its_doors_and_framing_rather_than_seeding_them_again()
+    {
+        // The DM closed the door the map opens by default and framed the projector on the pillars, then
+        // took the party down a floor and back up. Seeding again would reopen the door and recentre.
+        Harness harness = await Harness.Started();
+        harness.Maps.Maps["level-2"] = new VectorMap { MapId = "level-2", Bounds = new MapBounds(0, 0, 500, 400), Grid = new Grid { CellSizePx = 10 } };
+        harness.Annotations.Definitions["level-2"] = new MapDefinition { MapId = "level-2" };
+        harness.Session.SetDoorOpen("door-open", open: false);
+        harness.Session.ToggleRegion("r-pillars");
+        var framing = new MapBounds(100, 100, 300, 212.5);
+        harness.Session.SetPlayerViewport(framing);
+
+        await harness.Workspace.LoadMapAsync("level-2", CancellationToken.None);
+        Assert.Empty(harness.Session.RevealedRegionIds());
+
+        await harness.Workspace.LoadMapAsync("level-1", CancellationToken.None);
+
+        Assert.DoesNotContain("door-open", harness.Session.OpenDoorIds());
+        Assert.Contains("r-pillars", harness.Session.RevealedRegionIds());
+        Assert.Equal(framing, harness.Session.PlayerViewport);
+    }
+
+    [Fact]
     public async Task A_map_on_show_that_goes_missing_is_not_swapped_for_another()
     {
-        // Pointing the table at another map clears the reveals of the one in play, so a map file renamed
-        // or deleted mid-session must not do that behind the DM's back.
+        // Pointing the table at another map moves the projector off the one in play, so a map file
+        // renamed or deleted mid-session must not do that behind the DM's back.
         Harness harness = await Harness.Started();
         harness.Session.ToggleRegion("r-pillars");
         harness.Maps.Maps["level-0"] = new VectorMap { MapId = "level-0", Bounds = new MapBounds(0, 0, 500, 400), Grid = new Grid { CellSizePx = 10 } };

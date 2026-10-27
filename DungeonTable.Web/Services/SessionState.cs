@@ -15,9 +15,17 @@ namespace DungeonTable.Web.Services;
 /// mutated by the DM circuit and observed by the player.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The reveals, the open doors and the framing belong to one map. When the table moves to another,
+/// <see cref="SetCurrentMap"/> sets them aside under the map they were on and brings back whatever
+/// was left on the new one, so a party that goes down a floor and back up finds the first floor as
+/// they left it.
+/// </para>
+/// <para>
 /// <see cref="Capture"/> and <see cref="Restore"/> are how this outlives the process: the
 /// persistence coordinator captures a <see cref="RevealSnapshot"/> whenever <see cref="Changed"/>
 /// fires and restores one at startup, before any circuit connects.
+/// </para>
 /// </remarks>
 public sealed class SessionState
 {
@@ -30,9 +38,13 @@ public sealed class SessionState
     private readonly HashSet<string> revealedRegionIds = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> revealedFeatureIds = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<(int Col, int Row)> fogCells = new HashSet<(int, int)>();
-    // Doors the DM has opened this session. Live table state (not persisted): seeded from each
-    // door's DefaultOpen when a map loads and toggled during play. Cleared on a map switch.
+    // Doors standing open: seeded from each door's DefaultOpen the first time a map is shown and
+    // toggled during play. Saved with the reveals, and set aside with them on a map switch.
     private readonly HashSet<string> openDoorIds = new HashSet<string>(StringComparer.Ordinal);
+    // What was left on each map the table is not on now, keyed by map id. Never holds the current
+    // map: its state is the fields above.
+    private readonly Dictionary<string, MapRevealSnapshot> otherMaps =
+        new Dictionary<string, MapRevealSnapshot>(StringComparer.Ordinal);
     // One-step undo for a clear: what the last one threw away. Clearing destroys a whole evening of
     // fog state on a misclick, so what it hid is kept until the next clear or a map switch. Reveals
     // belong to one map, so a snapshot taken on another map would be meaningless.
@@ -58,7 +70,8 @@ public sealed class SessionState
     // The map whose default-open doors and starting viewport have already been seeded. It lives here
     // rather than on the (scoped) DM workspace because seeding is a property of the *table*, not of a
     // browser tab: a refresh, a second DM window or an app restart would otherwise re-seed and throw
-    // away the framing the DM had set and every door they had opened.
+    // away the framing the DM had set and every door they had opened. A map brought back from
+    // otherMaps counts as seeded: its doors and framing are the ones the table left there.
     private string seededMapId = string.Empty;
 
     /// <summary>Raised whenever the shared state changes.</summary>
@@ -156,20 +169,25 @@ public sealed class SessionState
     }
 
     /// <summary>
-    /// Records which map the reveal state applies to. Switching to a different map clears all
-    /// reveals — each map has its own world coordinates, regions and features.
+    /// Records which map the table is on. Switching to a different map sets the one being left aside,
+    /// with what was revealed on it, its open doors and its framing, and brings back what was left on
+    /// the new one, or nothing the first time it is shown. Each map has its own world coordinates,
+    /// regions and doors, so nothing carries over from one to the other.
     /// </summary>
     /// <param name="mapId">The id of the newly loaded map.</param>
     public void SetCurrentMap(string mapId)
     {
+        string id = mapId ?? string.Empty;
         bool changed = false;
         lock (gate)
         {
-            if (!string.Equals(mapId, currentMapId, StringComparison.Ordinal))
+            if (!string.Equals(id, currentMapId, StringComparison.Ordinal))
             {
-                currentMapId = mapId;
+                SetAside();
+                currentMapId = id;
                 ClearRevealState();
                 openDoorIds.Clear();
+                BringBack();
                 // A ping is a point in the old map's world coordinates; on another map it would
                 // land somewhere arbitrary.
                 ping = PingMarker.None;
@@ -642,16 +660,8 @@ public sealed class SessionState
                 RevealedRegionIds = revealedRegionIds.ToArray(),
                 RevealedFeatureIds = revealedFeatureIds.ToArray(),
                 OpenDoorIds = openDoorIds.ToArray(),
-                FogCells = fogCells
-                    .Select(cell => new FogCell { Col = cell.Col, Row = cell.Row })
-                    .ToArray(),
-                PlayerViewport = new ViewportSnapshot
-                {
-                    MinX = playerViewport.MinX,
-                    MinY = playerViewport.MinY,
-                    MaxX = playerViewport.MaxX,
-                    MaxY = playerViewport.MaxY,
-                },
+                FogCells = ToFogCells(fogCells),
+                PlayerViewport = ToViewport(playerViewport),
                 PlayerAspect = playerAspect,
                 ShownArt = new ShownArtSnapshot
                 {
@@ -660,6 +670,10 @@ public sealed class SessionState
                     Size = shownArtSize,
                     TrayImageIds = trayImageIds.ToArray(),
                 },
+                OtherMaps = otherMaps.Values
+                    .OrderBy(map => map.MapId, StringComparer.Ordinal)
+                    .Select(Copy)
+                    .ToArray(),
             };
         }
     }
@@ -690,11 +704,17 @@ public sealed class SessionState
             Replace(revealedRegionIds, snapshot.RevealedRegionIds);
             Replace(revealedFeatureIds, snapshot.RevealedFeatureIds);
             Replace(openDoorIds, snapshot.OpenDoorIds);
+            ReplaceCells(snapshot.FogCells);
 
-            fogCells.Clear();
-            foreach (FogCell cell in snapshot.FogCells ?? Array.Empty<FogCell>())
+            // The map in play is the fields above, so an entry for it is not read, and neither is a
+            // second entry for a map already read.
+            otherMaps.Clear();
+            IEnumerable<MapRevealSnapshot> others = (snapshot.OtherMaps ?? Array.Empty<MapRevealSnapshot>())
+                .Where(map => map is not null && !string.IsNullOrEmpty(map.MapId))
+                .Where(map => !string.Equals(map.MapId, currentMapId, StringComparison.Ordinal));
+            foreach (MapRevealSnapshot map in others)
             {
-                fogCells.Add((cell.Col, cell.Row));
+                otherMaps.TryAdd(map.MapId, Copy(map));
             }
 
             ShownArtSnapshot art = snapshot.ShownArt ?? new ShownArtSnapshot();
@@ -706,8 +726,7 @@ public sealed class SessionState
                 .Where(id => !string.IsNullOrEmpty(id))
                 .Distinct(StringComparer.Ordinal));
 
-            ViewportSnapshot view = snapshot.PlayerViewport ?? new ViewportSnapshot();
-            playerViewport = new MapBounds(view.MinX, view.MinY, view.MaxX, view.MaxY);
+            playerViewport = ToBounds(snapshot.PlayerViewport);
             playerAspect = IsUsableAspect(snapshot.PlayerAspect)
                 ? ClampAspect(snapshot.PlayerAspect)
                 : DefaultAspect;
@@ -730,6 +749,41 @@ public sealed class SessionState
         }
     }
 
+    private static FogCell[] ToFogCells(IEnumerable<(int Col, int Row)> cells) =>
+        cells.Select(cell => new FogCell { Col = cell.Col, Row = cell.Row }).ToArray();
+
+    private static ViewportSnapshot ToViewport(MapBounds bounds) => new ViewportSnapshot
+    {
+        MinX = bounds.MinX,
+        MinY = bounds.MinY,
+        MaxX = bounds.MaxX,
+        MaxY = bounds.MaxY,
+    };
+
+    private static MapBounds ToBounds(ViewportSnapshot viewport)
+    {
+        ViewportSnapshot view = viewport ?? new ViewportSnapshot();
+        return new MapBounds(view.MinX, view.MinY, view.MaxX, view.MaxY);
+    }
+
+    // A copy that shares nothing a caller could change, with what a stored document may lack (a list,
+    // an id, a cell) left out rather than kept as null.
+    private static MapRevealSnapshot Copy(MapRevealSnapshot map) => new MapRevealSnapshot
+    {
+        MapId = map.MapId,
+        RevealedRegionIds = Ids(map.RevealedRegionIds),
+        RevealedFeatureIds = Ids(map.RevealedFeatureIds),
+        OpenDoorIds = Ids(map.OpenDoorIds),
+        FogCells = (map.FogCells ?? Array.Empty<FogCell>())
+            .Where(cell => cell is not null)
+            .Select(cell => new FogCell { Col = cell.Col, Row = cell.Row })
+            .ToArray(),
+        PlayerViewport = ToViewport(ToBounds(map.PlayerViewport)),
+    };
+
+    private static string[] Ids(IReadOnlyList<string> ids) =>
+        (ids ?? Array.Empty<string>()).Where(id => !string.IsNullOrEmpty(id)).ToArray();
+
     private static bool IsUsableAspect(double aspect) => double.IsFinite(aspect) && aspect > 0;
 
     private static double ClampAspect(double aspect) => Math.Clamp(aspect, 0.2, 5.0);
@@ -750,6 +804,59 @@ public sealed class SessionState
         }
 
         Changed?.Invoke();
+    }
+
+    // Replaces the painted cells with stored ones, leaving out any a document holds as null. Caller
+    // holds gate.
+    private void ReplaceCells(IReadOnlyList<FogCell> cells)
+    {
+        fogCells.Clear();
+        foreach (FogCell cell in (cells ?? Array.Empty<FogCell>()).Where(cell => cell is not null))
+        {
+            fogCells.Add((cell.Col, cell.Row));
+        }
+    }
+
+    // Keeps what is on the map being left, under its id, for when the table comes back to it. A map
+    // never set up and with nothing on it is not kept: coming back to it must seed its doors and
+    // framing as a first visit would. Caller holds gate.
+    private void SetAside()
+    {
+        bool seeded = string.Equals(seededMapId, currentMapId, StringComparison.Ordinal);
+        bool anything = revealedRegionIds.Count > 0 || revealedFeatureIds.Count > 0
+            || fogCells.Count > 0 || openDoorIds.Count > 0;
+        if (currentMapId.Length == 0 || !(seeded || anything))
+        {
+            return;
+        }
+
+        otherMaps[currentMapId] = new MapRevealSnapshot
+        {
+            MapId = currentMapId,
+            RevealedRegionIds = revealedRegionIds.ToArray(),
+            RevealedFeatureIds = revealedFeatureIds.ToArray(),
+            OpenDoorIds = openDoorIds.ToArray(),
+            FogCells = ToFogCells(fogCells),
+            PlayerViewport = ToViewport(playerViewport),
+        };
+    }
+
+    // Puts back what was left on the map now in play, if anything was, and counts that map as seeded:
+    // its doors and framing are the ones the table left there, not the map's defaults. Caller holds
+    // gate.
+    private void BringBack()
+    {
+        if (!otherMaps.Remove(currentMapId, out MapRevealSnapshot left))
+        {
+            return;
+        }
+
+        Replace(revealedRegionIds, left.RevealedRegionIds);
+        Replace(revealedFeatureIds, left.RevealedFeatureIds);
+        Replace(openDoorIds, left.OpenDoorIds);
+        ReplaceCells(left.FogCells);
+        playerViewport = ToBounds(left.PlayerViewport);
+        seededMapId = currentMapId;
     }
 
     // Forgets the one-step clear-reveals undo snapshot. Caller holds gate.

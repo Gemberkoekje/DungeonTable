@@ -47,6 +47,14 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal(4, cell.Col);
         Assert.Equal(9, cell.Row);
 
+        MapRevealSnapshot left = Assert.Single(restored.Reveals.OtherMaps);
+        Assert.Equal("level-2-crypt", left.MapId);
+        Assert.Equal("region-crypt", Assert.Single(left.RevealedRegionIds));
+        Assert.Equal("trap-blade-2", Assert.Single(left.RevealedFeatureIds));
+        Assert.Equal("door-12", Assert.Single(left.OpenDoorIds));
+        Assert.Equal(3, Assert.Single(left.FogCells).Row);
+        Assert.Equal(275, left.PlayerViewport.MaxY);
+
         Assert.Equal("b1", restored.Battle.Id);
         Assert.Equal(3, restored.Battle.Round);
         Assert.Equal(12, restored.Battle.LastIdNumber);
@@ -75,6 +83,22 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal("data_dossiers_level_1_area_1", area.AreaNodeId);
         Assert.Equal("data_statblocks_monsters_bugbear", Assert.Single(area.ClearedCreatureIds));
         Assert.Equal("They spiked the door open.", area.Note);
+    }
+
+    [Fact]
+    public void A_document_written_before_other_maps_were_kept_restores_the_map_in_play()
+    {
+        // OtherMaps went into the reveals additively, without bumping CurrentVersion, so a document
+        // from an earlier build must restore the map in play and arrive with no other map kept.
+        JsonNode document = JsonNode.Parse(SessionDocuments.Serializer().ToJson(Sample()));
+        Assert.True(document["reveals"].AsObject().Remove("otherMaps"));
+
+        TableSnapshot restored = Read(document.ToJsonString());
+
+        Assert.Equal("level-1-undercroft", restored.Reveals.CurrentMapId);
+        Assert.Equal("region-entrywell", Assert.Single(restored.Reveals.RevealedRegionIds));
+        Assert.NotNull(restored.Reveals.OtherMaps);
+        Assert.Empty(restored.Reveals.OtherMaps);
     }
 
     [Fact]
@@ -288,6 +312,18 @@ public sealed class SessionDocumentJsonTests
                 Visible = true,
                 Size = ArtSize.Large,
                 TrayImageIds = new[] { "mm-vampire-spawn", "mm-bandit-captain" },
+            },
+            OtherMaps = new[]
+            {
+                new MapRevealSnapshot
+                {
+                    MapId = "level-2-crypt",
+                    RevealedRegionIds = new[] { "region-crypt" },
+                    RevealedFeatureIds = new[] { "trap-blade-2" },
+                    OpenDoorIds = new[] { "door-12" },
+                    FogCells = new[] { new FogCell { Col = 7, Row = 3 } },
+                    PlayerViewport = new ViewportSnapshot { MinX = 40, MinY = 50, MaxX = 440, MaxY = 275 },
+                },
             },
         },
         Battle = new BattleSnapshot

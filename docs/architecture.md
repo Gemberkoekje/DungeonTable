@@ -148,7 +148,7 @@ Blazor Server keeps one circuit per browser tab. The state of the table is share
 
 | service | lifetime | holds |
 |---|---|---|
-| `SessionState` | singleton | what the projector shows: the map, revealed regions and features, fog cells, open doors, concealed objects, the framing, the picture over the map |
+| `SessionState` | singleton | what the projector shows: the map, revealed regions and features, fog cells, open doors, concealed objects, the framing, the picture over the map; and the same per map the table has left |
 | `BattleState` | singleton | the one running fight |
 | `CampaignState` | singleton | quest progress, each deck's drawn cards, per-area checklists and notes |
 | `DmWorkspace` | scoped | one DM tab's own view: the loaded map, the room shown, the reference history |
@@ -170,6 +170,14 @@ The DM reveals the map as the party explores: a room at a time, a fog brush, a "
 what someone standing at a point could see (`VisionReveal`), and corridor stubs that fade out a step or
 two past an open door (`CorridorReveal`). The player view draws the same map under an opaque fog built
 from the revealed geometry only, and leaves out what the DM has concealed.
+
+Reveals belong to a map: each has its own world coordinates, regions and doors. When the table moves to
+another map, `SessionState` sets the reveals, painted fog, open doors and framing aside under the map
+they were on, and brings back whatever was left on the new one, so a party that goes down a floor and
+back up finds the first floor as they left it. A map brought back counts as already seeded: its
+default-open doors and starting framing are not applied again over what the DM changed. A map left
+before it was ever set up, with nothing on it, is not kept, so it still gets them on its first real
+visit. The maps set aside are saved with the rest, in `RevealSnapshot.OtherMaps`.
 
 Leaking hidden detail into the player view's DOM is not treated as a security problem: past the
 passphrase, only the people at the table have the URL, and the player view is a projector. What the
