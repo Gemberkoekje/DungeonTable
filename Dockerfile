@@ -18,7 +18,7 @@ RUN dotnet restore DungeonTable.Web/DungeonTable.Web.csproj --locked-mode
 RUN dotnet publish DungeonTable.Web/DungeonTable.Web.csproj -c Release -r linux-x64 --self-contained false \
     -p:UseAppHost=false -o /app/publish --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.13 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.14 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY LICENSE .
