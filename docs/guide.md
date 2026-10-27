@@ -43,7 +43,9 @@ switch between them from anywhere. The bar under the tabs stays in view whicheve
   picture is on the projector, the bar says so too.
 
 When the campaign has more than one map, the **Map** picker at the top right switches between them.
-The projector follows.
+The projector follows. Each map keeps what you revealed on it, its open doors and where the projector
+was framed, so when the party goes back to a floor they see it as they left it. A map shown for the
+first time starts dark, with its doors as the Room Editor set them.
 
 ### The map and its tools
 
@@ -66,7 +68,8 @@ Pick a tool from the column on the left, or press its number:
 
 The quickest way to reveal a room is the **Reveal room to players** button in the panel beside the
 map, which appears when you click a room with Inspect. A room drawn as several regions is revealed
-whole. **Clear reveals…** at the bottom hides everything again, and offers to undo the clear.
+whole. **Clear reveals…** at the bottom hides everything on this map again, and offers to undo the
+clear. Other maps keep their reveals.
 
 The single-key shortcuts (these, and the ones on the Battle and Art tabs) do nothing while you are
 typing in a box, so a note never changes your tool.

@@ -42,6 +42,9 @@ public sealed class MartenSessionStoreTests
         Assert.Equal(sessionId, restored.SessionId);
         Assert.Equal("region-entrywell", Assert.Single(restored.Reveals.RevealedRegionIds));
         Assert.Equal(4, Assert.Single(restored.Reveals.FogCells).Col);
+        MapRevealSnapshot left = Assert.Single(restored.Reveals.OtherMaps);
+        Assert.Equal("region-crypt", Assert.Single(left.RevealedRegionIds));
+        Assert.Equal(7, Assert.Single(left.FogCells).Col);
         Assert.Equal("Nave", restored.Battle.AreaTitle);
 
         Combatant combatant = Assert.Single(restored.Battle.Combatants);
@@ -150,6 +153,15 @@ public sealed class MartenSessionStoreTests
             FogCells = new[] { new FogCell { Col = 4, Row = 9 } },
             PlayerViewport = new ViewportSnapshot { MinX = 100, MinY = 200, MaxX = 1_100, MaxY = 762.5 },
             PlayerAspect = 16.0 / 9.0,
+            OtherMaps = new[]
+            {
+                new MapRevealSnapshot
+                {
+                    MapId = "level-2-crypt",
+                    RevealedRegionIds = new[] { "region-crypt" },
+                    FogCells = new[] { new FogCell { Col = 7, Row = 3 } },
+                },
+            },
         },
         Battle = new BattleSnapshot
         {

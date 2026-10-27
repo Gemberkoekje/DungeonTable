@@ -165,8 +165,8 @@ public sealed class RevealSnapshotTests
     [Fact]
     public void Restoring_the_same_map_keeps_its_reveals_when_the_dm_view_points_at_it_again()
     {
-        // SetCurrentMap clears reveals when the map changes, and the first DM circuit after a restart
-        // calls it with the map it loads. Restoring CurrentMapId is what keeps that call a no-op.
+        // SetCurrentMap sets the reveals aside when the map changes, and the first DM circuit after a
+        // restart calls it with the map it loads. Restoring CurrentMapId is what keeps that call a no-op.
         var state = new SessionState();
         state.SetCurrentMap("level-1-undercroft");
         state.ToggleRegion("region-entrywell");
@@ -177,4 +177,70 @@ public sealed class RevealSnapshotTests
 
         Assert.Equal(OneRegion, restored.RevealedRegionIds());
     }
+
+    [Fact]
+    public void The_maps_the_table_has_left_survive_a_capture_and_restore()
+    {
+        // A restart between floors must not cost the floor the party left: going back after it shows
+        // that floor as they left it.
+        var state = new SessionState();
+        state.SetCurrentMap("level-1-undercroft");
+        state.MarkSeeded("level-1-undercroft");
+        state.ToggleRegion("region-entrywell");
+        state.PaintCell(4, 9, erase: false);
+        state.SetDoorOpen("door-7", open: true);
+        state.SetPlayerViewport(new MapBounds(100, 200, 1_100, 762.5));
+        state.SetCurrentMap("level-2-crypt");
+        state.MarkSeeded("level-2-crypt");
+
+        var restored = new SessionState();
+        restored.Restore(state.Capture());
+        Assert.Equal("level-2-crypt", restored.CurrentMapId);
+        Assert.Empty(restored.RevealedRegionIds());
+
+        restored.SetCurrentMap("level-1-undercroft");
+
+        Assert.Equal(OneRegion, restored.RevealedRegionIds());
+        Assert.Equal(CellFourNine, restored.FogCells());
+        Assert.Equal(DoorSeven, restored.OpenDoorIds());
+        Assert.Equal(new MapBounds(100, 200, 1_100, 762.5), restored.PlayerViewport);
+        Assert.Equal("level-1-undercroft", restored.SeededMapId);
+    }
+
+    [Fact]
+    public void A_stored_entry_for_the_map_in_play_or_without_an_id_is_not_read()
+    {
+        // The map in play is the snapshot's own fields; an entry for it would bring stale reveals back
+        // the next time the table returns. An entry without an id belongs to no map, a missing entry
+        // is nothing, and of two entries for one map the first is kept.
+        var state = new SessionState();
+        state.Restore(new RevealSnapshot
+        {
+            CurrentMapId = "level-1-undercroft",
+            RevealedRegionIds = OneRegion,
+            OtherMaps = new[]
+            {
+                new MapRevealSnapshot { MapId = "level-1-undercroft", RevealedRegionIds = FreshRegion },
+                new MapRevealSnapshot { MapId = string.Empty, RevealedRegionIds = FreshRegion },
+                null,
+                new MapRevealSnapshot { MapId = "level-2-crypt", RevealedRegionIds = CryptRegion, FogCells = new FogCell[] { null } },
+                new MapRevealSnapshot { MapId = "level-2-crypt", RevealedRegionIds = FreshRegion },
+            },
+        });
+
+        MapRevealSnapshot kept = Assert.Single(state.Capture().OtherMaps);
+        Assert.Equal("level-2-crypt", kept.MapId);
+        Assert.Equal(OneRegion, state.RevealedRegionIds());
+
+        state.SetCurrentMap("level-2-crypt");
+        Assert.Equal(CryptRegion, state.RevealedRegionIds());
+        Assert.Empty(state.FogCells());
+
+        state.SetCurrentMap("level-1-undercroft");
+        Assert.Equal(OneRegion, state.RevealedRegionIds());
+    }
+
+    private static readonly string[] CryptRegion = { "region-crypt" };
+    private static readonly string[] DoorSeven = { "door-7" };
+    private static readonly (int Col, int Row)[] CellFourNine = { (4, 9) };
 }

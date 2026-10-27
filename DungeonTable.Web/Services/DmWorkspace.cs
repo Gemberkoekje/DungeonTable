@@ -317,7 +317,7 @@ public sealed class DmWorkspace
         levelNames = await MapLabels.LoadAsync(annotations, MapIds, cancellationToken);
 
         // The map the table is on, when there is one: a second DM window, or this one refreshed, must
-        // not point the shared session at the first map, which clears the reveals of the one in play.
+        // not point the shared session at the first map, which moves the projector off the one in play.
         string tableMap = session.CurrentMapId;
         string first = MapIds.Count > 0 ? MapIds[0] : string.Empty;
         await LoadMapAsync(MapIds.Contains(tableMap) ? tableMap : first, cancellationToken);
@@ -405,12 +405,13 @@ public sealed class DmWorkspace
 
         await LoadAnnotationsAsync(cancellationToken);
 
-        // Point the shared reveal state at this map; a different map clears prior reveals.
+        // Point the shared reveal state at this map. A different map sets the previous one's reveals
+        // aside, and brings back this one's if the table has been on it before.
         session.SetCurrentMap(mapId);
 
-        // Seed the player viewport whenever a different map loads (each map has its own world
+        // Seed the player viewport the first time a map is shown (each map has its own world
         // coordinates), to a centred rectangle at the player aspect, and open the doors the
-        // annotations marked default-open.
+        // annotations marked default-open. A map the table comes back to keeps what it had.
         //
         // "Already seeded" is tracked on the shared session, not here: this workspace is scoped, so a
         // browser refresh (or a second DM window) used to arrive with a blank flag and re-seed —

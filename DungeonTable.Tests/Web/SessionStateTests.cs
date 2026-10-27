@@ -100,7 +100,7 @@ public sealed class SessionStateTests
     }
 
     [Fact]
-    public void Switching_to_a_different_map_clears_all_reveals()
+    public void A_map_shown_for_the_first_time_has_nothing_revealed()
     {
         var state = new SessionState();
         state.SetCurrentMap("level-1");
@@ -115,6 +115,66 @@ public sealed class SessionStateTests
         Assert.Empty(state.RevealedFeatureIds());
         Assert.Empty(state.FogCells());
     }
+
+    [Fact]
+    public void Going_back_to_a_map_brings_back_everything_left_on_it()
+    {
+        // The party goes down a floor and comes back up: the first floor's fog, doors and framing must
+        // be as they left them, and nothing from the second floor may leak onto it.
+        var state = new SessionState();
+        state.SetCurrentMap("level-1");
+        state.MarkSeeded("level-1");
+        state.ToggleRegion("room-1");
+        state.ToggleFeature("trap-1");
+        state.PaintCell(4, 9, erase: false);
+        state.SetDoorOpen("door-1", open: true);
+        state.SetPlayerViewport(new MapBounds(10, 20, 410, 245));
+
+        state.SetCurrentMap("level-2");
+        state.MarkSeeded("level-2");
+        state.ToggleRegion("room-9");
+        state.SetDoorOpen("door-9", open: true);
+        state.SetPlayerViewport(new MapBounds(500, 500, 900, 725));
+
+        state.SetCurrentMap("level-1");
+
+        Assert.Equal(RoomOne, state.RevealedRegionIds());
+        Assert.Equal(TrapOne, state.RevealedFeatureIds());
+        Assert.Equal(CellFourNine, state.FogCells());
+        Assert.Equal(DoorOne, state.OpenDoorIds());
+        Assert.Equal(new MapBounds(10, 20, 410, 245), state.PlayerViewport);
+        // Brought back means already set up: a DM view must not seed its doors and framing again.
+        Assert.Equal("level-1", state.SeededMapId);
+
+        state.SetCurrentMap("level-2");
+
+        Assert.Equal(RoomNine, state.RevealedRegionIds());
+        Assert.Equal(DoorNine, state.OpenDoorIds());
+        Assert.Equal(new MapBounds(500, 500, 900, 725), state.PlayerViewport);
+    }
+
+    [Fact]
+    public void A_map_left_before_it_was_set_up_is_set_up_when_the_table_comes_back()
+    {
+        // Nothing was seeded or revealed on level 1 yet, so coming back must seed its default-open
+        // doors and framing as a first visit would, not bring back an empty map that counts as seeded.
+        var state = new SessionState();
+        state.SetCurrentMap("level-1");
+        state.SetCurrentMap("level-2");
+        state.MarkSeeded("level-2");
+
+        state.SetCurrentMap("level-1");
+
+        Assert.Equal("level-2", state.SeededMapId);
+        Assert.Empty(state.RevealedRegionIds());
+    }
+
+    private static readonly string[] RoomOne = { "room-1" };
+    private static readonly string[] RoomNine = { "room-9" };
+    private static readonly string[] TrapOne = { "trap-1" };
+    private static readonly string[] DoorOne = { "door-1" };
+    private static readonly string[] DoorNine = { "door-9" };
+    private static readonly (int Col, int Row)[] CellFourNine = { (4, 9) };
 
     [Fact]
     public void Re_selecting_the_same_map_keeps_the_reveal_state()
@@ -276,7 +336,7 @@ public sealed class SessionStateTests
     private static readonly string[] SeedDoorC = { "c" };
 
     [Fact]
-    public void Switching_maps_clears_open_doors()
+    public void A_map_shown_for_the_first_time_has_no_doors_open()
     {
         var state = new SessionState();
         state.SetCurrentMap("m1");

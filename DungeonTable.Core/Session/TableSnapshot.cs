@@ -36,6 +36,8 @@ public sealed class TableSnapshot
     /// costing the reveals and the running fight too. Additive and default-empty means no bump.
     /// The same holds for the campaign's drawn cards moving from one deck's list to
     /// <c>Campaign.Decks</c>: each build ignores the other's field and loses only the drawn cards.
+    /// And for <c>Reveals.OtherMaps</c>: an older build restores the map in play and loses only what
+    /// was revealed on the others.
     /// </remarks>
     public const int CurrentVersion = 1;
 

@@ -48,4 +48,13 @@ public sealed class RevealSnapshot
     /// unharmed — which is why <see cref="TableSnapshot.CurrentVersion"/> was not bumped for it.
     /// </summary>
     public ShownArtSnapshot ShownArt { get; set; } = new ShownArtSnapshot();
+
+    /// <summary>
+    /// What was left on each other map the table has been on, so going back to one shows it as the
+    /// party left it. Never holds <see cref="CurrentMapId"/>: the fields above are that map's.
+    /// Additive and default-empty like <see cref="ShownArt"/>: a build that predates it restores the
+    /// map in play and loses only the other maps' reveals, so
+    /// <see cref="TableSnapshot.CurrentVersion"/> was not bumped for it either.
+    /// </summary>
+    public IReadOnlyList<MapRevealSnapshot> OtherMaps { get; set; } = Array.Empty<MapRevealSnapshot>();
 }
