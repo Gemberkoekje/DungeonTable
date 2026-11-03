@@ -1,11 +1,18 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @*
-    Renders a fully-vector map (parsed from a Dungeon Scrawl .ds) as a single self-contained SVG.
+    Renders a fully-vector map (parsed from a Dungeon Scrawl .ds) as SVG.
     The DM and player views share this component:
       - Pannable wraps the map in a bounded box with drag-pan / wheel-zoom.
       - ShowPlayerBox overlays the aspect-locked "player view" rectangle the DM moves/resizes.
       - ViewBox restricts the SVG to a world-unit region (the player view shows only that box).
+
+    The DM's map is drawn in three layers inside one svg element: the map itself, the fog, and the
+    editor overlay. Each is its own piece of markup, and Blazor sends a piece only when its text has
+    changed, so a reveal sends the fog (a few kilobytes) and not the map (often over a megabyte). The
+    map layer is rendered again only when MapLayerKey says something it draws has changed. The empty
+    g.dt-live group comes last, so the editor script's drag previews drawn into it stay on top of the
+    layers when Blazor replaces one.
 *@
 
 <style>
@@ -68,7 +75,7 @@
 {
     <div class="vector-map-box" @ref="boxRef">
         <div class="vector-map-pan">
-            @((MarkupString)svg)
+            @MapSvg
         </div>
         <div class="vector-map-tools">
             <button type="button" title="Zoom in" @onclick="ZoomIn">+</button>
@@ -80,7 +87,7 @@
 else
 {
     <div class="vector-map-host @CssClass">
-        @((MarkupString)svg)
+        @MapSvg
     </div>
 }
 
@@ -194,7 +201,21 @@ else
 
     private ElementReference boxRef;
     private DotNetObjectReference<VectorMapCanvas> selfRef;
+
+    // The player projector's whole SVG, while it is still one piece of markup.
     private string svg = string.Empty;
+
+    // The DM map's layers (see the comment at the top), and what the map layer was rendered from.
+    private string viewBox = string.Empty;
+    private string mapLayer = string.Empty;
+    private string fogLayer = string.Empty;
+    private string overlayLayer = string.Empty;
+    private VectorMap mapLayerMap;
+    private string mapLayerKey = string.Empty;
+
+    private RenderFragment MapSvg => Fog.BookEdge
+        ? @<text>@((MarkupString)svg)</text>
+        : @<svg xmlns="http://www.w3.org/2000/svg" viewBox="@viewBox" preserveAspectRatio="xMidYMid meet" class="vector-map">@((MarkupString)mapLayer)@((MarkupString)fogLayer)@((MarkupString)overlayLayer)<g class="dt-live"></g></svg>;
 
     protected override void OnParametersSet()
     {
@@ -235,7 +256,18 @@ else
             Conceal = conceal,
             Fog = Fog,
         };
-        svg = VectorMapSvgRenderer.Render(Map, options);
+
+        viewBox = VectorMapSvgRenderer.ViewBox(Map, options);
+        string key = VectorMapSvgRenderer.MapLayerKey(options);
+        if (!ReferenceEquals(Map, mapLayerMap) || !string.Equals(key, mapLayerKey, StringComparison.Ordinal))
+        {
+            mapLayer = VectorMapSvgRenderer.RenderMapLayer(Map, options);
+            mapLayerMap = Map;
+            mapLayerKey = key;
+        }
+
+        fogLayer = VectorMapSvgRenderer.RenderFogLayer(Map, options);
+        overlayLayer = VectorMapSvgRenderer.RenderOverlayLayer(options);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

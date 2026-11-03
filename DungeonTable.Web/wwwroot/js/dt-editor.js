@@ -29,6 +29,10 @@ window.dtEditor = (function () {
 
     function svgOf(box) { return box ? box.querySelector('svg') : null; }
 
+    // Where the drag previews go: the empty g.dt-live group the canvas keeps last in the SVG, so they stay
+    // above the map's layers when Blazor replaces one of them mid-drag (the SVG element itself is kept).
+    function liveOf(svg) { return svg.querySelector('g.dt-live') || svg; }
+
     // Screen (clientX/clientY) -> map world units, honouring the live pan/zoom via the SVG's
     // on-screen matrix. Returns null until the SVG has a real layout.
     function worldOf(box, clientX, clientY) {
@@ -71,7 +75,7 @@ window.dtEditor = (function () {
             rect.setAttribute('fill', 'rgba(230,126,34,0.15)');
             rect.setAttribute('stroke', '#e67e22');
             rect.setAttribute('pointer-events', 'none');
-            svg.appendChild(rect);
+            liveOf(svg).appendChild(rect);
         }
         return rect;
     }
@@ -105,9 +109,9 @@ window.dtEditor = (function () {
 
     // The dashed segment from the outline's last corner to the pointer. .NET draws the corners
     // placed so far (the g.dt-draft-poly group) and writes the last one onto that group, with
-    // whether the next corner snaps; the segment ends where a click would put that corner. The SVG
-    // is re-rendered after every click, which wipes this element, so it is drawn again from the
-    // last pointer position as soon as the tool is re-applied (setTool).
+    // whether the next corner snaps; the segment ends where a click would put that corner. A click
+    // moves the outline's last corner, so the segment is drawn again from the last pointer position
+    // as soon as the tool is re-applied after the render (setTool).
     function drawRubber(box, s, cx, cy) {
         const svg = svgOf(box);
         const draft = svg && svg.querySelector('g.dt-draft-poly');
@@ -129,7 +133,7 @@ window.dtEditor = (function () {
             line.setAttribute('stroke', '#e67e22');
             line.setAttribute('stroke-linecap', 'round');
             line.setAttribute('pointer-events', 'none');
-            svg.appendChild(line);
+            liveOf(svg).appendChild(line);
         }
         line.setAttribute('x1', lx); line.setAttribute('y1', ly);
         line.setAttribute('x2', x); line.setAttribute('y2', y);
@@ -175,7 +179,7 @@ window.dtEditor = (function () {
             g.appendChild(under);
             g.appendChild(line);
             g.appendChild(label);
-            svg.appendChild(g);
+            liveOf(svg).appendChild(g);
         }
         return g;
     }

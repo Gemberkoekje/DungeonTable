@@ -52,44 +52,129 @@ public static class VectorMapSvgRenderer
     /// <summary>Renders the map to an SVG document string.</summary>
     /// <param name="map">The map to render.</param>
     /// <param name="options">Layer toggles and padding.</param>
-    /// <returns>A complete <c>&lt;svg&gt;</c> element.</returns>
+    /// <returns>A complete <c>&lt;svg&gt;</c> element: the three layers in one document.</returns>
     public static string Render(VectorMap map, VectorMapRenderOptions options)
     {
-        MapBounds bounds = map.Bounds;
-        double pad = options.Padding;
-        double minX = bounds.MinX - pad;
-        double minY = bounds.MinY - pad;
-        double width = bounds.Width + (pad * 2);
-        double height = bounds.Height + (pad * 2);
+        var svg = new StringBuilder(64 * 1024);
+        svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"").Append(ViewBox(map, options))
+            .Append("\" preserveAspectRatio=\"xMidYMid meet\" class=\"vector-map\">")
+            .Append(RenderMapLayer(map, options))
+            .Append(RenderFogLayer(map, options))
+            .Append(RenderOverlayLayer(options))
+            .Append("</svg>");
+        return svg.ToString();
+    }
 
-        // The player view overrides the viewBox to show only the DM-chosen region; masks and grid
-        // still cover the full padded bounds below.
+    /// <summary>
+    /// The <c>viewBox</c> the map is drawn in: the <see cref="VectorMapRenderOptions.ViewBox"/> region when
+    /// one is set (the player view shows only the DM-chosen region), otherwise the whole map with padding.
+    /// </summary>
+    /// <param name="map">The map.</param>
+    /// <param name="options">The render options.</param>
+    /// <returns>The four numbers of the <c>viewBox</c> attribute.</returns>
+    public static string ViewBox(VectorMap map, VectorMapRenderOptions options)
+    {
+        (double minX, double minY, double width, double height) = Padded(map, options.Padding);
         MapBounds view = options.ViewBox.Width > 0 && options.ViewBox.Height > 0
             ? options.ViewBox
             : new MapBounds(minX, minY, minX + width, minY + height);
+        return N(view.MinX) + " " + N(view.MinY) + " " + N(view.Width) + " " + N(view.Height);
+    }
 
+    /// <summary>
+    /// The first of a DM map's three layers: the map itself (floor, walls, grid, doors, stairs and
+    /// decorations, with their definitions). It is by far the largest, and it changes only when
+    /// <see cref="MapLayerKey"/> does, so a canvas renders it again only then.
+    /// </summary>
+    /// <param name="map">The map.</param>
+    /// <param name="options">The render options.</param>
+    /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element.</returns>
+    public static string RenderMapLayer(VectorMap map, VectorMapRenderOptions options)
+    {
+        (double minX, double minY, double width, double height) = Padded(map, options.Padding);
         var svg = new StringBuilder(64 * 1024);
-        svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"")
-            .Append(N(view.MinX)).Append(' ').Append(N(view.MinY)).Append(' ')
-            .Append(N(view.Width)).Append(' ').Append(N(view.Height))
-            .Append("\" preserveAspectRatio=\"xMidYMid meet\" class=\"vector-map\">");
-
         AppendMapContent(svg, map, options, minX, minY, width, height);
-
-        // Fog covers the map content but sits below the editor overlay (so the DM keeps drawing over
-        // it) and below the revealed markers it draws itself (so they read on the player projector).
-        if (options.Fog.Enabled)
-        {
-            AppendFog(svg, options.Fog, minX, minY, width, height);
-        }
-
-        if (!options.Overlay.IsEmpty)
-        {
-            AppendEditorOverlay(svg, options.Overlay);
-        }
-
-        svg.Append("</svg>");
         return svg.ToString();
+    }
+
+    /// <summary>
+    /// The second layer: the fog over what the players cannot see yet, with the revealed regions and
+    /// cells punched out of it. It covers the map but sits below the editor overlay (so the DM keeps
+    /// drawing over it) and below the revealed markers it draws itself (so they read on the projector).
+    /// Empty when the fog is off.
+    /// </summary>
+    /// <param name="map">The map (its bounds size the fog sheet).</param>
+    /// <param name="options">The render options; <see cref="VectorMapRenderOptions.Fog"/> is drawn.</param>
+    /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element, or an empty string.</returns>
+    public static string RenderFogLayer(VectorMap map, VectorMapRenderOptions options)
+    {
+        if (!options.Fog.Enabled)
+        {
+            return string.Empty;
+        }
+
+        (double minX, double minY, double width, double height) = Padded(map, options.Padding);
+        var svg = new StringBuilder(4 * 1024);
+        AppendFog(svg, options.Fog, minX, minY, width, height);
+        return svg.ToString();
+    }
+
+    /// <summary>
+    /// The third layer: the editor overlay (regions, markers, hit targets, the selection, the measured
+    /// line and the DM's pointer), on top of everything. Empty when there is no overlay.
+    /// </summary>
+    /// <param name="options">The render options; <see cref="VectorMapRenderOptions.Overlay"/> is drawn.</param>
+    /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element, or an empty string.</returns>
+    public static string RenderOverlayLayer(VectorMapRenderOptions options)
+    {
+        if (options.Overlay.IsEmpty)
+        {
+            return string.Empty;
+        }
+
+        var svg = new StringBuilder(8 * 1024);
+        AppendEditorOverlay(svg, options.Overlay);
+        return svg.ToString();
+    }
+
+    /// <summary>
+    /// Everything <see cref="RenderMapLayer"/> depends on besides the map itself, as one string: equal keys
+    /// for the same map mean an equal map layer, so a canvas can keep the one it rendered. Only the door
+    /// and object ids that change what is drawn take part: revealing a trap marker or a room does not.
+    /// </summary>
+    /// <param name="options">The render options.</param>
+    /// <returns>The key.</returns>
+    public static string MapLayerKey(VectorMapRenderOptions options)
+    {
+        DoorRenderState doors = options.Doors;
+        ConcealState conceal = options.Conceal;
+        var key = new StringBuilder();
+        key.Append(options.ShowGrid ? 'G' : 'g').Append(options.ShowShadow ? 'S' : 's')
+            .Append(options.ShowWallShading ? 'W' : 'w').Append(options.ShowObjects ? 'O' : 'o')
+            .Append(options.MarkSecretDoors ? 'M' : 'm').Append(N(options.Padding));
+        AppendKeyIds(key, doors.SecretDoorIds.Where(doors.IsHiddenSecret));
+        AppendKeyIds(key, doors.OpenDoorIds);
+        AppendKeyIds(key, doors.DoubleDoorIds);
+        AppendKeyIds(key, conceal.ConcealedIds.Where(conceal.IsHidden));
+        key.Append('|').Append(RectsPathData(options.FloorHoles));
+        return key.ToString();
+    }
+
+    // A set of ids in a fixed order, each prefixed with its length so no two different sets read alike.
+    private static void AppendKeyIds(StringBuilder key, IEnumerable<string> ids)
+    {
+        key.Append('|');
+        foreach (string id in ids.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            key.Append(id.Length).Append(':').Append(id);
+        }
+    }
+
+    // The map's bounds grown by the padding on every side, as the corner and size the layers work in.
+    private static (double MinX, double MinY, double Width, double Height) Padded(VectorMap map, double pad)
+    {
+        MapBounds bounds = map.Bounds;
+        return (bounds.MinX - pad, bounds.MinY - pad, bounds.Width + (pad * 2), bounds.Height + (pad * 2));
     }
 
     // Draws the book-style map itself (defs, exterior shading, floor, grid, walls, objects/decoration)
@@ -1089,7 +1174,9 @@ public static class VectorMapSvgRenderer
     }
 
     // Emits the revealed polygons + cells with the given presentation attributes (fill or stroke),
-    // skipping non-finite geometry so a malformed reveal fails closed (stays fogged).
+    // skipping non-finite geometry so a malformed reveal fails closed (stays fogged). The cells go out as
+    // ONE path of runs (the cells of a row merged where they touch) rather than an element per cell: a
+    // long evening reveals thousands of cells, and the mask is sent again on every reveal.
     private static void AppendRevealShapes(StringBuilder svg, FogOverlay fog, string attributes)
     {
         foreach (IReadOnlyList<MapPoint> polygon in fog.RevealedPolygons)
@@ -1101,11 +1188,67 @@ public static class VectorMapSvgRenderer
             }
         }
 
-        foreach (MapBounds cell in fog.RevealedCells.Where(IsFinite))
+        string runs = CellRunsPathData(fog.RevealedCells);
+        if (runs.Length > 0)
         {
-            AppendRect(svg, cell, attributes);
+            svg.Append("<path d=\"").Append(runs).Append("\" ").Append(attributes).Append("/>");
         }
     }
+
+    /// <summary>
+    /// Grid cells as path data, one closed rectangle per run: the cells sharing a row (the same top and
+    /// bottom) merged left to right wherever one starts where the last ended. Cells that do not touch, or
+    /// that sit on no shared row, stay rectangles of their own, so the area covered is exactly the cells'.
+    /// Non-finite cells are skipped.
+    /// </summary>
+    /// <param name="cells">The cells, in world units, in any order; duplicates are harmless.</param>
+    /// <returns>The path data; empty when there are no cells.</returns>
+    internal static string CellRunsPathData(IReadOnlyList<MapBounds> cells)
+    {
+        var rows = new SortedDictionary<(double MinY, double MaxY), List<MapBounds>>();
+        foreach (MapBounds cell in cells.Where(IsFinite))
+        {
+            if (!rows.TryGetValue((cell.MinY, cell.MaxY), out List<MapBounds> row))
+            {
+                row = new List<MapBounds>();
+                rows[(cell.MinY, cell.MaxY)] = row;
+            }
+
+            row.Add(cell);
+        }
+
+        var d = new StringBuilder();
+        foreach (KeyValuePair<(double MinY, double MaxY), List<MapBounds>> row in rows)
+        {
+            List<MapBounds> line = row.Value;
+            line.Sort((a, b) => a.MinX.CompareTo(b.MinX));
+
+            // Two neighbouring cells' shared edge can differ in the last bit (x + size against the next
+            // cell's own x), so "touching" allows a millionth of a cell; a gap that small draws as none.
+            double start = line[0].MinX, end = line[0].MaxX;
+            foreach (MapBounds cell in line.Skip(1))
+            {
+                if (cell.MinX <= end + (cell.Width * 1e-6))
+                {
+                    end = Math.Max(end, cell.MaxX);
+                    continue;
+                }
+
+                AppendRun(d, start, end, row.Key.MinY, row.Key.MaxY);
+                start = cell.MinX;
+                end = cell.MaxX;
+            }
+
+            AppendRun(d, start, end, row.Key.MinY, row.Key.MaxY);
+        }
+
+        return d.ToString();
+    }
+
+    private static void AppendRun(StringBuilder d, double minX, double maxX, double minY, double maxY) =>
+        d.Append('M').Append(N(minX)).Append(' ').Append(N(minY))
+            .Append('H').Append(N(maxX)).Append('V').Append(N(maxY))
+            .Append('H').Append(N(minX)).Append('Z');
 
     private static void AppendMaskOpen(
         StringBuilder svg, string id, double minX, double minY, double width, double height, bool whiteBase)
@@ -1135,13 +1278,6 @@ public static class VectorMapSvgRenderer
         }
 
         svg.Append("/>");
-    }
-
-    private static void AppendRect(StringBuilder svg, MapBounds bounds, string attributes)
-    {
-        svg.Append("<rect x=\"").Append(N(bounds.MinX)).Append("\" y=\"").Append(N(bounds.MinY))
-            .Append("\" width=\"").Append(N(bounds.Width)).Append("\" height=\"").Append(N(bounds.Height))
-            .Append("\" ").Append(attributes).Append("/>");
     }
 
     private static bool AllFinite(IReadOnlyList<MapPoint> points) =>
