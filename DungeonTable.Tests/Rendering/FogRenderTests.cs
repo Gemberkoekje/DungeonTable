@@ -102,7 +102,7 @@ public sealed class FogRenderTests
     }
 
     [Fact]
-    public void A_revealed_cell_punches_a_black_rect_into_the_mask()
+    public void A_revealed_cell_punches_a_black_square_into_the_mask()
     {
         var options = new VectorMapRenderOptions
         {
@@ -115,7 +115,40 @@ public sealed class FogRenderTests
 
         string svg = VectorMapSvgRenderer.Render(SimpleMap(), options);
 
-        Assert.Contains("<rect x=\"20\" y=\"20\" width=\"10\" height=\"10\" fill=\"black\"/>", svg, StringComparison.Ordinal);
+        Assert.Contains("<path d=\"M20 20H30V30H20Z\" fill=\"black\"/>", svg, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Revealed_cells_are_one_path_whatever_their_number()
+    {
+        // A long evening reveals thousands of cells; the mask is sent again with every reveal, so it must
+        // not grow an element per cell.
+        var cells = new List<MapBounds>();
+        for (int col = 0; col < 10; col++)
+        {
+            for (int row = 0; row < 10; row += 2)
+            {
+                cells.Add(new MapBounds(col * 10, row * 10, (col * 10) + 10, (row * 10) + 10));
+            }
+        }
+
+        var options = new VectorMapRenderOptions { Fog = new FogOverlay { Enabled = true, RevealedCells = cells } };
+
+        string fog = VectorMapSvgRenderer.RenderFogLayer(SimpleMap(), options);
+
+        Assert.Equal(1, Count(fog, "<path "));
+        Assert.Equal(0, Count(fog, "<rect x=\"0\" y=\"0\" width=\"10\""));
+    }
+
+    private static int Count(string text, string part)
+    {
+        int count = 0;
+        for (int at = text.IndexOf(part, StringComparison.Ordinal); at >= 0; at = text.IndexOf(part, at + 1, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     [Fact]

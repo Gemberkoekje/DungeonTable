@@ -183,6 +183,65 @@ Leaking hidden detail into the player view's DOM is not treated as a security pr
 passphrase, only the people at the table have the URL, and the player view is a projector. What the
 projector actually shows must be right, and the tests check that.
 
+## The fog lifter
+
+The lifter reveals what someone standing at a point could see within a range: every floor tile with a
+straight line to one of its floor sample points (the centre, then a 7×7 lattice at eighths of the tile,
+so a sliver of floor beside a slanted wall still counts) that crosses no wall and no still-hidden secret
+door. Wall segments are extended half a cell past every corner, so a line cannot slip through the point
+where two walls meet. Done plainly, that is each sample point tested against every floor outline on the
+map and each sight line against every wall in reach: on a large level a 120 ft lift took seconds.
+
+What never changes about a map is therefore worked out once per map, in a `VisionIndex` kept per
+`VectorMap` instance (a map read again from disk gets a new one):
+
+- which sample points are floor, a grid row at a time: the crossings of the floor's edges with each
+  row's lines of sample points are found once and sorted, and a point is floor when an odd number of
+  them lie to its right. That is `PointInRings`, with the same arithmetic, so the answer is the same to
+  the bit;
+- the walls, with how many meet at each end (for the corners) and which cells each one passes.
+
+Each lift then files the walls within its reach in a grid of buckets (`SightLines`), and a sight line
+tests only the walls in the buckets it passes, nearest first. The projector's corridor peek uses the
+same index for its floor test and its walls.
+
+**The rule did not change, only the bookkeeping.** The old algorithms are kept in the tests
+(`VisionRevealReference`, `CorridorRevealReference`), and the fast ones must agree with them tile for
+tile on the sample pack, from spots all over it, with doors shut, open and secret. If a lift ever has to
+be faster still, the next step is a visibility polygon from the viewer: one sweep, then a cheap test per
+tile. That changes the rule slightly, which is why it was not the first step.
+
+`LiftBenchmark` keeps "fast enough" a number. It is an explicit test the build never runs
+(`dotnet test DungeonTable.Tests -c Release --filter "FullyQualifiedName~LiftBenchmark" -- xUnit.Explicit=only`),
+on the sample pack's map or any map named in `DUNGEONTABLE_BENCH_MAP`. On a 138×177-cell level a
+120 ft lift takes 10 to 25 ms in a Release build, which is what the container runs.
+
+## What a reveal sends
+
+Blazor Server sends a component's changes as a diff, but markup handed over as a `MarkupString` is
+diffed as one piece: if one character changes, all of it goes again. The map used to be one such piece,
+so every lift, door or ping sent the whole SVG again to every DM screen (1.7 MB on a large level) and to
+the projector (2.8 MB), and each browser parsed it again.
+
+`VectorMapCanvas` therefore draws a Razor `<svg>` that holds three pieces, and Blazor sends only the
+pieces whose text has changed:
+
+| layer | DM screen | projector |
+|---|---|---|
+| map | the map itself; drawn again only when `MapLayerKey` changes (a door, a secret door found, a concealed object shown, the grid) | the floor, wall and grid geometry as definitions, the floor clip, the hatch and the sprites; once per map |
+| middle | the fog: revealed rooms, and the revealed cells as one path of row runs | the revealed tiles, the peek rings and the walls, drawing the geometry with `use` |
+| top | the editor overlay | the doors, stairs, decorations and markers, clipped to the revealed tiles |
+
+On a large level a lift now sends a few kilobytes to each DM screen and 5 to 40 KB to the projector.
+The `<svg>` element itself now stays in place between renders, so an empty `g.dt-live` group kept last
+in it holds the editor's drag previews above the layers when Blazor replaces one.
+
+`Render` and `RenderRevealed` still return one SVG, built from the same pieces, and tests hold the
+layers to them: the DM canvas must produce exactly `Render`'s output, and the projector's layers, with
+each `use` expanded into what it draws, must define and paint exactly what `RenderRevealed` does. A
+door still sends the DM's whole map layer again; the doors could move to a layer of their own if that
+ever matters.
+
 ## Persistence
 
 Everything the table cannot lose is one document per table, a `TableSnapshot`, stored with Marten in

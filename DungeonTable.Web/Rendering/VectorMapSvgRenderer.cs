@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using DungeonTable.Core.Briefing;
 using DungeonTable.Core.Maps;
@@ -52,44 +53,129 @@ public static class VectorMapSvgRenderer
     /// <summary>Renders the map to an SVG document string.</summary>
     /// <param name="map">The map to render.</param>
     /// <param name="options">Layer toggles and padding.</param>
-    /// <returns>A complete <c>&lt;svg&gt;</c> element.</returns>
+    /// <returns>A complete <c>&lt;svg&gt;</c> element: the three layers in one document.</returns>
     public static string Render(VectorMap map, VectorMapRenderOptions options)
     {
-        MapBounds bounds = map.Bounds;
-        double pad = options.Padding;
-        double minX = bounds.MinX - pad;
-        double minY = bounds.MinY - pad;
-        double width = bounds.Width + (pad * 2);
-        double height = bounds.Height + (pad * 2);
+        var svg = new StringBuilder(64 * 1024);
+        svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"").Append(ViewBox(map, options))
+            .Append("\" preserveAspectRatio=\"xMidYMid meet\" class=\"vector-map\">")
+            .Append(RenderMapLayer(map, options))
+            .Append(RenderFogLayer(map, options))
+            .Append(RenderOverlayLayer(options))
+            .Append("</svg>");
+        return svg.ToString();
+    }
 
-        // The player view overrides the viewBox to show only the DM-chosen region; masks and grid
-        // still cover the full padded bounds below.
+    /// <summary>
+    /// The <c>viewBox</c> the map is drawn in: the <see cref="VectorMapRenderOptions.ViewBox"/> region when
+    /// one is set (the player view shows only the DM-chosen region), otherwise the whole map with padding.
+    /// </summary>
+    /// <param name="map">The map.</param>
+    /// <param name="options">The render options.</param>
+    /// <returns>The four numbers of the <c>viewBox</c> attribute.</returns>
+    public static string ViewBox(VectorMap map, VectorMapRenderOptions options)
+    {
+        (double minX, double minY, double width, double height) = Padded(map, options.Padding);
         MapBounds view = options.ViewBox.Width > 0 && options.ViewBox.Height > 0
             ? options.ViewBox
             : new MapBounds(minX, minY, minX + width, minY + height);
+        return N(view.MinX) + " " + N(view.MinY) + " " + N(view.Width) + " " + N(view.Height);
+    }
 
+    /// <summary>
+    /// The first of a DM map's three layers: the map itself (floor, walls, grid, doors, stairs and
+    /// decorations, with their definitions). It is by far the largest, and it changes only when
+    /// <see cref="MapLayerKey"/> does, so a canvas renders it again only then.
+    /// </summary>
+    /// <param name="map">The map.</param>
+    /// <param name="options">The render options.</param>
+    /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element.</returns>
+    public static string RenderMapLayer(VectorMap map, VectorMapRenderOptions options)
+    {
+        (double minX, double minY, double width, double height) = Padded(map, options.Padding);
         var svg = new StringBuilder(64 * 1024);
-        svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"")
-            .Append(N(view.MinX)).Append(' ').Append(N(view.MinY)).Append(' ')
-            .Append(N(view.Width)).Append(' ').Append(N(view.Height))
-            .Append("\" preserveAspectRatio=\"xMidYMid meet\" class=\"vector-map\">");
-
         AppendMapContent(svg, map, options, minX, minY, width, height);
-
-        // Fog covers the map content but sits below the editor overlay (so the DM keeps drawing over
-        // it) and below the revealed markers it draws itself (so they read on the player projector).
-        if (options.Fog.Enabled)
-        {
-            AppendFog(svg, options.Fog, minX, minY, width, height);
-        }
-
-        if (!options.Overlay.IsEmpty)
-        {
-            AppendEditorOverlay(svg, options.Overlay);
-        }
-
-        svg.Append("</svg>");
         return svg.ToString();
+    }
+
+    /// <summary>
+    /// The second layer: the fog over what the players cannot see yet, with the revealed regions and
+    /// cells punched out of it. It covers the map but sits below the editor overlay (so the DM keeps
+    /// drawing over it) and below the revealed markers it draws itself (so they read on the projector).
+    /// Empty when the fog is off.
+    /// </summary>
+    /// <param name="map">The map (its bounds size the fog sheet).</param>
+    /// <param name="options">The render options; <see cref="VectorMapRenderOptions.Fog"/> is drawn.</param>
+    /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element, or an empty string.</returns>
+    public static string RenderFogLayer(VectorMap map, VectorMapRenderOptions options)
+    {
+        if (!options.Fog.Enabled)
+        {
+            return string.Empty;
+        }
+
+        (double minX, double minY, double width, double height) = Padded(map, options.Padding);
+        var svg = new StringBuilder(4 * 1024);
+        AppendFog(svg, options.Fog, minX, minY, width, height);
+        return svg.ToString();
+    }
+
+    /// <summary>
+    /// The third layer: the editor overlay (regions, markers, hit targets, the selection, the measured
+    /// line and the DM's pointer), on top of everything. Empty when there is no overlay.
+    /// </summary>
+    /// <param name="options">The render options; <see cref="VectorMapRenderOptions.Overlay"/> is drawn.</param>
+    /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element, or an empty string.</returns>
+    public static string RenderOverlayLayer(VectorMapRenderOptions options)
+    {
+        if (options.Overlay.IsEmpty)
+        {
+            return string.Empty;
+        }
+
+        var svg = new StringBuilder(8 * 1024);
+        AppendEditorOverlay(svg, options.Overlay);
+        return svg.ToString();
+    }
+
+    /// <summary>
+    /// Everything <see cref="RenderMapLayer"/> depends on besides the map itself, as one string: equal keys
+    /// for the same map mean an equal map layer, so a canvas can keep the one it rendered. Only the door
+    /// and object ids that change what is drawn take part: revealing a trap marker or a room does not.
+    /// </summary>
+    /// <param name="options">The render options.</param>
+    /// <returns>The key.</returns>
+    public static string MapLayerKey(VectorMapRenderOptions options)
+    {
+        DoorRenderState doors = options.Doors;
+        ConcealState conceal = options.Conceal;
+        var key = new StringBuilder();
+        key.Append(options.ShowGrid ? 'G' : 'g').Append(options.ShowShadow ? 'S' : 's')
+            .Append(options.ShowWallShading ? 'W' : 'w').Append(options.ShowObjects ? 'O' : 'o')
+            .Append(options.MarkSecretDoors ? 'M' : 'm').Append(N(options.Padding));
+        AppendKeyIds(key, doors.SecretDoorIds.Where(doors.IsHiddenSecret));
+        AppendKeyIds(key, doors.OpenDoorIds);
+        AppendKeyIds(key, doors.DoubleDoorIds);
+        AppendKeyIds(key, conceal.ConcealedIds.Where(conceal.IsHidden));
+        key.Append('|').Append(RectsPathData(options.FloorHoles));
+        return key.ToString();
+    }
+
+    // A set of ids in a fixed order, each prefixed with its length so no two different sets read alike.
+    private static void AppendKeyIds(StringBuilder key, IEnumerable<string> ids)
+    {
+        key.Append('|');
+        foreach (string id in ids.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            key.Append(id.Length).Append(':').Append(id);
+        }
+    }
+
+    // The map's bounds grown by the padding on every side, as the corner and size the layers work in.
+    private static (double MinX, double MinY, double Width, double Height) Padded(VectorMap map, double pad)
+    {
+        MapBounds bounds = map.Bounds;
+        return (bounds.MinX - pad, bounds.MinY - pad, bounds.Width + (pad * 2), bounds.Height + (pad * 2));
     }
 
     // Draws the book-style map itself (defs, exterior shading, floor, grid, walls, objects/decoration)
@@ -739,6 +825,19 @@ public static class VectorMapSvgRenderer
     }
 
     // ---- Player reveal render -------------------------------------------------------------------
+    // The projector's SVG is built from pieces that go out in two orders. RenderRevealed puts them in one
+    // document, as it always has. The player view's canvas sends them as two layers instead: the map layer
+    // (the floor, wall and grid geometry, defined once, plus the patterns and sprites) goes once per map,
+    // and the reveal layer, which draws that geometry by reference (use), goes again on every reveal. The
+    // geometry is most of the weight, and the reveal layer used to repeat it once per peek ring.
+
+    // The ids under which the projector's map layer defines the geometry its reveal layer draws.
+    private const string FloorGeometryId = "dt-p-floor";
+    private const string WallGeometryId = "dt-p-walls";
+    private const string GridGeometryId = "dt-p-grid";
+
+    // The projector's margin around the map's geometry, in world units.
+    private const double RevealPad = 24;
 
     /// <summary>
     /// Renders the revealed area for the player projector as a strict tile model. The DM sends the whole
@@ -753,6 +852,11 @@ public static class VectorMapSvgRenderer
     /// door draws as a door. The player view runs on the DM's own machine (beamed to the table), so
     /// drawing the revealed geometry here is fine.
     /// </summary>
+    /// <remarks>
+    /// The player view's canvas draws the same thing in three layers: <see cref="RenderRevealedMapLayer"/>
+    /// and the two of <see cref="RenderRevealedLayers"/>, in an <c>&lt;svg&gt;</c> with
+    /// <see cref="RevealedViewBox"/>.
+    /// </remarks>
     /// <param name="map">The map (its grid, bounds, floor, walls, objects and decorations).</param>
     /// <param name="viewBox">The projector's viewport in world units (empty = whole map).</param>
     /// <param name="regions">Revealed room polygons.</param>
@@ -772,97 +876,128 @@ public static class VectorMapSvgRenderer
         DoorRenderState doors,
         ConcealState conceal)
     {
-        Grid grid = map.Grid;
-        MapBounds mapBounds = map.Bounds;
-        const double pad = 24;
-        double minX = mapBounds.MinX - pad;
-        double minY = mapBounds.MinY - pad;
-        double width = mapBounds.Width + (pad * 2);
-        double height = mapBounds.Height + (pad * 2);
+        RevealScene scene = RevealScene.Build(map, regions, cells, doors, conceal);
+        var geometry = new RevealGeometry(scene.Map, inline: true);
+
+        var svg = new StringBuilder(64 * 1024);
+        svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"").Append(RevealedViewBox(map, viewBox))
+            .Append("\" preserveAspectRatio=\"xMidYMid meet\" class=\"vector-map\">");
+        svg.Append("<defs>");
+        AppendHatchPattern(svg);
+        AppendDrawnClip(svg, scene);
+        AppendMapFloorClip(svg, geometry);
+        AppendRevealFilters(svg, map, scene);
+        AppendRevealSprites(svg, map);
+        svg.Append("</defs>");
+        AppendRevealBackground(svg, scene.Map);
+        AppendRevealGround(svg, scene, geometry);
+        AppendRevealObjects(svg, map, scene, markers);
+        svg.Append("</svg>");
+        return svg.ToString();
+    }
+
+    /// <summary>The projector's <c>viewBox</c>: the DM's viewport, or the whole map with a margin.</summary>
+    /// <param name="map">The map.</param>
+    /// <param name="viewBox">The projector's viewport in world units (empty = whole map).</param>
+    /// <returns>The four numbers of the <c>viewBox</c> attribute.</returns>
+    public static string RevealedViewBox(VectorMap map, MapBounds viewBox)
+    {
+        (double minX, double minY, double width, double height) = Padded(map, RevealPad);
         MapBounds view = viewBox.Width > 0 && viewBox.Height > 0
             ? viewBox
             : new MapBounds(minX, minY, minX + width, minY + height);
+        return N(view.MinX) + " " + N(view.MinY) + " " + N(view.Width) + " " + N(view.Height);
+    }
 
-        double c = grid.CellSizePx;
-        if (c <= 0)
-        {
-            c = mapBounds.Width > 0 ? mapBounds.Width / 40 : 1;
-        }
-
-        double hatchR = 0.78 * c;   // wall band reach outside the drawn floor (matches the DM outer hatch)
-        double haloR = 0.7 * c;     // extra filter-region margin for the glow blur
-        DoorRenderState doorState = doors ?? DoorRenderState.None;
-        ConcealState concealState = conceal ?? ConcealState.None;
-
-        // Still-secret (undiscovered) doors read as wall AND block the peek/vision, exactly as before; a
-        // DISCOVERED secret door drops out of this set, so it draws as a normal door and no longer blocks.
-        var hiddenSecrets = new HashSet<string>(
-            doorState.SecretDoorIds.Where(id => !doorState.DiscoveredDoorIds.Contains(id)), StringComparer.Ordinal);
-
-        // Drawn tiles: the revealed squares, plus up to 2 squares out through OPEN edges — walls and
-        // still-hidden doors stop the reach, but an OPEN door is a passage, so the peek runs through it
-        // and shows the tiles behind it (even undiscovered ones), a step or two out.
-        IReadOnlyList<MapBounds> shownCells = CorridorReveal.ShownCells(map, regions, cells);
-        IReadOnlyList<(MapBounds Cell, int Distance)> dim =
-            CorridorReveal.Find(map, regions, cells, steps: 2, hiddenSecrets, doorState.OpenDoorIds);
-
-        var drawnCells = new List<MapBounds>(shownCells);
-        var dimByDistance = new Dictionary<int, List<MapBounds>>();
-        foreach ((MapBounds cell, int distance) in dim)
-        {
-            if (!IsFinite(cell))
-            {
-                continue;
-            }
-
-            drawnCells.Add(cell);
-            if (!dimByDistance.TryGetValue(distance, out List<MapBounds> ring))
-            {
-                ring = new List<MapBounds>();
-                dimByDistance[distance] = ring;
-            }
-
-            ring.Add(cell);
-        }
-
-        TryFindLayer(map.Layers, LayerKind.Floor, out MapLayer floor);
-        TryFindLayer(map.Layers, LayerKind.Walls, out MapLayer wallsLayer);
-
-        string mapFloorPath = PolygonPathData(floor.Geometry);
-        string floorFill = floor.Fill.Visible ? floor.Fill.Colour.ToHex() : "#f4f1ea";
-        string drawnClip = RectsPathData(drawnCells);
-
-        // Walls are drawn from the WALL GEOMETRY (as the DM view does), NOT the floor edge — because a wall
-        // can sit BETWEEN two floor tiles with floor continuous on both sides (the floor edge only exists at
-        // a room's perimeter, so a floor-edge line cannot draw such a wall). The wall geometry already runs
-        // UNBROKEN across every secret door in this map (a secret door is a hidden passage through a
-        // solid-looking wall, not a gap), so drawing that geometry faithfully already renders a secret door
-        // as the wall it is — no healing segment is added, and therefore no extra stroke caps poke out at
-        // the door jambs. Drawn once at a uniform width and masked to the revealed neighbourhood (dt-wall),
-        // so no wall changes width with its far side and no hidden room's interior walls leak in.
-        double wallW = Math.Max(StrokeWidth(wallsLayer), 0.13 * c);
-        string wallLinePath = PolylinePathData(wallsLayer.Geometry) + PolygonPathData(wallsLayer.Geometry);
-
-        var distances = dimByDistance.Keys.ToList();
-        distances.Sort();
-        distances.Reverse(); // far ring painted first, so a nearer ring wins where they overlap
-
-        bool hasReveal = shownCells.Count > 0;
-
-        // The dilation/blur filters are confined to the drawn tiles' bounding box, so they stay cheap.
-        (double fx, double fy, double fw, double fh) = FilterRegion(drawnCells, hatchR + haloR + c, minX, minY, width, height);
-
+    /// <summary>
+    /// The projector's first layer: the black ground and the definitions the reveal layer draws from
+    /// (the floor, wall and grid geometry, the floor clip, the hatch and the sprites). It depends on the
+    /// map alone, so it goes to the projector once per map.
+    /// </summary>
+    /// <param name="map">The map.</param>
+    /// <returns>SVG markup for inside the projector's <c>&lt;svg&gt;</c> element.</returns>
+    public static string RenderRevealedMapLayer(VectorMap map)
+    {
+        RevealMap shape = RevealMap.For(map);
         var svg = new StringBuilder(64 * 1024);
-        svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"")
-            .Append(N(view.MinX)).Append(' ').Append(N(view.MinY)).Append(' ')
-            .Append(N(view.Width)).Append(' ').Append(N(view.Height))
-            .Append("\" preserveAspectRatio=\"xMidYMid meet\" class=\"vector-map\">");
-
         svg.Append("<defs>");
         AppendHatchPattern(svg);
-        svg.Append("<clipPath id=\"dt-drawn\" clipPathUnits=\"userSpaceOnUse\"><path d=\"").Append(drawnClip).Append("\"/></clipPath>");
-        svg.Append("<clipPath id=\"dt-mapfloor\" clipPathUnits=\"userSpaceOnUse\"><path d=\"")
-            .Append(mapFloorPath).Append("\" clip-rule=\"evenodd\"/></clipPath>");
+        AppendMapFloorClip(svg, new RevealGeometry(shape, inline: false));
+        svg.Append("<path id=\"").Append(FloorGeometryId).Append("\" d=\"").Append(shape.FloorPath).Append("\"/>");
+        svg.Append("<path id=\"").Append(WallGeometryId).Append("\" d=\"").Append(shape.WallPath).Append("\"/>");
+        if (shape.GridMarkup.StartsWith("<g ", StringComparison.Ordinal))
+        {
+            svg.Append("<g id=\"").Append(GridGeometryId).Append("\" ").Append(shape.GridMarkup, 3, shape.GridMarkup.Length - 3);
+        }
+
+        AppendRevealSprites(svg, map);
+        svg.Append("</defs>");
+        AppendRevealBackground(svg, shape);
+        return svg.ToString();
+    }
+
+    /// <summary>
+    /// The projector's second and third layers. The reveal layer is what has been revealed (the revealed
+    /// tiles, the peek rings and the walls), drawn from the map layer's definitions: the layer a reveal
+    /// changes, small however large the map is. The object layer is the doors, stairs and decorations,
+    /// clipped to the revealed tiles, and the revealed markers on top: it changes when a door opens or a
+    /// concealed object or a marker is shown, not when more of the map is revealed.
+    /// </summary>
+    /// <param name="map">The map.</param>
+    /// <param name="regions">Revealed room polygons.</param>
+    /// <param name="cells">Revealed fog-brush cells.</param>
+    /// <param name="markers">Revealed feature markers to draw on top.</param>
+    /// <param name="doors">Per-door presentation state (see <see cref="RenderRevealed"/>).</param>
+    /// <param name="conceal">Which objects are concealed (see <see cref="RenderRevealed"/>).</param>
+    /// <returns>SVG markup for inside the projector's <c>&lt;svg&gt;</c> element, after the map layer and in
+    /// this order.</returns>
+    public static (string Reveal, string Objects) RenderRevealedLayers(
+        VectorMap map,
+        IReadOnlyList<IReadOnlyList<MapPoint>> regions,
+        IReadOnlyList<MapBounds> cells,
+        IReadOnlyList<FeatureMarker> markers,
+        DoorRenderState doors,
+        ConcealState conceal)
+    {
+        RevealScene scene = RevealScene.Build(map, regions, cells, doors, conceal);
+        var reveal = new StringBuilder(16 * 1024);
+        reveal.Append("<defs>");
+        AppendDrawnClip(reveal, scene);
+        AppendRevealFilters(reveal, map, scene);
+        reveal.Append("</defs>");
+        AppendRevealGround(reveal, scene, new RevealGeometry(scene.Map, inline: false));
+
+        var objects = new StringBuilder(16 * 1024);
+        AppendRevealObjects(objects, map, scene, markers);
+        return (reveal.ToString(), objects.ToString());
+    }
+
+    private static void AppendDrawnClip(StringBuilder svg, RevealScene scene) =>
+        svg.Append("<clipPath id=\"dt-drawn\" clipPathUnits=\"userSpaceOnUse\"><path d=\"").Append(scene.DrawnClip).Append("\"/></clipPath>");
+
+    private static void AppendMapFloorClip(StringBuilder svg, RevealGeometry geometry)
+    {
+        svg.Append("<clipPath id=\"dt-mapfloor\" clipPathUnits=\"userSpaceOnUse\">");
+        geometry.Floor(svg, "clip-rule=\"evenodd\"");
+        svg.Append("</clipPath>");
+    }
+
+    private static void AppendRevealSprites(StringBuilder svg, VectorMap map)
+    {
+        if (map.Decorations.Count > 0)
+        {
+            AppendSpriteDefs(svg, map.Sprites);
+        }
+    }
+
+    private static void AppendRevealBackground(StringBuilder svg, RevealMap shape) =>
+        AppendFullRect(svg, shape.MinX, shape.MinY, shape.Width, shape.Height, "#05060a", 1, mask: string.Empty);
+
+    private static void AppendRevealFilters(StringBuilder svg, VectorMap map, RevealScene scene)
+    {
+        RevealMap shape = scene.Map;
+        double c = shape.Cell;
+        (double fx, double fy, double fw, double fh) = scene.FilterBox;
 
         svg.Append("<filter id=\"dt-fade\" filterUnits=\"userSpaceOnUse\" x=\"").Append(N(fx)).Append("\" y=\"").Append(N(fy))
             .Append("\" width=\"").Append(N(fw)).Append("\" height=\"").Append(N(fh))
@@ -877,14 +1012,14 @@ public static class VectorMapSvgRenderer
         // boundary wall's own thickness.
         svg.Append("<filter id=\"dt-walldil\" filterUnits=\"userSpaceOnUse\" x=\"").Append(N(fx)).Append("\" y=\"").Append(N(fy))
             .Append("\" width=\"").Append(N(fw)).Append("\" height=\"").Append(N(fh))
-            .Append("\"><feMorphology operator=\"dilate\" radius=\"").Append(N(wallW * 0.5)).Append("\"/></filter>");
-        AppendMaskOpen(svg, "dt-wall", minX, minY, width, height, whiteBase: false);
-        svg.Append("<g filter=\"url(#dt-walldil)\"><path d=\"").Append(drawnClip).Append("\" fill=\"white\"/></g>");
+            .Append("\"><feMorphology operator=\"dilate\" radius=\"").Append(N(shape.WallWidth * 0.5)).Append("\"/></filter>");
+        AppendMaskOpen(svg, "dt-wall", shape.MinX, shape.MinY, shape.Width, shape.Height, whiteBase: false);
+        svg.Append("<g filter=\"url(#dt-walldil)\"><path d=\"").Append(scene.DrawnClip).Append("\" fill=\"white\"/></g>");
         // Open the wall across OPEN doors so an opened door reads as a real doorway (a gap), not a leaf
         // drawn on top of a solid wall — some maps draw the wall unbroken across a door. A CLOSED door
         // keeps its wall; a still-hidden secret door is never open, so its wall stays solid and the
         // "secret door looks like wall" invariant is untouched.
-        string openHoles = OpenDoorHoles(map, doorState, wallW);
+        string openHoles = OpenDoorHoles(map, scene.Doors, shape.WallWidth);
         if (openHoles.Length > 0)
         {
             svg.Append("<path d=\"").Append(openHoles).Append("\" fill=\"black\"/>");
@@ -896,96 +1031,44 @@ public static class VectorMapSvgRenderer
         svg.Append("<filter id=\"dt-inner\" filterUnits=\"userSpaceOnUse\" x=\"").Append(N(fx)).Append("\" y=\"").Append(N(fy))
             .Append("\" width=\"").Append(N(fw)).Append("\" height=\"").Append(N(fh))
             .Append("\"><feGaussianBlur stdDeviation=\"").Append(N(0.16 * c)).Append("\"/></filter>");
-        if (map.Decorations.Count > 0)
+    }
+
+    // The first part of what is drawn over the black ground: the peek rings and the revealed tiles, then
+    // the walls. Nothing when nothing is revealed (or the map has no floor).
+    private static void AppendRevealGround(StringBuilder svg, RevealScene scene, RevealGeometry geometry)
+    {
+        RevealMap shape = scene.Map;
+        if (!scene.Draws)
         {
-            AppendSpriteDefs(svg, map.Sprites);
-        }
-
-        svg.Append("</defs>");
-
-        AppendFullRect(svg, minX, minY, width, height, "#05060a", 1, mask: string.Empty);
-        if (!hasReveal || mapFloorPath.Length == 0)
-        {
-            svg.Append("</svg>");
-            return svg.ToString();
-        }
-
-        // One reveal layer: its floor (clipped to the layer's tiles) + its hatch band (the layer's own drawn
-        // floor DILATED, gated to the not-drawn-floor region). Wall LINES are not drawn here — they come
-        // once from the real wall geometry below. A peek layer is wrapped in an opacity group, so floor and
-        // hatch dim together with distance — a peek tile is exactly a revealed tile, only darker and
-        // aligned. Because each layer's band comes from its OWN floor, an open frontier grows no hatch.
-        void EmitLayer(IReadOnlyList<MapBounds> layerCells, string suffix, double opacity)
-        {
-            if (layerCells.Count == 0)
-            {
-                return;
-            }
-
-            string clipId = "dt-c-" + suffix;
-            string bandId = "dt-b-" + suffix;
-            string gateId = "dt-g-" + suffix;
-
-            svg.Append("<clipPath id=\"").Append(clipId).Append("\" clipPathUnits=\"userSpaceOnUse\"><path d=\"")
-                .Append(RectsPathData(layerCells)).Append("\"/></clipPath>");
-
-            // Gate: the hatch is allowed anywhere that is NOT drawn floor (real floor within a drawn tile).
-            // Excluding only the DRAWN floor — not all real floor — means the hidden side of a wall or secret
-            // door (real floor that the DM has not revealed) still hatches, giving it the book edge; a wall
-            // whose far side IS revealed sits between two drawn floors and gets no hatch, just its line.
-            AppendMaskOpen(svg, gateId, minX, minY, width, height, whiteBase: true);
-            svg.Append("<g clip-path=\"url(#dt-drawn)\"><path d=\"").Append(mapFloorPath).Append("\" fill=\"black\" fill-rule=\"evenodd\"/></g>");
-            svg.Append("</mask>");
-
-            // Wall band: the layer's drawn floor FADED outward (dilate + blur), so the hatch dims with
-            // distance from the wall, gated to the allowed region.
-            AppendMaskOpen(svg, bandId, minX, minY, width, height, whiteBase: false);
-            svg.Append("<g mask=\"url(#").Append(gateId).Append(")\"><g filter=\"url(#dt-fade)\"><path d=\"")
-                .Append(mapFloorPath).Append("\" clip-path=\"url(#").Append(clipId).Append(")\" fill=\"white\" fill-rule=\"evenodd\"/></g></g>");
-            svg.Append("</mask>");
-
-            svg.Append(opacity < 1 ? $"<g opacity=\"{N(opacity)}\">" : "<g>");
-            // Wall body / halo: light cream, fading to black with the band.
-            svg.Append("<rect x=\"").Append(N(minX)).Append("\" y=\"").Append(N(minY)).Append("\" width=\"")
-                .Append(N(width)).Append("\" height=\"").Append(N(height)).Append("\" fill=\"#e6ddc6\" mask=\"url(#")
-                .Append(bandId).Append(")\"/>");
-            // Floor + inner shadow + grid.
-            svg.Append("<g clip-path=\"url(#").Append(clipId).Append(")\">");
-            AppendPath(svg, mapFloorPath, floorFill, fillRuleEvenOdd: true, fillOpacity: 1);
-            // Inner wall shadow: the wall geometry as a wide, BLURRED grey stroke clipped to the floor, so a
-            // soft shadow hugs the inside of every wall and fades toward the room centre (the book look).
-            // Based on the wall geometry (not the floor edge) so it appears at a secret door too — keeping
-            // the door indistinguishable. Clipped to the map floor so it never spills onto the hatch/black.
-            svg.Append("<g clip-path=\"url(#dt-mapfloor)\"><path d=\"").Append(wallLinePath)
-                .Append("\" fill=\"none\" stroke=\"").Append(ShadowColour).Append("\" stroke-width=\"").Append(N(0.72 * c))
-                .Append("\" stroke-opacity=\"0.55\" stroke-linejoin=\"round\" filter=\"url(#dt-inner)\"/></g>");
-            svg.Append("<g clip-path=\"url(#dt-mapfloor)\">");
-            AppendGrid(svg, grid, mapBounds);
-            svg.Append("</g></g>");
-            // Hatch, fading with the band.
-            svg.Append("<rect x=\"").Append(N(minX)).Append("\" y=\"").Append(N(minY)).Append("\" width=\"")
-                .Append(N(width)).Append("\" height=\"").Append(N(height)).Append("\" fill=\"url(#dt-hatch)\" mask=\"url(#")
-                .Append(bandId).Append(")\"/>");
-
-            svg.Append("</g>");
+            return;
         }
 
         // Peek rings first (far ring dimmest), then the revealed layer on top.
-        foreach (int distance in distances)
+        foreach (int distance in scene.Distances)
         {
-            EmitLayer(dimByDistance[distance], "d" + distance, Math.Max(0.16, 0.9 - (0.3 * distance)));
+            AppendRevealLayer(svg, scene, geometry, scene.DimByDistance[distance], "d" + distance, Math.Max(0.16, 0.9 - (0.3 * distance)));
         }
 
-        EmitLayer(shownCells, "r", 1);
+        AppendRevealLayer(svg, scene, geometry, scene.ShownCells, "r", 1);
 
         // Walls: the real wall geometry plus the healed secret doors, one uniform-width stroke over the
         // hatch, masked to the revealed neighbourhood. This is the ONLY place a wall line is drawn — a
         // secret door is just another segment in this path, indistinguishable from a wall between two tiles.
-        if (wallLinePath.Length > 0)
+        if (shape.WallPath.Length > 0)
         {
-            svg.Append("<g mask=\"url(#dt-wall)\"><path d=\"").Append(wallLinePath)
-                .Append("\" fill=\"none\" stroke=\"#241f18\" stroke-width=\"").Append(N(wallW))
-                .Append("\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>");
+            svg.Append("<g mask=\"url(#dt-wall)\">");
+            geometry.Walls(svg, "fill=\"none\" stroke=\"#241f18\" stroke-width=\"" + N(shape.WallWidth) + "\" stroke-linejoin=\"round\" stroke-linecap=\"round\"");
+            svg.Append("</g>");
+        }
+    }
+
+    // The second part, over the walls: the objects on the revealed tiles, then the revealed markers.
+    // Nothing when nothing is revealed (or the map has no floor).
+    private static void AppendRevealObjects(StringBuilder svg, VectorMap map, RevealScene scene, IReadOnlyList<FeatureMarker> markers)
+    {
+        if (!scene.Draws)
+        {
+            return;
         }
 
         // Objects on the revealed tiles: decorations/columns, stairs, and NON-hidden doors as doors (a
@@ -995,12 +1078,12 @@ public static class VectorMapSvgRenderer
         svg.Append("<g clip-path=\"url(#dt-drawn)\">");
         if (map.Decorations.Count > 0)
         {
-            AppendDecorations(svg, map, concealState, omitHidden: true);
+            AppendDecorations(svg, map, scene.Conceal, omitHidden: true);
         }
 
         foreach (StairFeature stair in map.Stairs)
         {
-            if (!concealState.IsEmpty && concealState.IsHidden(stair.Id))
+            if (!scene.Conceal.IsEmpty && scene.Conceal.IsHidden(stair.Id))
             {
                 continue;
             }
@@ -1014,47 +1097,299 @@ public static class VectorMapSvgRenderer
 
         foreach (DoorFeature door in map.Doors)
         {
-            if (hiddenSecrets.Contains(door.Id))
+            if (scene.HiddenSecrets.Contains(door.Id))
             {
                 continue; // a still-secret door is wall until the DM discovers it
             }
 
             AppendDoor(svg, door,
-                open: doorState.OpenDoorIds.Contains(door.Id),
-                dbl: doorState.DoubleDoorIds.Contains(door.Id));
+                open: scene.Doors.OpenDoorIds.Contains(door.Id),
+                dbl: scene.Doors.DoubleDoorIds.Contains(door.Id));
         }
 
         svg.Append("</g>");
 
         foreach (FeatureMarker marker in markers)
         {
-            AppendMarkerGlyph(svg, marker, c, selected: false);
+            AppendMarkerGlyph(svg, marker, scene.Map.Cell, selected: false);
         }
-
-        svg.Append("</svg>");
-        return svg.ToString();
     }
 
-    // The bounding box of the drawn cells, grown by margin and clamped to the padded map, so the
-    // dilation filters run over only the revealed neighbourhood rather than the whole map.
-    private static (double X, double Y, double W, double H) FilterRegion(
-        IReadOnlyList<MapBounds> cells, double margin, double minX, double minY, double width, double height)
+    // One reveal layer: its floor (clipped to the layer's tiles) + its hatch band (the layer's own drawn
+    // floor DILATED, gated to the not-drawn-floor region). Wall LINES are not drawn here — they come
+    // once from the real wall geometry. A peek layer is wrapped in an opacity group, so floor and hatch
+    // dim together with distance — a peek tile is exactly a revealed tile, only darker and aligned.
+    // Because each layer's band comes from its OWN floor, an open frontier grows no hatch.
+    private static void AppendRevealLayer(
+        StringBuilder svg, RevealScene scene, RevealGeometry geometry, IReadOnlyList<MapBounds> layerCells, string suffix, double opacity)
     {
-        double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
-        foreach (MapBounds b in cells.Where(IsFinite))
+        if (layerCells.Count == 0)
         {
-            x0 = Math.Min(x0, b.MinX);
-            y0 = Math.Min(y0, b.MinY);
-            x1 = Math.Max(x1, b.MaxX);
-            y1 = Math.Max(y1, b.MaxY);
+            return;
         }
 
-        if (x0 > x1)
+        RevealMap shape = scene.Map;
+        double minX = shape.MinX, minY = shape.MinY, width = shape.Width, height = shape.Height;
+        string clipId = "dt-c-" + suffix;
+        string bandId = "dt-b-" + suffix;
+        string gateId = "dt-g-" + suffix;
+
+        svg.Append("<clipPath id=\"").Append(clipId).Append("\" clipPathUnits=\"userSpaceOnUse\"><path d=\"")
+            .Append(CellRunsPathData(layerCells)).Append("\"/></clipPath>");
+
+        // Gate: the hatch is allowed anywhere that is NOT drawn floor (real floor within a drawn tile).
+        // Excluding only the DRAWN floor — not all real floor — means the hidden side of a wall or secret
+        // door (real floor that the DM has not revealed) still hatches, giving it the book edge; a wall
+        // whose far side IS revealed sits between two drawn floors and gets no hatch, just its line.
+        AppendMaskOpen(svg, gateId, minX, minY, width, height, whiteBase: true);
+        svg.Append("<g clip-path=\"url(#dt-drawn)\">");
+        geometry.Floor(svg, "fill=\"black\" fill-rule=\"evenodd\"");
+        svg.Append("</g>");
+        svg.Append("</mask>");
+
+        // Wall band: the layer's drawn floor FADED outward (dilate + blur), so the hatch dims with
+        // distance from the wall, gated to the allowed region.
+        AppendMaskOpen(svg, bandId, minX, minY, width, height, whiteBase: false);
+        svg.Append("<g mask=\"url(#").Append(gateId).Append(")\"><g filter=\"url(#dt-fade)\">");
+        geometry.Floor(svg, "clip-path=\"url(#" + clipId + ")\" fill=\"white\" fill-rule=\"evenodd\"");
+        svg.Append("</g></g>");
+        svg.Append("</mask>");
+
+        svg.Append(opacity < 1 ? $"<g opacity=\"{N(opacity)}\">" : "<g>");
+        // Wall body / halo: light cream, fading to black with the band.
+        svg.Append("<rect x=\"").Append(N(minX)).Append("\" y=\"").Append(N(minY)).Append("\" width=\"")
+            .Append(N(width)).Append("\" height=\"").Append(N(height)).Append("\" fill=\"#e6ddc6\" mask=\"url(#")
+            .Append(bandId).Append(")\"/>");
+        // Floor + inner shadow + grid.
+        svg.Append("<g clip-path=\"url(#").Append(clipId).Append(")\">");
+        geometry.Floor(svg, "fill=\"" + shape.FloorFill + "\" fill-rule=\"evenodd\"");
+        // Inner wall shadow: the wall geometry as a wide, BLURRED grey stroke clipped to the floor, so a
+        // soft shadow hugs the inside of every wall and fades toward the room centre (the book look).
+        // Based on the wall geometry (not the floor edge) so it appears at a secret door too — keeping
+        // the door indistinguishable. Clipped to the map floor so it never spills onto the hatch/black.
+        svg.Append("<g clip-path=\"url(#dt-mapfloor)\">");
+        geometry.Walls(svg, "fill=\"none\" stroke=\"" + ShadowColour + "\" stroke-width=\"" + N(0.72 * shape.Cell)
+            + "\" stroke-opacity=\"0.55\" stroke-linejoin=\"round\" filter=\"url(#dt-inner)\"");
+        svg.Append("</g>");
+        svg.Append("<g clip-path=\"url(#dt-mapfloor)\">");
+        geometry.Grid(svg);
+        svg.Append("</g></g>");
+        // Hatch, fading with the band.
+        svg.Append("<rect x=\"").Append(N(minX)).Append("\" y=\"").Append(N(minY)).Append("\" width=\"")
+            .Append(N(width)).Append("\" height=\"").Append(N(height)).Append("\" fill=\"url(#dt-hatch)\" mask=\"url(#")
+            .Append(bandId).Append(")\"/>");
+
+        svg.Append("</g>");
+    }
+
+    // What the projector draws from the map alone, worked out once per map: the padded frame, the cell
+    // size the filters scale with, and the floor, wall and grid geometry as path data.
+    private sealed class RevealMap
+    {
+        private static readonly ConditionalWeakTable<VectorMap, RevealMap> Shapes = new();
+
+        private RevealMap(VectorMap map)
         {
-            return (minX, minY, width, height);
+            MapBounds mapBounds = map.Bounds;
+            (MinX, MinY, Width, Height) = Padded(map, RevealPad);
+
+            double c = map.Grid.CellSizePx;
+            if (c <= 0)
+            {
+                c = mapBounds.Width > 0 ? mapBounds.Width / 40 : 1;
+            }
+
+            Cell = c;
+            TryFindLayer(map.Layers, LayerKind.Floor, out MapLayer floor);
+            TryFindLayer(map.Layers, LayerKind.Walls, out MapLayer walls);
+            FloorPath = PolygonPathData(floor.Geometry);
+            FloorFill = floor.Fill.Visible ? floor.Fill.Colour.ToHex() : "#f4f1ea";
+
+            // Walls are drawn from the WALL GEOMETRY (as the DM view does), NOT the floor edge — because a
+            // wall can sit BETWEEN two floor tiles with floor continuous on both sides (the floor edge only
+            // exists at a room's perimeter, so a floor-edge line cannot draw such a wall). The wall geometry
+            // already runs UNBROKEN across every secret door in this map (a secret door is a hidden passage
+            // through a solid-looking wall, not a gap), so drawing that geometry faithfully already renders a
+            // secret door as the wall it is — no healing segment is added, and therefore no extra stroke caps
+            // poke out at the door jambs. Drawn once at a uniform width and masked to the revealed
+            // neighbourhood (dt-wall), so no wall changes width with its far side and no hidden room's
+            // interior walls leak in.
+            WallWidth = Math.Max(StrokeWidth(walls), 0.13 * c);
+            WallPath = PolylinePathData(walls.Geometry) + PolygonPathData(walls.Geometry);
+
+            var grid = new StringBuilder();
+            AppendGrid(grid, map.Grid, mapBounds);
+            GridMarkup = grid.ToString();
         }
 
-        return (x0 - margin, y0 - margin, (x1 - x0) + (2 * margin), (y1 - y0) + (2 * margin));
+        internal double MinX { get; }
+
+        internal double MinY { get; }
+
+        internal double Width { get; }
+
+        internal double Height { get; }
+
+        internal double Cell { get; }
+
+        internal string FloorPath { get; }
+
+        internal string FloorFill { get; }
+
+        internal double WallWidth { get; }
+
+        internal string WallPath { get; }
+
+        internal string GridMarkup { get; }
+
+        internal static RevealMap For(VectorMap map) => Shapes.GetValue(map, static m => new RevealMap(m));
+    }
+
+    // What one state of the reveal draws: the revealed tiles, the peek rings around them, and the doors
+    // and objects as they stand.
+    private sealed class RevealScene
+    {
+        private RevealScene(RevealMap map, DoorRenderState doors, ConcealState conceal)
+        {
+            Map = map;
+            Doors = doors;
+            Conceal = conceal;
+        }
+
+        internal RevealMap Map { get; }
+
+        internal DoorRenderState Doors { get; }
+
+        internal ConcealState Conceal { get; }
+
+        internal HashSet<string> HiddenSecrets { get; private init; }
+
+        internal IReadOnlyList<MapBounds> ShownCells { get; private init; }
+
+        internal Dictionary<int, List<MapBounds>> DimByDistance { get; private init; }
+
+        internal List<int> Distances { get; private init; }
+
+        internal string DrawnClip { get; private init; }
+
+        // Whether anything is drawn over the black ground at all: something is revealed, on a map with a floor.
+        internal bool Draws => ShownCells.Count > 0 && Map.FloorPath.Length > 0;
+
+        internal (double X, double Y, double W, double H) FilterBox { get; private init; }
+
+        internal static RevealScene Build(
+            VectorMap map, IReadOnlyList<IReadOnlyList<MapPoint>> regions, IReadOnlyList<MapBounds> cells,
+            DoorRenderState doors, ConcealState conceal)
+        {
+            RevealMap shape = RevealMap.For(map);
+            double c = shape.Cell;
+            double hatchR = 0.78 * c;   // wall band reach outside the drawn floor (matches the DM outer hatch)
+            double haloR = 0.7 * c;     // extra filter-region margin for the glow blur
+            DoorRenderState doorState = doors ?? DoorRenderState.None;
+
+            // Still-secret (undiscovered) doors read as wall AND block the peek/vision, exactly as before; a
+            // DISCOVERED secret door drops out of this set, so it draws as a normal door and no longer blocks.
+            var hiddenSecrets = new HashSet<string>(
+                doorState.SecretDoorIds.Where(id => !doorState.DiscoveredDoorIds.Contains(id)), StringComparer.Ordinal);
+
+            // Drawn tiles: the revealed squares, plus up to 2 squares out through OPEN edges — walls and
+            // still-hidden doors stop the reach, but an OPEN door is a passage, so the peek runs through it
+            // and shows the tiles behind it (even undiscovered ones), a step or two out.
+            IReadOnlyList<MapBounds> shownCells = CorridorReveal.ShownCells(map, regions, cells);
+            IReadOnlyList<(MapBounds Cell, int Distance)> dim =
+                CorridorReveal.Find(map, regions, cells, steps: 2, hiddenSecrets, doorState.OpenDoorIds);
+
+            var drawnCells = new List<MapBounds>(shownCells);
+            var dimByDistance = new Dictionary<int, List<MapBounds>>();
+            foreach ((MapBounds cell, int distance) in dim)
+            {
+                if (!IsFinite(cell))
+                {
+                    continue;
+                }
+
+                drawnCells.Add(cell);
+                if (!dimByDistance.TryGetValue(distance, out List<MapBounds> ring))
+                {
+                    ring = new List<MapBounds>();
+                    dimByDistance[distance] = ring;
+                }
+
+                ring.Add(cell);
+            }
+
+            var distances = dimByDistance.Keys.ToList();
+            distances.Sort();
+            distances.Reverse(); // far ring painted first, so a nearer ring wins where they overlap
+
+            return new RevealScene(shape, doorState, conceal ?? ConcealState.None)
+            {
+                HiddenSecrets = hiddenSecrets,
+                ShownCells = shownCells,
+                DimByDistance = dimByDistance,
+                Distances = distances,
+                DrawnClip = CellRunsPathData(drawnCells),
+
+                // The dilation/blur filters are confined to the drawn tiles' bounding box, so they stay cheap.
+                FilterBox = FilterRegionOf(drawnCells, hatchR + haloR + c, shape.MinX, shape.MinY, shape.Width, shape.Height),
+            };
+        }
+
+        // The bounding box of the drawn cells, grown by margin and clamped to the padded map, so the
+        // dilation filters run over only the revealed neighbourhood rather than the whole map.
+        private static (double X, double Y, double W, double H) FilterRegionOf(
+            IReadOnlyList<MapBounds> cells, double margin, double minX, double minY, double width, double height)
+        {
+            double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+            foreach (MapBounds b in cells.Where(IsFinite))
+            {
+                x0 = Math.Min(x0, b.MinX);
+                y0 = Math.Min(y0, b.MinY);
+                x1 = Math.Max(x1, b.MaxX);
+                y1 = Math.Max(y1, b.MaxY);
+            }
+
+            if (x0 > x1)
+            {
+                return (minX, minY, width, height);
+            }
+
+            return (x0 - margin, y0 - margin, (x1 - x0) + (2 * margin), (y1 - y0) + (2 * margin));
+        }
+    }
+
+    // Writes the floor, wall and grid geometry where the projector draws it: as the path data itself (the
+    // single SVG), or as a use of the map layer's definition (the reveal layer). The attributes are the
+    // same either way, and a use draws its definition with them, so both draw the same thing.
+    private sealed class RevealGeometry(RevealMap shape, bool inline)
+    {
+        internal void Floor(StringBuilder svg, string attributes) => Shape(svg, FloorGeometryId, shape.FloorPath, attributes);
+
+        internal void Walls(StringBuilder svg, string attributes) => Shape(svg, WallGeometryId, shape.WallPath, attributes);
+
+        internal void Grid(StringBuilder svg)
+        {
+            if (inline)
+            {
+                svg.Append(shape.GridMarkup);
+            }
+            else if (shape.GridMarkup.Length > 0)
+            {
+                svg.Append("<use href=\"#").Append(GridGeometryId).Append("\"/>");
+            }
+        }
+
+        private void Shape(StringBuilder svg, string id, string pathData, string attributes)
+        {
+            if (inline)
+            {
+                svg.Append("<path d=\"").Append(pathData).Append("\" ").Append(attributes).Append("/>");
+            }
+            else
+            {
+                svg.Append("<use href=\"#").Append(id).Append("\" ").Append(attributes).Append("/>");
+            }
+        }
     }
 
     // Footprints of the OPEN doors as rect subpaths — painted black into a wall mask so the wall opens
@@ -1089,7 +1424,9 @@ public static class VectorMapSvgRenderer
     }
 
     // Emits the revealed polygons + cells with the given presentation attributes (fill or stroke),
-    // skipping non-finite geometry so a malformed reveal fails closed (stays fogged).
+    // skipping non-finite geometry so a malformed reveal fails closed (stays fogged). The cells go out as
+    // ONE path of runs (the cells of a row merged where they touch) rather than an element per cell: a
+    // long evening reveals thousands of cells, and the mask is sent again on every reveal.
     private static void AppendRevealShapes(StringBuilder svg, FogOverlay fog, string attributes)
     {
         foreach (IReadOnlyList<MapPoint> polygon in fog.RevealedPolygons)
@@ -1101,11 +1438,67 @@ public static class VectorMapSvgRenderer
             }
         }
 
-        foreach (MapBounds cell in fog.RevealedCells.Where(IsFinite))
+        string runs = CellRunsPathData(fog.RevealedCells);
+        if (runs.Length > 0)
         {
-            AppendRect(svg, cell, attributes);
+            svg.Append("<path d=\"").Append(runs).Append("\" ").Append(attributes).Append("/>");
         }
     }
+
+    /// <summary>
+    /// Grid cells as path data, one closed rectangle per run: the cells sharing a row (the same top and
+    /// bottom) merged left to right wherever one starts where the last ended. Cells that do not touch, or
+    /// that sit on no shared row, stay rectangles of their own, so the area covered is exactly the cells'.
+    /// Non-finite cells are skipped.
+    /// </summary>
+    /// <param name="cells">The cells, in world units, in any order; duplicates are harmless.</param>
+    /// <returns>The path data; empty when there are no cells.</returns>
+    internal static string CellRunsPathData(IReadOnlyList<MapBounds> cells)
+    {
+        var rows = new SortedDictionary<(double MinY, double MaxY), List<MapBounds>>();
+        foreach (MapBounds cell in cells.Where(IsFinite))
+        {
+            if (!rows.TryGetValue((cell.MinY, cell.MaxY), out List<MapBounds> row))
+            {
+                row = new List<MapBounds>();
+                rows[(cell.MinY, cell.MaxY)] = row;
+            }
+
+            row.Add(cell);
+        }
+
+        var d = new StringBuilder();
+        foreach (KeyValuePair<(double MinY, double MaxY), List<MapBounds>> row in rows)
+        {
+            List<MapBounds> line = row.Value;
+            line.Sort((a, b) => a.MinX.CompareTo(b.MinX));
+
+            // Two neighbouring cells' shared edge can differ in the last bit (x + size against the next
+            // cell's own x), so "touching" allows a millionth of a cell; a gap that small draws as none.
+            double start = line[0].MinX, end = line[0].MaxX;
+            foreach (MapBounds cell in line.Skip(1))
+            {
+                if (cell.MinX <= end + (cell.Width * 1e-6))
+                {
+                    end = Math.Max(end, cell.MaxX);
+                    continue;
+                }
+
+                AppendRun(d, start, end, row.Key.MinY, row.Key.MaxY);
+                start = cell.MinX;
+                end = cell.MaxX;
+            }
+
+            AppendRun(d, start, end, row.Key.MinY, row.Key.MaxY);
+        }
+
+        return d.ToString();
+    }
+
+    private static void AppendRun(StringBuilder d, double minX, double maxX, double minY, double maxY) =>
+        d.Append('M').Append(N(minX)).Append(' ').Append(N(minY))
+            .Append('H').Append(N(maxX)).Append('V').Append(N(maxY))
+            .Append('H').Append(N(minX)).Append('Z');
 
     private static void AppendMaskOpen(
         StringBuilder svg, string id, double minX, double minY, double width, double height, bool whiteBase)
@@ -1135,13 +1528,6 @@ public static class VectorMapSvgRenderer
         }
 
         svg.Append("/>");
-    }
-
-    private static void AppendRect(StringBuilder svg, MapBounds bounds, string attributes)
-    {
-        svg.Append("<rect x=\"").Append(N(bounds.MinX)).Append("\" y=\"").Append(N(bounds.MinY))
-            .Append("\" width=\"").Append(N(bounds.Width)).Append("\" height=\"").Append(N(bounds.Height))
-            .Append("\" ").Append(attributes).Append("/>");
     }
 
     private static bool AllFinite(IReadOnlyList<MapPoint> points) =>

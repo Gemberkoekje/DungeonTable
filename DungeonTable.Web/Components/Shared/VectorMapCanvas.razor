@@ -1,11 +1,20 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @*
-    Renders a fully-vector map (parsed from a Dungeon Scrawl .ds) as a single self-contained SVG.
+    Renders a fully-vector map (parsed from a Dungeon Scrawl .ds) as SVG.
     The DM and player views share this component:
       - Pannable wraps the map in a bounded box with drag-pan / wheel-zoom.
       - ShowPlayerBox overlays the aspect-locked "player view" rectangle the DM moves/resizes.
       - ViewBox restricts the SVG to a world-unit region (the player view shows only that box).
+
+    The map is drawn in three layers inside one svg element. On the DM's map they are the map itself,
+    the fog, and the editor overlay; on the projector (Fog.BookEdge) the map's geometry, the revealed
+    area drawn from it, and the doors, objects and markers on that area. Each is its own piece of
+    markup, and Blazor sends a piece only when its text has changed, so a reveal sends the middle
+    layer (kilobytes) and not the map (often over a megabyte). The map layer is rendered again only
+    when the map, or on the DM's map what MapLayerKey covers, changes. The empty g.dt-live group comes
+    last, so the editor script's drag previews drawn into it stay on top of the layers when Blazor
+    replaces one.
 *@
 
 <style>
@@ -68,7 +77,7 @@
 {
     <div class="vector-map-box" @ref="boxRef">
         <div class="vector-map-pan">
-            @((MarkupString)svg)
+            @MapSvg
         </div>
         <div class="vector-map-tools">
             <button type="button" title="Zoom in" @onclick="ZoomIn">+</button>
@@ -80,7 +89,7 @@
 else
 {
     <div class="vector-map-host @CssClass">
-        @((MarkupString)svg)
+        @MapSvg
     </div>
 }
 
@@ -194,7 +203,20 @@ else
 
     private ElementReference boxRef;
     private DotNetObjectReference<VectorMapCanvas> selfRef;
-    private string svg = string.Empty;
+
+    // The key the projector's map layer is kept under: it depends on the map alone.
+    private const string ProjectorMapLayerKey = "projector";
+
+    // The three layers (see the comment at the top), and what the map layer was rendered from.
+    private string viewBox = string.Empty;
+    private string mapLayer = string.Empty;
+    private string middleLayer = string.Empty;
+    private string topLayer = string.Empty;
+    private VectorMap mapLayerMap;
+    private string mapLayerKey = string.Empty;
+
+    private RenderFragment MapSvg =>
+        @<svg xmlns="http://www.w3.org/2000/svg" viewBox="@viewBox" preserveAspectRatio="xMidYMid meet" class="vector-map">@((MarkupString)mapLayer)@((MarkupString)middleLayer)@((MarkupString)topLayer)<g class="dt-live"></g></svg>;
 
     protected override void OnParametersSet()
     {
@@ -216,11 +238,13 @@ else
 
         // The player projector gets a reveal-windowed render: a still-secret door reads as wall and
         // blocks the peek; only a discovered door renders as a normal (open/closed) door. A concealed
-        // object is left out of that render entirely.
+        // object is left out of that render entirely. Its map layer depends on the map alone.
         if (Fog.BookEdge)
         {
-            svg = VectorMapSvgRenderer.RenderRevealed(
-                Map, ViewBox, Fog.RevealedPolygons, Fog.RevealedCells, Fog.RevealedMarkers, doors, conceal);
+            viewBox = VectorMapSvgRenderer.RevealedViewBox(Map, ViewBox);
+            KeepMapLayer(ProjectorMapLayerKey, () => VectorMapSvgRenderer.RenderRevealedMapLayer(Map));
+            (middleLayer, topLayer) = VectorMapSvgRenderer.RenderRevealedLayers(
+                Map, Fog.RevealedPolygons, Fog.RevealedCells, Fog.RevealedMarkers, doors, conceal);
             return;
         }
 
@@ -235,7 +259,23 @@ else
             Conceal = conceal,
             Fog = Fog,
         };
-        svg = VectorMapSvgRenderer.Render(Map, options);
+
+        viewBox = VectorMapSvgRenderer.ViewBox(Map, options);
+        KeepMapLayer(VectorMapSvgRenderer.MapLayerKey(options), () => VectorMapSvgRenderer.RenderMapLayer(Map, options));
+        middleLayer = VectorMapSvgRenderer.RenderFogLayer(Map, options);
+        topLayer = VectorMapSvgRenderer.RenderOverlayLayer(options);
+    }
+
+    // Renders the map layer again only when the map or its key has changed since the last render; the
+    // same text then goes out unchanged, and Blazor sends nothing for it.
+    private void KeepMapLayer(string key, Func<string> render)
+    {
+        if (!ReferenceEquals(Map, mapLayerMap) || !string.Equals(key, mapLayerKey, StringComparison.Ordinal))
+        {
+            mapLayer = render();
+            mapLayerMap = Map;
+            mapLayerKey = key;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
