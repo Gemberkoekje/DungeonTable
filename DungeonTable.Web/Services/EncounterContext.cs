@@ -10,7 +10,7 @@ namespace DungeonTable.Web.Services;
 /// <summary>
 /// Finds what the area a fight started in says about one of its creatures, so the combatant detail
 /// pane can show the "Bugbear Tactics" block next to the bugbear's stat block instead of sending the
-/// DM back to the Info tab mid-round.
+/// DM back to the Room tab mid-round.
 /// </summary>
 /// <remarks>
 /// <para>

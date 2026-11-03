@@ -1,0 +1,93 @@
+@inherits DmTabBase
+@*
+    A card (a monster, a person, a spell, a faction, a book entry) as a sheet over the dock, with the
+    history's back and forward and its breadcrumb above it. Esc or the card's close button puts the
+    sheet away and the room is underneath, where the DM left it: a card used to sit at the top of the
+    old Info tab and push the room down under it.
+
+    The shell shows the sheet only while a card is open and the dock is on the Room or Campaign tab;
+    the Battle tab has a detail pane of its own.
+*@
+
+<div class="card-sheet" role="dialog" aria-label="Card">
+    <nav class="nav-history" aria-label="Reference history">
+        <div class="nav-steps">
+            <button type="button" class="nav-step" disabled="@(!Workspace.History.CanBack)"
+                    title="Back (Alt+Left)" aria-label="Back" @onclick="Back">&larr;</button>
+            <button type="button" class="nav-step" disabled="@(!Workspace.History.CanForward)"
+                    title="Forward (Alt+Right)" aria-label="Forward" @onclick="Forward">&rarr;</button>
+        </div>
+        <ol class="breadcrumb">
+            @if (CrumbStart > 0)
+            {
+                <li class="crumb-ellipsis" aria-hidden="true">&hellip;</li>
+            }
+            @for (int i = CrumbStart; i <= Workspace.History.Cursor; i++)
+            {
+                int index = i;
+                NavEntry entry = Workspace.History.Entries[index];
+                <li>
+                    <button type="button"
+                            class="crumb crumb-@CrossRefStyle.CssClass(entry.Kind) @(index == Workspace.History.Cursor ? "current" : string.Empty)"
+                            title="@entry.Label" @onclick="() => JumpTo(index)">@entry.Label</button>
+                </li>
+            }
+        </ol>
+    </nav>
+
+    <ReferenceDrawer Card="Workspace.ReferenceCard"
+                     BookCard="Workspace.BookCard"
+                     StatBlock="Workspace.OpenStatBlock"
+                     SpellEntry="Workspace.OpenSpellEntry"
+                     StatBlockCitation="@Workspace.OpenStatBlockCitation"
+                     SpellCitation="@Workspace.OpenSpellCitation"
+                     Npc="Workspace.OpenNpc"
+                     Character="Workspace.OpenCharacter"
+                     ResolveRefs="Workspace.ResolveCardRefs"
+                     ResolveEntityRefs="Workspace.ResolveEntityRefs"
+                     ResolveRefsOn="Workspace.ResolveRefsOn"
+                     OnOpenReference="OpenReference"
+                     OnClose="Workspace.CloseDrawer" />
+</div>
+
+@code {
+    /// <summary>
+    /// Raised when the sheet led to a room (a room's link on the card, or the history stepping onto a
+    /// room), so the dock can show the Room tab.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnShowRoom { get; set; }
+
+    // How many breadcrumb chips to show before eliding the older ones.
+    private const int MaxCrumbs = 8;
+
+    private int CrumbStart => Math.Max(0, Workspace.History.Cursor - MaxCrumbs + 1);
+
+    private Task OpenReference(string node)
+    {
+        Workspace.OpenReference(node);
+        return ShowRoomWhenNoCard();
+    }
+
+    private Task Back()
+    {
+        Workspace.NavigateBack();
+        return ShowRoomWhenNoCard();
+    }
+
+    private Task Forward()
+    {
+        Workspace.NavigateForward();
+        return ShowRoomWhenNoCard();
+    }
+
+    private Task JumpTo(int index)
+    {
+        Workspace.JumpTo(index);
+        return ShowRoomWhenNoCard();
+    }
+
+    // The history stop is a room once no card is open, and a room is read on the Room tab.
+    private Task ShowRoomWhenNoCard() =>
+        Workspace.CardNode.Length == 0 ? OnShowRoom.InvokeAsync() : Task.CompletedTask;
+}

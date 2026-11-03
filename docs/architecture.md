@@ -155,8 +155,42 @@ Blazor Server keeps one circuit per browser tab. The state of the table is share
 
 The app assumes **one live table**. The shared state is a singleton so that a refreshed DM tab, a
 second DM window and the player view all agree, and each service raises `Changed` so the others
-re-render. The DM screen's four tabs (Map, Info, Battle, Art) stay mounted and are hidden with CSS, so
-switching never loses the map's pan and zoom or the navigation history.
+re-render.
+
+## The DM screen: one map, one dock
+
+The DM screen is the map, which never leaves the screen, and beside it a **dock** with four tabs: Room,
+Battle, Campaign and Art. It used to be four whole-screen tabs, Map and Info among them, and reading a
+room meant leaving the map: pick the inspect tool, click the room, switch to Info, read, switch back to
+Map, pick the lifter again. Five actions to answer "what do I say", and the projector's frame and the
+reveals worked on the Map tab only. Now the bar (what the players see, the frame, the map picker, the
+save status), the map and the dock are all on screen at once, and reveals, the frame and the doors work
+whichever dock tab is up.
+
+- **A click looks.** The map has a default mode, Look, and goes back to it on Esc. A click on a room
+  shows it on the Room tab and changes nothing for the players; a click on a door opens or closes it.
+  A secret door the players have not found gets no click target in Look, so the click reads the room
+  behind it: discovering one takes the Doors tool, so it never happens by accident (`MapHitTargets`).
+- **The tools are for the occasional job.** The ones that do one thing to one object (reveal, doors,
+  conceal, point) go back to Look after one click that did something; the fog brush, the lifter and
+  measuring stay until Esc; Shift keeps a one-click tool up (`ToolSelection`). The trap this removes is
+  being left in the wrong mode. The toolbar and its options are drawn over the map, not beside it, so
+  the canvas keeps its size whatever tool is up.
+- **The Room tab reads in table order**: the read-aloud first, then the checks and the short list, the
+  encounter, the detail, the DM's note, and, folded at the foot, who is here (`RoomReading`). It
+  started with the encounter and the note and reached the read-aloud only after nine sub-tabs.
+- **Cards are a sheet over the dock** (`CardSheet`), with the history's back, forward and breadcrumb,
+  so Esc puts the card away and the room is still there, scrolled where it was. The sheet covers the
+  Room and Campaign tabs only: the fight has its own detail pane.
+- **Every dock tab stays mounted**, stacked and hidden with CSS, so a tab keeps its scroll position,
+  half-typed boxes and the fight's open pane. The map pane is mounted once and never hidden, because
+  the canvas keeps its pan and zoom in JS.
+- **The dock's width is the DM's**: they drag the divider, and `dt-dock.js` keeps the width per
+  browser in local storage (guarded, since that can be refused); it is not table state. `\` widens the
+  dock for a long fight. The fight's detail pane sits beside the order only when the dock has about
+  68rem, since a row stays two lines only while the order has about 36rem; in the default dock it
+  goes under the order. Below 1200 px wide the dock is a drawer over the map, toggled with Tab: a
+  fallback, since the table runs on a 1920×1080 laptop.
 
 ## Maps and what the players see
 
@@ -275,7 +309,7 @@ design:
 - **The list never re-sorts under the cursor.** Enter and Tab walk the initiative column, and the order
   is sorted only once the last blank is filled.
 - **The detail pane stands on its own.** Damage, healing and conditions are repeated there, beside the
-  stat block and the room's own notes on that creature, so the DM never has to go back to the Info tab
+  stat block and the room's own notes on that creature, so the DM never has to go back to the Room tab
   mid-round.
 - **There is one fight.** `BattleState` replaces a running fight without asking; asking is the UI's
   job, because it knows how to word the question for where it came from.

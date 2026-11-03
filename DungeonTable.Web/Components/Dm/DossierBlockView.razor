@@ -1,0 +1,29 @@
+@* One dossier block, folded: a room's Detail, a floor's factions and wandering monsters, a section of
+   the campaign's background or rules. Folded because these are opened when the party engages, not
+   read on the way in. The body runs through the cross-reference engine with the resolver the caller
+   chooses: the shown floor for a room or a level, no floor for the campaign and the rules. *@
+
+<details class="detail-block @(Block.Secret ? "secret" : string.Empty)">
+    <summary>
+        <span class="detail-heading">@Block.Heading</span>
+        @if (Block.Secret)
+        {
+            <span class="secret-badge" title="DM only — don't read this aloud">secret</span>
+        }
+    </summary>
+    <div class="detail-body"><CrossRefProse Text="@Block.Body" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></div>
+</details>
+
+@code {
+    /// <summary>The block to show.</summary>
+    [Parameter]
+    public DossierBlock Block { get; set; } = new DossierBlock();
+
+    /// <summary>Resolves the links in the body. When null, the body is plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with the id of a link the DM clicks in the body.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+}

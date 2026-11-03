@@ -44,7 +44,7 @@
             else
             {
                 <button type="button" class="primary" disabled="@(Workspace.PanelNode.Length == 0)"
-                        title="Start a fight in the area the Info tab is showing, seeding the saved party"
+                        title="Start a fight in the room the Room tab is showing, seeding the saved party"
                         @onclick="StartHere">Start battle in @Workspace.PanelTitle</button>
             }
         </div>
@@ -80,7 +80,7 @@
         {
             <p class="muted battle-empty">
                 No battle is running. Start one here, or add creatures from the <strong>Encounter</strong>
-                strip on the Info tab &mdash; that opens a fight in their area and seeds the party.
+                strip on the Room tab &mdash; that opens a fight in their area and seeds the party.
             </p>
         }
         else

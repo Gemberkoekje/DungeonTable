@@ -1,0 +1,147 @@
+@inherits DmTabBase
+@inject CampaignState Campaign
+@*
+    The dock's Room tab: the room the DM is looking at, beside the map, in the order it is read at the
+    table (RoomReading). Clicking a room on the map shows it here; nothing about that reaches the
+    players.
+
+    The header carries what the old context rail beside the map carried: the title and area number,
+    whether the room is cleared and whether the players can see it, and the actions on the room itself
+    (reveal it, frame the projector on it, centre the DM's map on it). Back and forward walk the same
+    history the card sheet's breadcrumb does.
+*@
+
+<div class="room-tab">
+    @if (Workspace.PanelNode.Length == 0)
+    {
+        <p class="muted room-empty">Click a room on the map to read it here.</p>
+    }
+    else
+    {
+        <header class="room-head">
+            <div class="room-head-top">
+                @if (Workspace.History.Entries.Count > 1)
+                {
+                    <span class="room-steps">
+                        <button type="button" class="nav-step" disabled="@(!Workspace.History.CanBack)"
+                                title="Back (Alt+Left)" aria-label="Back" @onclick="Workspace.NavigateBack">&larr;</button>
+                        <button type="button" class="nav-step" disabled="@(!Workspace.History.CanForward)"
+                                title="Forward (Alt+Right)" aria-label="Forward" @onclick="Workspace.NavigateForward">&rarr;</button>
+                    </span>
+                }
+
+                @if (Workspace.AreaDossier.AreaNumber > 0)
+                {
+                    <span class="room-number">Area @Workspace.AreaDossier.AreaNumber</span>
+                }
+
+                @if (AreaCleared)
+                {
+                    <span class="room-chip cleared" title="Every creature this area names has been ticked off">
+                        <span aria-hidden="true">&#x2714;</span> cleared
+                    </span>
+                }
+
+                @if (Workspace.RoomRevealed())
+                {
+                    <span class="room-chip revealed" title="The players can see this room">
+                        <span aria-hidden="true">&#x25CD;</span> revealed
+                    </span>
+                }
+
+                <span class="room-actions">
+                    @if (Workspace.RoomRegionIds.Count > 0)
+                    {
+                        <button type="button" class="room-action @(Workspace.RoomRevealed() ? "on" : string.Empty)"
+                                aria-pressed="@(Workspace.RoomRevealed() ? "true" : "false")"
+                                title="@(Workspace.RoomRevealed() ? "Hide this room from the players" : "Reveal this room to the players")"
+                                @onclick="Workspace.ToggleRoomReveal">
+                            <span aria-hidden="true">&#x25CD;</span> @(Workspace.RoomRevealed() ? "Hide" : "Reveal")
+                        </button>
+                    }
+                    <button type="button" class="room-action" disabled="@(!Workspace.MapLoaded)"
+                            title="Frame the projector on this room" @onclick="Workspace.FrameShownArea">
+                        <span aria-hidden="true">&#x2922;</span> Frame
+                    </button>
+                    <button type="button" class="room-action" disabled="@(!Workspace.MapLoaded)"
+                            title="Centre your map on this room" @onclick="ShowOnMap">
+                        <span aria-hidden="true">&#x2316;</span> Centre
+                    </button>
+                </span>
+            </div>
+
+            <h2 class="room-title">@Workspace.PanelTitle</h2>
+
+            @if (Workspace.MapLoaded && Workspace.RoomRegionIds.Count == 0)
+            {
+                <p class="muted room-unmapped">No region on this map is linked to this room yet.</p>
+            }
+        </header>
+
+        @if (!string.IsNullOrEmpty(Workspace.RegionNotice))
+        {
+            <p class="muted" role="status">@Workspace.RegionNotice</p>
+        }
+
+        @if (!string.IsNullOrEmpty(Workspace.ErrorMessage))
+        {
+            <p class="error" role="alert">@Workspace.ErrorMessage</p>
+        }
+        else
+        {
+            <RoomReading Briefing="Workspace.Briefing"
+                         Dossier="Workspace.AreaDossier"
+                         Encounter="EncounterSlot"
+                         Note="NoteSlot"
+                         OnNavigate="Workspace.NavigateTo"
+                         OnOpenReference="Workspace.OpenReference"
+                         ResolveRefs="Workspace.ResolveRefs"
+                         ResolveRefsOn="Workspace.ResolveRefsOn" />
+        }
+    }
+</div>
+
+@code {
+    /// <summary>Raised with a world point when the DM asks to centre their map on the shown room.</summary>
+    [Parameter]
+    public EventCallback<MapPoint> OnShowOnMap { get; set; }
+
+    // The checklist, read from the shown area: derived rather than stored, as the encounter strip
+    // derives it, so the chip and the strip can never disagree about whether a room is done.
+    private bool AreaCleared =>
+        Workspace.Encounter.Count > 0
+        && Campaign.ClearedCount(Workspace.PanelNode, Workspace.Encounter.Select(monster => monster.NodeId))
+            == Workspace.Encounter.Count;
+
+    private RenderFragment EncounterSlot => @<EncounterStrip Monsters="Workspace.Encounter"
+                                                            AreaNodeId="@Workspace.PanelNode"
+                                                            AreaTitle="@Workspace.PanelTitle"
+                                                            OnOpenReference="Workspace.OpenReference" />;
+
+    private RenderFragment NoteSlot => @<AreaNotes AreaNodeId="@Workspace.PanelNode" AreaTitle="@Workspace.PanelTitle" />;
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        // DmTabBase watches the workspace and the session; the ticks behind the cleared chip live on
+        // the campaign, which the encounter strip changes.
+        Campaign.Changed += OnCampaignChanged;
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Campaign.Changed -= OnCampaignChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void OnCampaignChanged() => InvokeAsync(StateHasChanged);
+
+    private Task ShowOnMap() => OnShowOnMap.InvokeAsync(Workspace.ShownAreaCentre());
+}

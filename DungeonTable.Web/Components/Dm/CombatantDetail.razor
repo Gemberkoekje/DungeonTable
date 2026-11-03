@@ -9,7 +9,7 @@
     a rulebook — how many attacks it gets and at what bonus, all six saving throws as a plus or a
     minus, its spells and how many slots are left, and what the room's own text says about it.
 
-    It renders StatBlockView, the same component the Info tab's reference drawer uses, so the two
+    It renders StatBlockView, the same component the card sheet's reference drawer uses, so the two
     surfaces can never disagree about a creature. What is NOT in StatBlockView is what belongs to this
     creature rather than to its species: current hit points, the damage box, its conditions, its spent
     slots, and the dossier blocks from the area the fight is in.
@@ -94,7 +94,7 @@
 
     @if (spell.NodeId.Length > 0)
     {
-        @* A spell opened from the spellcasting list stays inside the pane: jumping to the Info tab's
+        @* A spell opened from the spellcasting list stays inside the pane: jumping to the card sheet's
            reference drawer mid-round would move the DM off the fight to read three lines. *@
         <div class="detail-spell">
             <button type="button" class="link-btn detail-back" @onclick="CloseSpell">&#x25C2; Back to @Who.Name</button>

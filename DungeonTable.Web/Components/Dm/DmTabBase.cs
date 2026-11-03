@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Components;
 namespace DungeonTable.Web.Components.Dm;
 
 /// <summary>
-/// Base for the DM screen's tab panels. Injects the two pieces of state every tab reads — the
+/// Base for the DM screen's map pane and dock tabs. Injects the two pieces of state each reads — the
 /// per-circuit <see cref="DmWorkspace"/> and the shared <see cref="SessionState"/> — and re-renders
 /// the tab whenever either changes.
 /// </summary>

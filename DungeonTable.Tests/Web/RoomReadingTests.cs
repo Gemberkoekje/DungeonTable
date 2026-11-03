@@ -13,13 +13,68 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DungeonTable.Tests.Web;
 
 /// <summary>
-/// Renders the briefing panel's Room tab to HTML: what reaches its read-aloud box (the DM reads that
-/// box out to the players, so only the room's authored read-aloud may land in it), and how the area's
-/// creatures and exits are shown.
+/// Renders the Room tab's reading of a room to HTML: the order it is read in, what reaches its
+/// read-aloud box (the DM reads that box out to the players, so only the room's authored read-aloud
+/// may land in it), and how the area's creatures and exits are shown.
 /// </summary>
-public sealed class RoomBriefingPanelTests
+public sealed class RoomReadingTests
 {
     private const string RoomId = "data_dossiers_level_1_area_1";
+
+    [Fact]
+    public async Task The_room_reads_in_the_order_it_is_read_at_the_table()
+    {
+        // The read-aloud is what the DM says first; it used to sit under the encounter, the note and
+        // nine sub-tabs, below the fold on the table's laptop.
+        var dossier = new AreaDossier
+        {
+            AreaNodeId = RoomId,
+            ReadAloud = "Smoke hangs under the rafters.",
+            SkillChecks = new[] { new SkillCheck { Ability = "Wisdom (Perception)", Dc = 12 } },
+            Glance = new[] { new DossierBlock { Heading = "Fire", Body = "Broken pews burn." } },
+            Detail = new[] { new DossierBlock { Heading = "The loot", Body = "Under the altar." } },
+        };
+        var briefing = new RoomBriefing
+        {
+            RoomId = RoomId,
+            Occupants = new[] { new OccupantEntry { Label = "Goblin", NodeId = "goblin", Count = "3" } },
+            Connections = new[] { new ConnectionEntry { TargetRoomId = "area-2", Label = "Nave" } },
+        };
+
+        string html = await Render(new Dictionary<string, object>
+        {
+            [nameof(RoomReading.Briefing)] = briefing,
+            [nameof(RoomReading.Dossier)] = dossier,
+            [nameof(RoomReading.Encounter)] = (RenderFragment)(builder => builder.AddMarkupContent(0, "<p>ENCOUNTER-SLOT</p>")),
+            [nameof(RoomReading.Note)] = (RenderFragment)(builder => builder.AddMarkupContent(0, "<p>NOTE-SLOT</p>")),
+        });
+
+        int[] order =
+        {
+            html.IndexOf("Smoke hangs under the rafters.", StringComparison.Ordinal),
+            html.IndexOf("Perception DC 12", StringComparison.Ordinal),
+            html.IndexOf("At a glance", StringComparison.Ordinal),
+            html.IndexOf("ENCOUNTER-SLOT", StringComparison.Ordinal),
+            html.IndexOf("The loot", StringComparison.Ordinal),
+            html.IndexOf("NOTE-SLOT", StringComparison.Ordinal),
+            html.IndexOf("Occupants (1)", StringComparison.Ordinal),
+            html.IndexOf("Connections (1)", StringComparison.Ordinal),
+        };
+
+        Assert.DoesNotContain(-1, order);
+        Assert.Equal(order.OrderBy(index => index), order);
+    }
+
+    [Fact]
+    public async Task Who_is_here_is_folded_and_the_ways_out_stay_open()
+    {
+        // Who is here repeats the encounter, so it folds. The connections stay open until the Room
+        // tab lists the neighbouring rooms itself.
+        string html = await Render(new RoomBriefing { RoomId = RoomId }, new AreaDossier());
+
+        Assert.Contains("<details class=\"room-more room-occupants\"><summary>Occupants (0)</summary>", html, StringComparison.Ordinal);
+        Assert.Contains("<details class=\"room-more room-connections\" open><summary>Connections (0)</summary>", html, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task A_room_with_no_read_aloud_shows_no_read_aloud_box()
@@ -42,7 +97,7 @@ public sealed class RoomBriefingPanelTests
     }
 
     [Fact]
-    public async Task The_room_tab_lists_the_occupants_and_the_connections_and_nothing_else()
+    public async Task The_room_lists_the_occupants_and_the_connections_and_nothing_else()
     {
         // The tab once listed a room's features, items and contents as well; the room's own prose
         // carries all of it.
@@ -118,59 +173,11 @@ public sealed class RoomBriefingPanelTests
             StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("Level")]
-    [InlineData("Rules")]
-    public async Task Campaign_and_rules_prose_is_read_on_no_floor(string tab)
-    {
-        // campaign.json and reference.json belong to no floor. The content tests and the format read
-        // them on none, so a bare [[area 3]] there is broken; the DM screen read them on the floor on
-        // show, where the same link worked on one floor and pointed elsewhere on the next.
-        const string Prose = "Take the ringers' stair down.";
-        var onTheShownFloor = new ScriptedCrossRefResolver().Add("the ringers' stair", "data_dossiers_level_1_area_5", CrossRefKind.Area);
-        var onNoFloor = new ScriptedCrossRefResolver();
-        var block = new DossierBlock { Heading = "The way down", Body = Prose };
-
-        string html = await Render(new Dictionary<string, object>
-        {
-            [nameof(RoomBriefingPanel.InitialTab)] = tab,
-            [nameof(RoomBriefingPanel.Campaign)] = new CampaignDossier { Title = "The Silent Bell", Sections = new[] { block } },
-            [nameof(RoomBriefingPanel.Reference)] = new ReferenceLibrary { Sections = new[] { block } },
-            [nameof(RoomBriefingPanel.ResolveRefs)] = (Func<string, IReadOnlyList<CrossRef>>)(text => onTheShownFloor.Resolve(text, "data_dossiers_level_1")),
-            [nameof(RoomBriefingPanel.ResolveEntityRefs)] = (Func<string, IReadOnlyList<CrossRef>>)onNoFloor.Resolve,
-        });
-
-        Assert.Contains("<div class=\"detail-body\">Take the ringers&#x27; stair down.</div>", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("xref-area", html, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task The_rules_tab_is_headed_in_the_campaigns_own_words_or_not_at_all()
-    {
-        // It said "Dungeon features" over every campaign's rules: one book's wording, left in the app.
-        var sections = new[] { new DossierBlock { Heading = "Darkness Below", Body = "Count the lanterns." } };
-
-        string titled = await Render(new Dictionary<string, object>
-        {
-            [nameof(RoomBriefingPanel.InitialTab)] = "Rules",
-            [nameof(RoomBriefingPanel.Reference)] = new ReferenceLibrary { Title = "Rules of the undercroft", Sections = sections },
-        });
-        string untitled = await Render(new Dictionary<string, object>
-        {
-            [nameof(RoomBriefingPanel.InitialTab)] = "Rules",
-            [nameof(RoomBriefingPanel.Reference)] = new ReferenceLibrary { Sections = sections },
-        });
-
-        Assert.Contains("<div class=\"detail\"><h3>Rules of the undercroft</h3><details", titled, StringComparison.Ordinal);
-        Assert.Contains("<div class=\"detail\"><details", untitled, StringComparison.Ordinal);
-        Assert.DoesNotContain("Dungeon features", titled + untitled, StringComparison.OrdinalIgnoreCase);
-    }
-
     private static Task<string> Render(RoomBriefing briefing, AreaDossier dossier) =>
         Render(new Dictionary<string, object>
         {
-            [nameof(RoomBriefingPanel.Briefing)] = briefing,
-            [nameof(RoomBriefingPanel.Dossier)] = dossier,
+            [nameof(RoomReading.Briefing)] = briefing,
+            [nameof(RoomReading.Dossier)] = dossier,
         });
 
     private static async Task<string> Render(Dictionary<string, object> parameters)
@@ -180,7 +187,7 @@ public sealed class RoomBriefingPanelTests
 
         return await renderer.Dispatcher.InvokeAsync(async () =>
         {
-            HtmlRootComponent output = await renderer.RenderComponentAsync<RoomBriefingPanel>(ParameterView.FromDictionary(parameters));
+            HtmlRootComponent output = await renderer.RenderComponentAsync<RoomReading>(ParameterView.FromDictionary(parameters));
             return output.ToHtmlString();
         });
     }

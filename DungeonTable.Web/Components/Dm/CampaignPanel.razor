@@ -1,0 +1,406 @@
+@* The Campaign tab's panel: everything the DM reads that is not the room in front of the party. Level
+   (the floor's "what dwells here", its factions, and the campaign's background below), Quests (the
+   adventure hooks and their beat chains), Party (the player characters), NPCs (the campaign's named
+   people), Story (what came before), Session (tonight's prep and running order), Rules (the rules
+   reference and the card decks) and Search (find any area, person, creature, spell or book entry).
+
+   These belong to the floor or the campaign, not to a room, so the tab shown stays put when the room
+   in the Room tab changes. All of this prose except the floor's own is read on no floor
+   (ResolveEntityRefs): a bare [[area 3]] in a quest beat or a rules section is not whichever floor is
+   on show. *@
+
+<article class="briefing campaign-panel">
+    <nav class="briefing-tabs" role="tablist" aria-label="Campaign sections">
+        @foreach (CampaignSubTab tab in AllTabs)
+        {
+            <button type="button" role="tab" id="campaign-tab-@tab"
+                    class="briefing-tab @(activeTab == tab ? "active" : string.Empty)"
+                    aria-selected="@(activeTab == tab ? "true" : "false")"
+                    aria-controls="campaign-panel-@tab"
+                    @onclick="() => activeTab = tab">
+                @TabLabel(tab)
+            </button>
+        }
+    </nav>
+
+    @if (activeTab == CampaignSubTab.Level)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Level" aria-labelledby="campaign-tab-Level">
+            @if (HasLevel)
+            {
+                <section class="level-dossier">
+                    <h2 class="level-title">@Level.Title</h2>
+
+                    @if (!string.IsNullOrWhiteSpace(Level.DesignedFor))
+                    {
+                        <p class="designed-for"><span class="field-label">Designed for</span>@Level.DesignedFor</p>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Level.WhatDwellsHere))
+                    {
+                        <blockquote class="what-dwells"><CrossRefProse Text="@Level.WhatDwellsHere" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></blockquote>
+                    }
+
+                    @if (Level.Factions.Count > 0)
+                    {
+                        <div class="detail">
+                            <h3>Factions</h3>
+                            @foreach (DossierBlock faction in Level.Factions)
+                            {
+                                <DossierBlockView Block="faction" ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
+                            }
+                        </div>
+                    }
+
+                    @if (Level.WanderingMonsters.Count > 0)
+                    {
+                        <div class="detail">
+                            <h3>Wandering monsters</h3>
+                            @foreach (DossierBlock wander in Level.WanderingMonsters)
+                            {
+                                <DossierBlockView Block="wander" ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
+                            }
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Level.Aftermath))
+                    {
+                        <div class="detail">
+                            <h3>Aftermath</h3>
+                            <p class="aftermath"><CrossRefProse Text="@Level.Aftermath" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+                        </div>
+                    }
+                </section>
+            }
+            else
+            {
+                <p class="muted">No level dossier is authored for this floor yet.</p>
+            }
+
+            @if (HasCampaign)
+            {
+                @* Floor-independent background: what this place is, what makes it strange, and the
+                   way the party came in. The Level tab is where the DM already reads orientation
+                   prose, so it lives at the foot of it rather than in a tab of its own. *@
+                <section class="campaign-dossier">
+                    <h3>Campaign &mdash; @Campaign.Title</h3>
+
+                    @foreach (DossierBlock section in Campaign.Sections)
+                    {
+                        <DossierBlockView Block="section" ResolveRefs="NoFloorRefs" OnOpenReference="OnOpenReference" />
+                    }
+
+                    <LevelTable Campaign="Campaign" />
+
+                    @foreach (DossierBlock bonus in Campaign.BonusXp)
+                    {
+                        <DossierBlockView Block="bonus" ResolveRefs="NoFloorRefs" OnOpenReference="OnOpenReference" />
+                    }
+                </section>
+            }
+        </div>
+    }
+    else if (activeTab == CampaignSubTab.Quests)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Quests" aria-labelledby="campaign-tab-Quests">
+            <QuestLogPanel Log="Quests"
+                           OnOpenReference="OnOpenReference"
+                           OnNavigate="OnNavigate"
+                           ResolveRefs="NoFloorRefs"
+                           IsAuthored="IsAreaAuthored"
+                           IsFloorAuthored="IsFloorAuthored" />
+        </div>
+    }
+    else if (activeTab == CampaignSubTab.Party)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Party" aria-labelledby="campaign-tab-Party">
+            @* Like the quest log, a character's prose ranges across the whole campaign rather than
+               the shown floor, so it resolves through ResolveEntityRefs: a "level 3" in a backstory
+               is not this floor's area 3. *@
+            <PartyPanel Party="Party"
+                        ResolveRefs="NoFloorRefs"
+                        OnOpenReference="OnOpenReference" />
+        </div>
+    }
+    else if (activeTab == CampaignSubTab.Npcs)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Npcs" aria-labelledby="campaign-tab-Npcs">
+            <NpcPanel Roster="Npcs"
+                      ResolveRefs="NoFloorRefs"
+                      OnOpenReference="OnOpenReference" />
+        </div>
+    }
+    else if (activeTab == CampaignSubTab.Story)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Story" aria-labelledby="campaign-tab-Story">
+            <StoryPanel Story="Story"
+                        ResolveRefs="NoFloorRefs"
+                        OnOpenReference="OnOpenReference" />
+        </div>
+    }
+    else if (activeTab == CampaignSubTab.Session)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Session" aria-labelledby="campaign-tab-Session">
+            <SessionPanel Log="Sessions"
+                          ResolveRefs="NoFloorRefs"
+                          OnOpenReference="OnOpenReference" />
+        </div>
+    }
+    else if (activeTab == CampaignSubTab.Rules)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Rules" aria-labelledby="campaign-tab-Rules">
+            @if (Reference.Sections.Count > 0)
+            {
+                <div class="detail">
+                    @if (!string.IsNullOrWhiteSpace(Reference.Title))
+                    {
+                        <h3>@Reference.Title</h3>
+                    }
+                    @foreach (DossierBlock section in Reference.Sections)
+                    {
+                        <DossierBlockView Block="section" ResolveRefs="NoFloorRefs" OnOpenReference="OnOpenReference" />
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="muted">No rules reference is authored.</p>
+            }
+
+            @* The decks live here rather than in a tab of their own: a deck is drawn in the middle
+               of a rules moment (a door opening, a check just made), which is where the DM already
+               is. Their cards narrate places all over the dungeon, so like the quest log they
+               resolve through ResolveEntityRefs — an "area N" on a card is never about the floor
+               being shown. *@
+            @foreach (CardDeck deck in Decks.Where(deck => deck.Cards.Count > 0))
+            {
+                <DeckPanel @key="deck.Id" Deck="deck"
+                           ResolveRefs="NoFloorRefs"
+                           OnOpenReference="OnOpenReference" />
+            }
+        </div>
+    }
+    else if (activeTab == CampaignSubTab.Search)
+    {
+        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Search" aria-labelledby="campaign-tab-Search">
+            @if (SearchNodes is null)
+            {
+                <p class="muted">Search is unavailable.</p>
+            }
+            else
+            {
+                <div class="briefing-search">
+                    <input type="search" placeholder="Search areas, people, monsters, the book…" aria-label="Search"
+                           @bind="searchQuery" @bind:event="oninput" @bind:after="RunSearch" />
+
+                    @if (string.IsNullOrWhiteSpace(searchQuery))
+                    {
+                        <p class="muted">Type to find any area, person, monster, spell or book entry and jump to it.</p>
+                    }
+                    else if (searchResults.Count == 0)
+                    {
+                        <p class="muted">No matches for &ldquo;@searchQuery&rdquo;.</p>
+                    }
+                    else
+                    {
+                        <ul class="search-results">
+                            @foreach (SearchMatch match in searchResults)
+                            {
+                                <li>
+                                    <button type="button" class="search-result" title="Open this node"
+                                            @onclick="() => ActivateSearch(match)">
+                                        <span class="search-label">@match.Label</span>
+                                        @if (!string.IsNullOrEmpty(match.Category))
+                                        {
+                                            @* A book index hit is badged as the book's: machine-made, and lower-trust than the campaign's own. *@
+                                            <span class="@(match.Category == "book" ? "search-cat search-book" : "search-cat")">@match.Category</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(match.Citation))
+                                        {
+                                            <span class="search-cite">@match.Citation</span>
+                                        }
+                                        <span class="search-id">@match.Id</span>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    /// <summary>
+    /// The floor-level dossier for the shown area's level (overview, factions, wandering monsters),
+    /// surfaced on the Level tab. Empty when no level dossier is authored.
+    /// </summary>
+    [Parameter]
+    public LevelDossier Level { get; set; } = new LevelDossier();
+
+    /// <summary>
+    /// The shared, level-independent rules reference (doors, light, resting), surfaced on the Rules
+    /// tab. Empty when none is authored.
+    /// </summary>
+    [Parameter]
+    public ReferenceLibrary Reference { get; set; } = new ReferenceLibrary();
+
+    /// <summary>The campaign's quest log, surfaced on the Quests tab. Empty when none is authored.</summary>
+    [Parameter]
+    public QuestLog Quests { get; set; } = new QuestLog();
+
+    /// <summary>
+    /// The campaign-wide background (the place's history, the way in, the level table), shown at the
+    /// foot of the Level tab. Empty when none is authored.
+    /// </summary>
+    [Parameter]
+    public CampaignDossier Campaign { get; set; } = new CampaignDossier();
+
+    /// <summary>The player characters the dungeon is being run for, on the Party tab. Empty when none is authored.</summary>
+    [Parameter]
+    public PartyDossier Party { get; set; } = new PartyDossier();
+
+    /// <summary>The campaign's named non-player characters, on the NPCs tab. Empty when none is authored.</summary>
+    [Parameter]
+    public NpcRoster Npcs { get; set; } = new NpcRoster();
+
+    /// <summary>The table's prior-campaign history, on the Story tab. Empty for a table that started fresh.</summary>
+    [Parameter]
+    public StoryLibrary Story { get; set; } = new StoryLibrary();
+
+    /// <summary>The table's session prep, on the Session tab. Empty when none is authored.</summary>
+    [Parameter]
+    public SessionLog Sessions { get; set; } = new SessionLog();
+
+    /// <summary>
+    /// The campaign's card decks, shown at the foot of the Rules tab with a Draw button each. Empty
+    /// when none is authored.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<CardDeck> Decks { get; set; } = Array.Empty<CardDeck>();
+
+    /// <summary>
+    /// Tests whether an area node id has an authored dossier, so a quest beat's destination chip
+    /// knows whether to be a live jump or a muted "not authored yet" label. When null, every chip
+    /// is muted.
+    /// </summary>
+    [Parameter]
+    public Func<string, bool> IsAreaAuthored { get; set; }
+
+    /// <summary>
+    /// Tests whether a floor is written, by its number, so a quest beat that happens on a floor rather
+    /// than in one area is marked "not authored yet" only while it is not. When null, every floor counts
+    /// as unwritten.
+    /// </summary>
+    [Parameter]
+    public Func<int, bool> IsFloorAuthored { get; set; }
+
+    /// <summary>
+    /// Searches the content for what matches a query, for the Search tab. When null, the Search tab
+    /// shows an "unavailable" notice instead of a search box.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<SearchMatch>> SearchNodes { get; set; }
+
+    /// <summary>
+    /// Raised with an area's node id when the DM clicks a quest beat's destination, to read that room.
+    /// When no delegate is attached, those chips render as plain text.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnNavigate { get; set; }
+
+    /// <summary>
+    /// Raised with an id when the DM clicks a cross-reference or a search result, to open its card (an
+    /// area navigates instead). When no delegate is attached, prose links are inert.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>
+    /// Resolves the cross-references in the floor's own prose (the Level tab's overview, factions and
+    /// wandering monsters), on that floor. When null, that prose renders as plain text.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>
+    /// Resolves cross-references in prose that ranges beyond the shown floor: the quest log, the
+    /// party, the NPCs, the story, the session prep, the decks, the campaign background and the
+    /// rules. It reads them on no floor, so a bare <c>[[area 14c]]</c> in a beat about level 3 cannot
+    /// become Level 1's area 14c; an area link there names its floor. Falls back to
+    /// <see cref="ResolveRefs"/> when not supplied.
+    /// </summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveEntityRefs { get; set; }
+
+    /// <summary>
+    /// The tab shown first: "Level" unless set. The DM screen leaves it alone; the tests render the
+    /// other tabs through it, since a static render cannot click.
+    /// </summary>
+    [Parameter]
+    public string InitialTab { get; set; } = nameof(CampaignSubTab.Level);
+
+    // The Campaign tab's sections, in the order of its tab strip.
+    private enum CampaignSubTab
+    {
+        None,
+        Level,
+        Quests,
+        Party,
+        Npcs,
+        Story,
+        Session,
+        Rules,
+        Search,
+    }
+
+    private static readonly CampaignSubTab[] AllTabs =
+    {
+        CampaignSubTab.Level,
+        CampaignSubTab.Quests,
+        CampaignSubTab.Party,
+        CampaignSubTab.Npcs,
+        CampaignSubTab.Story,
+        CampaignSubTab.Session,
+        CampaignSubTab.Rules,
+        CampaignSubTab.Search,
+    };
+
+    // Every tab is spelled the way its enum member is, except the acronym: nobody writes "Npcs".
+    private static string TabLabel(CampaignSubTab tab) => tab == CampaignSubTab.Npcs ? "NPCs" : tab.ToString();
+
+    private CampaignSubTab activeTab = CampaignSubTab.None;
+
+    private string searchQuery = string.Empty;
+    private IReadOnlyList<SearchMatch> searchResults = Array.Empty<SearchMatch>();
+
+    private Func<string, IReadOnlyList<CrossRef>> NoFloorRefs => ResolveEntityRefs ?? ResolveRefs;
+
+    protected override void OnParametersSet()
+    {
+        if (activeTab == CampaignSubTab.None)
+        {
+            activeTab = Enum.TryParse(InitialTab, out CampaignSubTab tab) && tab != CampaignSubTab.None ? tab : CampaignSubTab.Level;
+        }
+    }
+
+    private void RunSearch()
+    {
+        searchResults = string.IsNullOrWhiteSpace(searchQuery) || SearchNodes is null
+            ? Array.Empty<SearchMatch>()
+            : SearchNodes(searchQuery);
+    }
+
+    private bool HasLevel =>
+        !string.IsNullOrWhiteSpace(Level.Title)
+        || !string.IsNullOrWhiteSpace(Level.WhatDwellsHere)
+        || Level.Factions.Count > 0
+        || Level.WanderingMonsters.Count > 0;
+
+    private bool HasCampaign => Campaign.Sections.Count > 0 || Campaign.Levels.Count > 0;
+
+    // A search result opens a reference card. Routing by kind is the workspace's job: OpenReference
+    // navigates to the room instead whenever the id is an area's.
+    private Task ActivateSearch(SearchMatch match) => OnOpenReference.InvokeAsync(match.Id);
+}

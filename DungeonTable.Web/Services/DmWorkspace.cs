@@ -15,17 +15,17 @@ using Qowaiv.Validation.Abstractions;
 namespace DungeonTable.Web.Services;
 
 /// <summary>
-/// Everything the DM screen's three tabs share: the loaded vector map and its editor annotations,
+/// Everything the DM screen's map and dock share: the loaded vector map and its editor annotations,
 /// the room briefing currently on show, and the reference history that threads them together.
 /// Registered <b>Scoped</b>, so there is one per Blazor circuit (one DM browser) — unlike
 /// <see cref="SessionState"/>, which is the singleton the player projector also observes. Splitting
-/// this out of the DM page keeps the Map / Info / Battle tabs from prop-drilling a dozen parameters
+/// this out of the DM page keeps the map and the dock's tabs from prop-drilling a dozen parameters
 /// each, and lets a tab mutate shared state without knowing who else is watching:
 /// <see cref="Changed"/> tells the shell to re-render all of them.
 /// </summary>
 public sealed class DmWorkspace
 {
-    // The Search tab shows at most this many matches per query.
+    // The Campaign tab's Search shows at most this many matches per query.
     private const int SearchLimit = 20;
 
     private readonly IContentProjection content;
@@ -540,7 +540,7 @@ public sealed class DmWorkspace
     }
 
     /// <summary>
-    /// Handles an Inspect-mode click on a map region: navigates to its linked briefing, or — when
+    /// Handles a Look click on a map region: navigates to its linked briefing, or — when
     /// the region has no link — highlights it and explains, keeping the current room's briefing (and
     /// the breadcrumb) shown so the panel and the history stay in step.
     /// </summary>
@@ -609,6 +609,45 @@ public sealed class DmWorkspace
     // ---- Framing --------------------------------------------------------------------------
 
     /// <summary>
+    /// Moves the player viewport onto the shown room, padded by a cell and in the projector's shape,
+    /// or onto the whole map when the shown room has no region on this map. The bar's Frame button and
+    /// the Room tab's frame action both do this.
+    /// </summary>
+    public void FrameShownArea()
+    {
+        if (!MapLoaded)
+        {
+            return;
+        }
+
+        MapBounds target = SelectedBounds();
+        if (target.Width <= 0 && target.Height <= 0)
+        {
+            session.SetPlayerViewport(MapFraming.DefaultViewport(Map.Bounds, session.PlayerAspect));
+            return;
+        }
+
+        MapBounds padded = MapFraming.Pad(target, UnitSize);
+        session.SetPlayerViewport(MapFraming.Frame(padded, session.PlayerAspect, Map.Bounds));
+    }
+
+    /// <summary>
+    /// The middle of the shown room, in world units, for centring the DM's map on it; the middle of the
+    /// whole map when the room has no region on this map.
+    /// </summary>
+    /// <returns>The point to centre on.</returns>
+    public MapPoint ShownAreaCentre()
+    {
+        MapBounds bounds = SelectedBounds();
+        if (bounds.Width <= 0 && bounds.Height <= 0)
+        {
+            bounds = Map.Bounds;
+        }
+
+        return new MapPoint(bounds.MinX + (bounds.Width / 2), bounds.MinY + (bounds.Height / 2));
+    }
+
+    /// <summary>
     /// The world-unit rectangle of the shown room — the union of its linked regions, or the
     /// highlighted region when the room has none. Empty when nothing is selected.
     /// </summary>
@@ -616,8 +655,8 @@ public sealed class DmWorkspace
     public MapBounds SelectedBounds() => MapFraming.Bounds(SelectedRegions());
 
     /// <summary>
-    /// The regions the Info tab's orientation mini map draws: the shown room's regions, or the
-    /// highlighted region when the room has no linked geometry.
+    /// The regions of the shown room on this map, or the highlighted region when the room has no
+    /// linked geometry: what framing and centring aim at.
     /// </summary>
     /// <returns>The regions to highlight (possibly empty).</returns>
     public IReadOnlyList<Region> SelectedRegions()
@@ -677,7 +716,7 @@ public sealed class DmWorkspace
     // ---- Lookups --------------------------------------------------------------------------
 
     /// <summary>
-    /// The Search tab's lookup, capped for the panel: the same search the Room Editor's node picker
+    /// The Campaign tab's Search, capped for the panel: the same search the Room Editor's node picker
     /// uses, over the campaign's own content and then the book index.
     /// </summary>
     /// <param name="query">The search query.</param>

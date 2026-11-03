@@ -127,9 +127,9 @@ public sealed class RelationRenderingTests
             Involvements = new[] { new Involvement { SubjectId = "nib", SubjectLabel = "Nib", Lines = new[] { Rival } } },
         };
 
-        string html = await Render<RoomBriefingPanel>(new() { [nameof(RoomBriefingPanel.Briefing)] = briefing });
+        string html = await Render<RoomReading>(new() { [nameof(RoomReading.Briefing)] = briefing });
 
-        Assert.Contains("<h3>Involved with</h3>", html, StringComparison.Ordinal);
+        Assert.Contains("<summary>Involved with (1)</summary>", html, StringComparison.Ordinal);
         Assert.Contains("<span class=\"involvement-subject\">Nib</span>", html, StringComparison.Ordinal);
         Assert.Contains("rival of", html, StringComparison.Ordinal);
     }
@@ -137,7 +137,7 @@ public sealed class RelationRenderingTests
     [Fact]
     public async Task A_room_with_no_involvements_draws_no_section()
     {
-        string html = await Render<RoomBriefingPanel>(new() { [nameof(RoomBriefingPanel.Briefing)] = new RoomBriefing { RoomId = "area-6" } });
+        string html = await Render<RoomReading>(new() { [nameof(RoomReading.Briefing)] = new RoomBriefing { RoomId = "area-6" } });
 
         Assert.DoesNotContain("Involved with", html, StringComparison.Ordinal);
     }

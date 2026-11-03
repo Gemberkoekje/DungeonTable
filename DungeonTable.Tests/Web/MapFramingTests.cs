@@ -6,8 +6,8 @@ using DungeonTable.Web.Services;
 namespace DungeonTable.Tests.Web;
 
 /// <summary>
-/// Verifies the world-unit framing helpers behind the shell's "Frame" button, the Info tab's
-/// orientation mini map, and the status bar's "which region is the projector pointed at" readout.
+/// Verifies the world-unit framing helpers behind the bar's "Frame" button, the Room tab's frame and
+/// centre actions, and the bar's "which region is the projector pointed at" readout.
 /// </summary>
 public sealed class MapFramingTests
 {
@@ -38,15 +38,6 @@ public sealed class MapFramingTests
         Assert.Equal(new MapBounds(8, 8, 22, 22), MapFraming.Pad(bounds, 2));
         Assert.Equal(bounds, MapFraming.Pad(bounds, 0));
         Assert.Equal(bounds, MapFraming.Pad(bounds, -5));
-    }
-
-    [Fact]
-    public void At_least_grows_a_tiny_rectangle_around_its_centre_and_leaves_a_big_one_alone()
-    {
-        MapBounds grown = MapFraming.AtLeast(new MapBounds(100, 100, 104, 104), 10);
-
-        Assert.Equal(new MapBounds(97, 97, 107, 107), grown);
-        Assert.Equal(new MapBounds(0, 0, 50, 50), MapFraming.AtLeast(new MapBounds(0, 0, 50, 50), 10));
     }
 
     [Fact]

@@ -30,79 +30,103 @@ the DM screen, and the frame you draw takes that shape.
 
 ### The DM screen
 
-![The Map tab: three rooms revealed, the player view framed on the Nave](images/dm-map.png)
+![The DM screen: the map with three rooms revealed and the player view framed on the Nave, and the Goblin Den on the Room tab](images/dm-screen.png)
 
-The DM screen has four tabs: **Map**, **Info**, **Battle** and **Art**. **Ctrl+1** to **Ctrl+4**
-switch between them from anywhere. The bar under the tabs stays in view whichever tab is up:
+The DM screen is the map, which never leaves the screen, and beside it the **dock**, with four tabs:
+**Room**, **Battle**, **Campaign** and **Art**. **Ctrl+1** to **Ctrl+4** switch the dock from
+anywhere; the map stays where it is, so you can reveal, open doors and move the projector's view
+whichever tab is up. The bar across the top is in view all the time:
 
 - **Players see 3 regions · 0 cells** is what the projector shows right now.
 - **Viewport: Nave** is the room under the middle of the projector's view.
-- **Frame** moves the projector's view onto the room you have selected, or the whole map when none
-  is selected.
+- **Frame** moves the projector's view onto the room on the Room tab, or the whole map when it has no
+  room on this map.
+- When the campaign has more than one map, the **map picker** switches between them. The projector
+  follows. Each map keeps what you revealed on it, its open doors and where the projector was framed,
+  so when the party goes back to a floor they see it as they left it. A map shown for the first time
+  starts dark, with its doors as the Room Editor set them.
 - The save status is on the right (see [what "Not saved" means](#what-not-saved-means)). When a
   picture is on the projector, the bar says so too.
 
-When the campaign has more than one map, the **Map** picker at the top right switches between them.
-The projector follows. Each map keeps what you revealed on it, its open doors and where the projector
-was framed, so when the party goes back to a floor they see it as they left it. A map shown for the
-first time starts dark, with its doors as the Room Editor set them.
+**The dock's width is yours.** Drag the line between the map and the dock to make it wider or
+narrower; the screen remembers it in this browser. Double-click the line to go back to the usual width.
+**\\** (or the **⇤** button at the end of the dock's tabs) widens the dock for a long fight and back.
+On a screen narrower than about 1200 pixels, the dock slides over the map instead: **Tab**, or the
+**Dock** button in the bar, brings it out and puts it away.
 
 ### The map and its tools
 
-The **Map** tab is the map with its fog. Rooms the players can see are drawn light; the rest are
-shaded. The box labelled **Player view** is exactly what the projector shows. Drag it by its border to
-move the projector's view, or by a corner to zoom in or out, or select a room and press **Frame**.
+Rooms the players can see are drawn light; the rest are shaded. The box labelled **Player view** is
+exactly what the projector shows. Drag it by its border to move the projector's view, or by a corner to
+zoom in or out, or press **Frame**. Drag anywhere else on the map to pan it, and use the mouse wheel
+(or **+**, **−** and **Reset** at the bottom right) to zoom.
 
-Pick a tool from the column on the left, or press its number:
+**A click looks.** Unless you pick a tool, the map is in **Look**:
 
-| key | tool | what it does |
-|---|---|---|
-| **1** | Inspect | Click a room to see it in the panel beside the map; double-click to open its briefing on the Info tab. Drag the Player view box to move the projector's view. |
-| **2** | Reveal | Click a room, a door or a marker (a trap, a hazard) to show it to the players, and again to hide it. |
-| **3** | Fog | A brush: drag to reveal grid cells. Hold **Alt**, or drag with the right button, to hide them again. For caves, and for rooms the players only glimpse. |
-| **4** | Lifter | Set a vision range, then click where the party stands. Every tile they could see from there is revealed, stopping at walls. |
-| **5** | Doors | Click a door to open or close it. A secret door is drawn as wall until you click it to discover it; click again to hide it. |
-| **6** | Conceal | Click a concealed object (a hidden stair, a pit, a chest) to show it to the players, and again to hide it. It is drawn ghosted on your map until then. You mark what is concealed in the [Room Editor](#step-3-mark-the-rooms-in-the-room-editor). |
-| **7** | Measure | Drag between two points to read the distance, with diagonals counted the 5e way. Only you see it. |
-| **8** | Point | Click a spot to point at it on the projector. It pulses a few times and fades. |
+- **Click a room** and the Room tab shows it. Nothing changes for the players.
+- **Click a door** to open or close it. A secret door the players have not found is left alone: a click
+  on it reads the room behind it, so you never give one away by accident. Discover it with the Doors
+  tool; once found, a click opens and closes it like any other door.
 
-The quickest way to reveal a room is the **Reveal room to players** button in the panel beside the
-map, which appears when you click a room with Inspect. A room drawn as several regions is revealed
-whole. **Clear reveals…** at the bottom hides everything on this map again, and offers to undo the
-clear. Other maps keep their reveals.
+**The tools are for the occasional job.** Pick one from the bar over the map, or press its number.
+**Esc** always goes back to Look.
+
+| key | tool | what it does | afterwards |
+|---|---|---|---|
+| **1** | Look | Click a room to read it, click a door to open or close it. | |
+| **2** | Reveal | Click a room, a door or a marker (a trap, a hazard) to show it to the players, and again to hide it. | back to Look |
+| **3** | Fog | A brush: drag to reveal grid cells. Hold **Alt**, or drag with the right button, to hide them again. For caves, and for rooms the players only glimpse. | stays |
+| **4** | Lifter | Set a vision range, then click where the party stands. Every tile they could see from there is revealed, stopping at walls. | stays |
+| **5** | Doors | Click a door to open or close it. A secret door is drawn as wall until you click it to discover it; click again to open it, and again to hide it. | back to Look |
+| **6** | Conceal | Click a concealed object (a hidden stair, a pit, a chest) to show it to the players, and again to hide it. It is drawn ghosted on your map until then. You mark what is concealed in the [Room Editor](#step-3-mark-the-rooms-in-the-room-editor). | back to Look |
+| **7** | Measure | Drag between two points to read the distance, with diagonals counted the 5e way. Only you see it. | stays |
+| **8** | Point | Click a spot to point at it on the projector. It pulses a few times and fades. | back to Look |
+
+"Back to Look" happens after a click that did something, so a click that misses keeps the tool. To keep
+one of those tools up, for revealing a whole wing room by room, hold **Shift** as you pick it
+(**Shift+2**, or Shift and click). Pressing a tool's number again also puts Look back.
+
+**Clear reveals…** at the foot of the map hides everything on this map again, and offers to undo the
+clear. Other maps keep their reveals. **Grid** draws the grid.
 
 The single-key shortcuts (these, and the ones on the Battle and Art tabs) do nothing while you are
 typing in a box, so a note never changes your tool.
 
-### The Info tab: what the room says
+### The Room tab: what the room says
 
-![The Info tab: the Goblin Den's briefing](images/dm-info.png)
+The Room tab shows the room you last clicked, in the order you need it at the table:
 
-Click a room on the map and the **Info** tab has everything written about it:
-
+- **The header**: the area number, the title, and whether the room is **cleared** and **revealed**.
+  **Reveal** shows the whole room to the players (a room drawn as several regions is revealed whole),
+  **Frame** frames the projector on it, and **Centre** brings it to the middle of your map. **←** and
+  **→** step back and forth through what you opened.
+- **The text to read aloud**, in a box, first.
+- **Skill checks** as DC pills, then **At a glance**, the short list to read next.
 - **The encounter**: each creature the room lists, with where its stat block comes from and how many
   there are. A count written as dice (**1d4+2**) is yours to roll: set the number with **−** and
   **+**. **Add** puts them in the fight, and **Add all to battle** puts in everyone. Tick a creature
-  off once it has been dealt with; when all are, the room reads **Area cleared**, here and on the Map
-  tab.
-- **Notes**: your own note on the room, for what happened here. It is kept with the table.
-- **The briefing**: the text to read aloud, in a box; skill checks as DC pills; **At a glance**, the
-  short list to read first; **Detail**, folded until you open it, with secrets marked **SECRET**; who
-  is here, how they are tied to each other, and where the room leads.
-- **The map**, small, on the right. **Show on map** takes you to the room on the Map tab.
+  off once it has been dealt with; when all are, the room reads **cleared**.
+- **Detail**, folded until you open it, with secrets marked **SECRET**.
+- **Notes**: your own note on the room, for what happened here, one line until you click into it. It
+  is kept with the table.
+- At the foot: who is here and how they are tied to each other, folded, and where the room leads.
 
-Every underlined name is a link. A person, a monster, a spell or a faction opens a **card** in the
-Info tab: who they are, their stat block, where they appear and how they are tied to others. A room
-opens that room. **←** and **→** (or **Alt+←** and **Alt+→**) walk back and forth through what you
-opened, and the row of names beside them jumps straight to one.
+![A card over the Room tab: Nib, with the breadcrumb back to the Goblin Den](images/dm-card.png)
 
-The Info tab has its own tabs for the rest of the campaign:
+Every underlined name is a link. A person, a monster, a spell or a faction opens a **card** over the
+dock: who they are, their stat block, where they appear and how they are tied to others. **Esc**, or
+the card's **×**, puts it away, and the room is still there underneath. **←** and **→** (or **Alt+←**
+and **Alt+→**) walk back and forth through what you opened, and the row of names beside them jumps
+straight to one. A link to a room shows that room on the Room tab.
+
+### The Campaign tab
+
+The **Campaign** tab (**Ctrl+3**) holds the rest of the campaign, in tabs of its own:
 
 | tab | what it holds |
 |---|---|
-| Room | the room, as above |
 | Level | the floor: who lives here, the factions, the wandering monsters, and the campaign's background below |
-| Quests | the quest log. Tick each beat as it happens; a beat's destination jumps to its room |
+| Quests | the quest log. Tick each beat as it happens; a beat's destination shows its room |
 | Party | the player characters, with the numbers you are asked for mid-turn in view |
 | NPCs | the campaign's people. Type to filter them by name, place, or anything they know |
 | Story | what happened before this campaign |
@@ -110,11 +134,13 @@ The Info tab has its own tabs for the rest of the campaign:
 | Rules | the campaign's rules, and its card decks: **Draw** hands out a card. A deck whose cards the players keep remembers which are out until you reset it |
 | Search | everything above, and the books the campaign indexes, by name |
 
+The tab you leave it on stays put when you look at another room.
+
 ### A fight
 
-![The Battle tab: a fight in the Goblin Den, Nib frightened and his pane open](images/dm-battle.png)
+![The Battle tab in the wide dock: a fight in the Goblin Den, Nib frightened and his pane open](images/dm-battle.png)
 
-**Starting one.** Press **Add all to battle** on the room's encounter, on the Info tab: that starts
+**Starting one.** Press **Add all to battle** on the room's encounter, on the Room tab: that starts
 a fight in the room, with the party, and puts in everyone the room lists. **Add** on one line puts in
 just those. **Start battle in Goblin Den**, on the Battle tab, starts a fight with only the party in
 it, for a fight the room does not list. While a fight is running, adding from another room asks
@@ -141,8 +167,9 @@ one's hit points listed under it. **Split** gives each its own row, and **Merge*
 back together. A named creature (Nib, who fights with the goblin's stat block) always has a row of
 his own.
 
-**The detail pane.** Click a creature's name for its full stat block beside the order: its attacks
-as short lines, its saves, its spells (click one to read it) and its spell slots. **Esc** closes it.
+**The detail pane.** Click a creature's name for its full stat block: its attacks as short lines, its
+saves, its spells (click one to read it) and its spell slots. It opens under the order, or beside it
+when the dock is wide (**\\**), which is how a long fight is easiest to run. **Esc** closes it.
 
 **Adding and ending.** Below the order you can add a party member, an ally, or a one-off creature
 with just a name. **Edit party** and **Edit allies** change the rosters. **End battle** clears the
@@ -562,8 +589,8 @@ The content tests name every broken link, with the file it is in.
 
 - **Nothing shows until you reveal it.** The bar says what the players can see: **Players see 0
   regions · 0 cells** means nothing yet.
-- **The projector shows only what is inside the Player view box** on the Map tab. Press **Frame** to
-  bring it to the room you selected.
+- **The projector shows only what is inside the Player view box** on the map. Press **Frame** to
+  bring it to the room on the Room tab.
 - **The projector follows the map picked on the DM screen.**
 - **A room cannot be revealed**, or is revealed but does not show: it has no region, or its region
   is not linked to it. Open the Room Editor and check the room's region says **linked**.

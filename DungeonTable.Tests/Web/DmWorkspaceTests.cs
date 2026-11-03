@@ -14,7 +14,7 @@ namespace DungeonTable.Tests.Web;
 /// <summary>
 /// Verifies the per-circuit DM workspace the Map / Info / Battle tabs share: loading a map and its
 /// annotations, navigating the briefing, resolving which regions belong to the shown room, and the
-/// derived readouts the shell's status bar and the Info tab's mini map use.
+/// derived readouts the shell's bar and the Room tab use.
 /// </summary>
 public sealed class DmWorkspaceTests
 {
@@ -568,6 +568,45 @@ public sealed class DmWorkspaceTests
 
         harness.Workspace.CloseDrawer();
         Assert.Equal(string.Empty, harness.Workspace.OpenNpc.Id);
+    }
+
+    [Fact]
+    public async Task Framing_the_shown_room_puts_the_projector_over_it()
+    {
+        // The bar's Frame and the Room tab's frame action both run this.
+        Harness harness = await Harness.Started();
+        harness.Workspace.NavigateTo(Pillars);
+
+        harness.Workspace.FrameShownArea();
+
+        MapBounds viewport = harness.Session.PlayerViewport;
+        Assert.True(viewport.MinX <= 100 && viewport.MinY <= 100 && viewport.MaxX >= 200 && viewport.MaxY >= 200);
+        Assert.Equal(150, viewport.MinX + (viewport.Width / 2), 6);
+        Assert.Equal(150, viewport.MinY + (viewport.Height / 2), 6);
+        Assert.Equal(harness.Session.PlayerAspect, viewport.Width / viewport.Height, 6);
+    }
+
+    [Fact]
+    public async Task Framing_a_room_with_no_region_here_shows_the_whole_map()
+    {
+        Harness harness = await Harness.Started();
+        harness.Workspace.NavigateTo("data_dossiers_level_1_area_9");
+
+        harness.Workspace.FrameShownArea();
+
+        Assert.Equal(MapFraming.DefaultViewport(harness.Workspace.Map.Bounds, harness.Session.PlayerAspect), harness.Session.PlayerViewport);
+    }
+
+    [Fact]
+    public async Task Centring_aims_at_the_middle_of_the_shown_room_or_of_the_map()
+    {
+        Harness harness = await Harness.Started();
+
+        harness.Workspace.NavigateTo(Pillars);
+        Assert.Equal(new MapPoint(150, 150), harness.Workspace.ShownAreaCentre());
+
+        harness.Workspace.NavigateTo("data_dossiers_level_1_area_9");
+        Assert.Equal(new MapPoint(500, 400), harness.Workspace.ShownAreaCentre());
     }
 
     [Fact]

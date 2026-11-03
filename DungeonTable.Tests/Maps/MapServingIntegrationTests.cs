@@ -45,6 +45,32 @@ public sealed class MapServingIntegrationTests : IClassFixture<MapServingFixture
     }
 
     [Fact]
+    public async Task Dm_view_shows_the_map_and_the_room_on_one_screen()
+    {
+        string html = await fixture.Client.GetStringAsync("/dm", CancellationToken.None);
+
+        // The map and the room it starts on are both on the page, not on two tabs of their own.
+        Assert.Contains("class=\"vector-map\"", html, StringComparison.Ordinal);
+        Assert.Contains("The stair from the chapel ends in a low stone room", html, StringComparison.Ordinal);
+
+        // The dock's tabs, in their Ctrl+1..4 order; the old Map and Info tabs are gone.
+        int[] tabs =
+        {
+            html.IndexOf("id=\"dm-tab-Room\"", StringComparison.Ordinal),
+            html.IndexOf("id=\"dm-tab-Battle\"", StringComparison.Ordinal),
+            html.IndexOf("id=\"dm-tab-Campaign\"", StringComparison.Ordinal),
+            html.IndexOf("id=\"dm-tab-Art\"", StringComparison.Ordinal),
+        };
+        Assert.DoesNotContain(-1, tabs);
+        Assert.Equal(tabs.OrderBy(index => index), tabs);
+        Assert.DoesNotContain("dm-tab-Map", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("dm-tab-Info", html, StringComparison.Ordinal);
+
+        // A click looks until a tool is picked.
+        Assert.Matches("<button type=\"button\" class=\"map-tool active\" aria-pressed=\"true\"[^>]*>\\s*<span class=\"tool-glyph\" aria-hidden=\"true\">[^<]*</span>\\s*<span class=\"tool-label\">Look</span>", html);
+    }
+
+    [Fact]
     public async Task Player_view_renders_the_vector_map()
     {
         string html = await fixture.Client.GetStringAsync("/player", CancellationToken.None);

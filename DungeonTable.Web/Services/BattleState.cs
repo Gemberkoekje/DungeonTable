@@ -808,7 +808,7 @@ public sealed class BattleState
     }
 
     // Adding a combatant outside a started battle implicitly opens one, so "add these two bugbears"
-    // from the Info tab never fails with "no battle". Caller holds gate.
+    // from the Room tab never fails with "no battle". Caller holds gate.
     private void EnsureBattle()
     {
         if (battleId.Length == 0)

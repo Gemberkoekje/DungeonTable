@@ -300,7 +300,7 @@ line in a list.
 | `note` | as prose, beside them in the encounter |
 | `secret` | only the DM should know they are here |
 
-The creature list is the encounter: **Add all to battle** on the room's Info tab puts exactly these
+The creature list is the encounter: **Add all to battle** on the room's Room tab puts exactly these
 into the fight.
 
 **An exit**: `to` (`"area 2"`, or `"L2 area 1"` for another floor), `note` (prose) and `secret`. It

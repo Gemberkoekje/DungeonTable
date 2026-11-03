@@ -5,6 +5,7 @@
     what is in the room; this says what happened in it — the name the players gave the innkeeper, the
     lie they told the doppelganger, the fact they left the door spiked open.
 
+    One line until the DM clicks into it, so it sits low in the room without pushing the rest down.
     Saved on blur rather than per keystroke: the note goes through the same debounced write as the
     rest of the table, and a save per character would wake both circuits and the database for a
     half-typed word. Trimming to blank is how a note is deleted.
@@ -29,7 +30,7 @@
            setAttribute, which does no entity decoding, so the entity would show as its own source
            text. (This comment sits OUTSIDE the tag on purpose — a Razor comment among the attributes
            is emitted as an attribute *name*, which throws at render time and drops the circuit.) *@
-        <textarea class="area-notes-box" rows="3"
+        <textarea class="area-notes-box" rows="1"
                   aria-label="@($"Your notes on {(AreaTitle.Length > 0 ? AreaTitle : "this area")}")"
                   placeholder="What happened here, and what they will find if they come back…"
                   value="@draft"

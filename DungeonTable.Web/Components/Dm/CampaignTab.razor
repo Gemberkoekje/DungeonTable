@@ -1,0 +1,45 @@
+@inherits DmTabBase
+@*
+    The dock's Campaign tab: the floor, the quests, the party, the people, the story, tonight's prep,
+    the rules and search (CampaignPanel), beside the map. A link to a room shows that room on the Room
+    tab, which is where the DM reads rooms; a link to anything else opens its card over the dock.
+*@
+
+<div class="campaign-tab">
+    <CampaignPanel Level="Workspace.LevelDossier"
+                   Reference="Workspace.ReferenceLibrary"
+                   Quests="Workspace.QuestLog"
+                   Campaign="Workspace.CampaignDossier"
+                   Party="Workspace.PartyDossier"
+                   Npcs="Workspace.NpcRoster"
+                   Story="Workspace.StoryLibrary"
+                   Sessions="Workspace.SessionLog"
+                   Decks="Workspace.Decks"
+                   IsAreaAuthored="Workspace.IsAreaAuthored"
+                   IsFloorAuthored="Workspace.IsFloorAuthored"
+                   SearchNodes="Workspace.SearchNodes"
+                   OnNavigate="Navigate"
+                   OnOpenReference="OpenReference"
+                   ResolveRefs="Workspace.ResolveRefs"
+                   ResolveEntityRefs="Workspace.ResolveEntityRefs" />
+</div>
+
+@code {
+    /// <summary>Raised when a link here led to a room, so the dock can show the Room tab.</summary>
+    [Parameter]
+    public EventCallback OnShowRoom { get; set; }
+
+    private Task Navigate(string node)
+    {
+        Workspace.NavigateTo(node);
+        return OnShowRoom.InvokeAsync();
+    }
+
+    // The workspace decides what an id is: a card opens over the dock, and an area is navigated to
+    // instead, in which case no card is open afterwards and the room is what the DM asked for.
+    private Task OpenReference(string node)
+    {
+        Workspace.OpenReference(node);
+        return Workspace.CardNode.Length == 0 ? OnShowRoom.InvokeAsync() : Task.CompletedTask;
+    }
+}

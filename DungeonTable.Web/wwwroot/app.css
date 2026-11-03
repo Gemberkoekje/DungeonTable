@@ -67,31 +67,6 @@ code {
     border-radius: 0.25rem;
 }
 
-.node-picker {
-    display: flex;
-    gap: 0.5rem;
-    margin: 1rem 0 1.5rem;
-}
-
-.node-picker input {
-    flex: 1;
-    padding: 0.5rem 0.65rem;
-    background: var(--panel);
-    color: var(--ink);
-    border: 1px solid var(--border);
-    border-radius: 0.35rem;
-}
-
-.node-picker button {
-    padding: 0.5rem 1rem;
-    background: var(--accent);
-    color: #1a1508;
-    border: none;
-    border-radius: 0.35rem;
-    font-weight: 600;
-    cursor: pointer;
-}
-
 .briefing {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -103,10 +78,12 @@ code {
     margin: 0;
 }
 
-.briefing .room-id {
-    margin: 0.15rem 0 1rem;
-    font-family: ui-monospace, monospace;
-    font-size: 0.8rem;
+/* In the dock the briefing is the tab's whole content, so it needs no box of its own. */
+.dock-panel .briefing,
+.card-sheet .briefing {
+    padding: 0;
+    background: none;
+    border: none;
 }
 
 .read-aloud {
@@ -156,34 +133,6 @@ code {
 .briefing .nav-link:hover,
 .briefing .nav-link:focus-visible {
     text-decoration: underline;
-}
-
-/* Back / reveal-room controls above the briefing. */
-.briefing-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-}
-
-.briefing-actions button {
-    padding: 0.4rem 0.7rem;
-    border: 1px solid var(--border);
-    border-radius: 0.35rem;
-    background: var(--panel);
-    color: var(--ink);
-    cursor: pointer;
-}
-
-.briefing-actions button:hover {
-    border-color: #b8860b;
-}
-
-.briefing-actions .reveal-room.on {
-    background: #b8860b;
-    border-color: #b8860b;
-    color: #1b1b1b;
-    font-weight: 600;
 }
 
 /* ---- Area dossier: the room's prose ---- */
@@ -305,11 +254,7 @@ code {
     color: var(--error);
 }
 
-/* ---- Briefing tabs: Room / Level / Rules / Search ---- */
-
-.briefing-head {
-    margin-bottom: 0.5rem;
-}
+/* ---- The Campaign tab's sections: Level / Quests / Party / NPCs / Story / Session / Rules / Search ---- */
 
 .briefing-tabs {
     display: flex;
@@ -1738,86 +1683,45 @@ code {
     color: var(--muted);
 }
 
-/* ---- DM shell: the Map / Info / Battle tabs ---- */
+/* ---- DM screen: the bar, the map and the dock ---- */
 
-/* The DM screen needs far more width than the 60rem reading column the rest of the app uses, so it
-   breaks out of `.page` rather than forcing every other page to be wide. */
+/* The DM screen fills the window. The map and the dock each pan or scroll inside their own space, so
+   the page itself never scrolls under the DM's hands. It breaks out of the 60rem reading column the
+   rest of the app uses rather than forcing every other page to be wide. */
+.page:has(.dm-shell) {
+    display: flex;
+    flex-direction: column;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    padding: 0 0.75rem 0.6rem;
+}
+
+.page:has(.dm-shell) > .topbar {
+    padding: 0.3rem 0;
+    margin-bottom: 0.45rem;
+}
+
+.page:has(.dm-shell) > main {
+    flex: 1;
+    min-height: 0;
+}
+
 .dm-shell {
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(100rem, calc(100vw - 2rem));
-}
-
-.dm-shell-head {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 1rem;
-    margin-top: 0.25rem;
-}
-
-.dm-tabs {
-    display: flex;
-    gap: 0.25rem;
-}
-
-.dm-tab {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.45rem;
-    padding: 0.5rem 1.15rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-bottom: none;
-    border-radius: 0.45rem 0.45rem 0 0;
-    color: var(--muted);
-    font: inherit;
-    cursor: pointer;
-}
-
-.dm-tab:hover,
-.dm-tab:focus-visible {
-    color: var(--ink);
-}
-
-.dm-tab.active {
-    background: #2a231c;
-    color: var(--accent);
-    font-weight: 600;
-    box-shadow: inset 0 3px 0 var(--accent);
-}
-
-.dm-tab-key {
-    font-size: 0.65rem;
-    opacity: 0.7;
-}
-
-.map-picker {
-    display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 0.5rem;
-    margin: 0 0 0.35rem auto;
-    color: var(--muted);
+    height: 100%;
 }
 
-.map-picker select,
-.tool-options select {
-    padding: 0.35rem 0.5rem;
-    background: var(--panel);
-    color: var(--ink);
-    border: 1px solid var(--border);
-    border-radius: 0.35rem;
-}
-
-/* The player-view status bar lives in the shell, so the DM can see and reframe what the projector
-   shows from any tab — including mid-fight, without leaving the Battle tab. */
+/* The bar: what the projector shows, the frame, the map on the table and whether it is saved. It sits
+   above both the map and the dock, so it reads the same whatever the dock is showing. */
 .dm-player-bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1.25rem;
-    padding: 0.45rem 0.85rem;
+    gap: 0.5rem 1.25rem;
+    padding: 0.4rem 0.85rem;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 0.45rem;
@@ -1839,7 +1743,6 @@ code {
 }
 
 .frame-btn {
-    margin-left: auto;
     padding: 0.3rem 0.8rem;
     background: none;
     border: 1px solid var(--border);
@@ -1859,8 +1762,22 @@ code {
     cursor: default;
 }
 
-/* Whether the table is being persisted. Sits at the far right of the player bar, after Frame,
-   which already takes the flex slack with margin-left: auto. */
+.bar-spacer {
+    flex: 1 1 0;
+}
+
+.map-picker,
+.map-tool-options select {
+    padding: 0.3rem 0.5rem;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+/* Whether the table is being persisted, at the right of the bar. */
 .table-saved {
     display: inline-flex;
     align-items: center;
@@ -1880,51 +1797,310 @@ code {
     color: var(--error);
 }
 
-/* Inactive tabs are hidden, never unmounted: the map canvas keeps its pan/zoom state in JS. */
-.dm-panels {
-    margin-top: 0.9rem;
-}
-
-.dm-panel-hidden {
+/* Only a screen too narrow for the dock beside the map needs a button to bring the dock out. */
+.drawer-btn {
     display: none;
-}
-
-/* ---- Map tab: tool rail, canvas, context rail, options strip ---- */
-
-.map-stage {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) minmax(13rem, 16rem);
-    gap: 0.9rem;
-    align-items: start;
-}
-
-.tool-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-}
-
-.tool-rail .tool {
-    display: grid;
-    grid-template-columns: 1.2rem 1fr auto;
-    align-items: center;
-    gap: 0.45rem;
-    width: 7.5rem;
-    padding: 0.45rem 0.55rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 0.4rem;
-    color: var(--ink);
+    padding: 0.3rem 0.8rem;
+    background: none;
+    border: 1px solid var(--accent);
+    border-radius: 0.35rem;
+    color: var(--accent);
     font: inherit;
-    text-align: left;
+    font-size: 0.8rem;
     cursor: pointer;
 }
 
-.tool-rail .tool:hover {
+/* The map on the left, the divider, the dock on the right. The dock's width is the DM's to drag
+   (dt-dock.js sets --dock-width); until they do, the map gets about 60 % of the window, which on the
+   table's 1920-pixel laptop leaves the dock about 770 px, wide enough for the fight's order and its
+   detail pane side by side. */
+.dm-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 0.6rem var(--dock-width, clamp(24rem, 40%, 56rem));
+}
+
+/* The wide dock, for a long fight: most of the width, with the map still in view beside it. */
+.dm-shell.dock-wide .dm-body {
+    grid-template-columns: minmax(0, 1fr) 0.6rem min(72%, 110rem);
+}
+
+.dm-map {
+    container: map / inline-size;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+}
+
+.dm-divider {
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.dm-divider::after {
+    content: "";
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    border-radius: 1px;
+    background: var(--border);
+}
+
+.dm-divider:hover::after,
+.dm-divider:focus-visible::after,
+.dm-shell.resizing .dm-divider::after {
+    background: var(--accent);
+}
+
+.dm-divider:focus-visible {
+    outline: none;
+}
+
+.dm-shell.dock-wide .dm-divider {
+    pointer-events: none;
+}
+
+.dm-shell.resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+.dm-dock {
+    container: dock / inline-size;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+}
+
+.dock-tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.2rem;
+    padding: 0.35rem 0.45rem 0;
+    background: #191512;
+    border-bottom: 1px solid var(--border);
+}
+
+.dock-tab {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.45rem 1rem;
+    background: none;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 0.4rem 0.4rem 0 0;
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.dock-tab:hover,
+.dock-tab:focus-visible {
+    color: var(--ink);
+}
+
+.dock-tab.active {
+    background: var(--panel);
+    border-color: var(--border);
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.dock-tab-key {
+    font-size: 0.65rem;
+    opacity: 0.7;
+}
+
+.dock-wide-btn {
+    align-self: center;
+    margin-left: auto;
+    padding: 0.15rem 0.5rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.dock-wide-btn:hover,
+.dock-wide-btn.on {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Every tab stays mounted, stacked in one place; the hidden ones keep their scroll position and
+   their half-typed boxes, and content-visibility spares the browser drawing them. */
+.dock-panels {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+}
+
+.dock-panel {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.85rem 1rem 1.5rem;
+}
+
+.dock-panel-hidden {
+    visibility: hidden;
+    content-visibility: hidden;
+    pointer-events: none;
+}
+
+/* A card over the reading tabs, with the room still underneath. */
+.card-sheet {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.75rem 1rem 1.5rem;
+    background: var(--panel);
+    box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.card-sheet .nav-history {
+    margin-bottom: 0.6rem;
+}
+
+/* The fight in the dock: the detail pane sits beside the order only while the dock is wide enough
+   for both, and under the order otherwise, so nothing moves under the cursor that opened it. A row
+   stays two lines, read at a glance, only while the order has about 36rem; the pane takes up to
+   28rem, so side by side needs a dock of about 68rem: the wide dock (\) on the table's laptop, not
+   the default one. Measured, not guessed: at the default 760 px each row wrapped to five lines.
+   The selectors carry .dock-panel so that they outrank the Battle tab's own rules further down. */
+.dock-panel .battle-detail {
+    top: 0;
+    max-height: calc(100dvh - 9rem);
+}
+
+@container dock (max-width: 68rem) {
+    .dock-panel .battle-layout.with-detail {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dock-panel .battle-detail {
+        position: static;
+        max-height: none;
+    }
+}
+
+/* Below about 1200 px the dock does not fit beside the map, so it slides over it as a drawer: Tab or
+   the bar's Dock button brings it out. A fallback for a small screen, not the way the table runs. */
+@media (max-width: 1199px) {
+    .dm-body,
+    .dm-shell.dock-wide .dm-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dm-divider,
+    .dock-wide-btn {
+        display: none;
+    }
+
+    .drawer-btn {
+        display: inline-block;
+    }
+
+    .dm-dock {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10;
+        width: min(48rem, 94%);
+        visibility: hidden;
+        transform: translateX(calc(100% + 1rem));
+        transition: transform 0.18s ease-out, visibility 0s linear 0.18s;
+        box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .dm-shell.drawer-open .dm-dock {
+        visibility: visible;
+        transform: none;
+        transition: transform 0.18s ease-out;
+    }
+}
+
+/* ---- The map: the canvas, its toolbar and the strips over it ---- */
+
+/* The toolbar and the strips are drawn over the canvas, not beside it, so the canvas keeps its size
+   and a point on the map keeps its place on screen whatever tool is up. */
+.map-pane {
+    --vector-map-height: 100%;
+    position: relative;
+    height: 100%;
+}
+
+.map-message {
+    margin: 0;
+    padding: 1rem;
+}
+
+/* The canvas's own zoom buttons go to the bottom right, out of the toolbar's way. */
+.map-pane .vector-map-tools {
+    top: auto;
+    bottom: 8px;
+}
+
+.map-tool-bar,
+.map-tool-options,
+.map-footer,
+.map-warning {
+    position: absolute;
+    left: 0.5rem;
+    z-index: 4;
+    background: rgba(30, 26, 23, 0.9);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.map-tool-bar {
+    top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem;
+    max-width: calc(100% - 1rem);
+    padding: 0.25rem;
+}
+
+.map-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.28rem 0.55rem;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.map-tool:hover {
     border-color: var(--accent);
 }
 
-.tool-rail .tool.active {
+.map-tool.active {
     background: #b8860b;
     border-color: #b8860b;
     color: #1b1b1b;
@@ -1932,87 +2108,54 @@ code {
 }
 
 .tool-glyph {
-    font-size: 1.05rem;
+    font-size: 1rem;
     line-height: 1;
 }
 
 .tool-key {
-    font-size: 0.65rem;
-    opacity: 0.7;
+    font-size: 0.62rem;
+    opacity: 0.65;
 }
 
-.context-rail {
-    padding: 0.75rem 0.85rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 0.45rem;
+/* A narrow map keeps the glyphs and the keys, and drops the words. */
+@container map (max-width: 50rem) {
+    .map-tool .tool-label {
+        display: none;
+    }
 }
 
-.context-title {
-    margin: 0;
-    font-size: 1rem;
-}
-
-.context-id {
-    margin: 0.1rem 0 0.7rem;
-    font-family: ui-monospace, monospace;
-    font-size: 0.72rem;
-}
-
-.context-action {
-    display: block;
-    width: 100%;
-    margin-top: 0.4rem;
-    padding: 0.4rem 0.6rem;
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 0.35rem;
-    color: var(--ink);
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-}
-
-.context-action:hover {
-    border-color: #b8860b;
-}
-
-.context-action.reveal-room.on {
-    background: #b8860b;
-    border-color: #b8860b;
-    color: #1b1b1b;
-    font-weight: 600;
-}
-
-.context-note {
-    margin: 0.5rem 0 0;
-    font-size: 0.8rem;
-}
-
-/* Only the active tool's options are shown, next to that tool's one-line hint. */
-.tool-options {
+/* The active tool's settings and its one-line hint, under the toolbar. */
+.map-tool-options {
+    top: 3.1rem;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1rem;
-    margin-top: 0.6rem;
-    padding: 0.5rem 0.85rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 0.45rem;
-    font-size: 0.85rem;
+    gap: 0.4rem 1rem;
+    max-width: min(46rem, calc(100% - 1rem));
+    padding: 0.4rem 0.75rem;
+    font-size: 0.82rem;
 }
 
-.tool-options .grid-toggle,
-.tool-options .vision-range,
-.tool-options .brush-size,
-.tool-options .measure-readout,
-.tool-options .ping-readout {
+.map-tool-options .vision-range,
+.map-tool-options .brush-size,
+.map-tool-options .measure-readout,
+.map-tool-options .ping-readout,
+.map-footer .grid-toggle {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     color: var(--muted);
     white-space: nowrap;
+}
+
+.map-hint {
+    flex: 1 1 16rem;
+    margin: 0;
+    color: var(--muted);
+}
+
+.map-hint-after {
+    color: var(--accent);
 }
 
 /* The measured distance. The rules figure is the one a DM acts on, so it is the one that is big;
@@ -2050,11 +2193,6 @@ code {
     border-color: #b8860b;
 }
 
-.tool-options .map-hint {
-    flex: 1 1 16rem;
-    margin: 0;
-}
-
 .vision-range input {
     width: 4rem;
 }
@@ -2078,76 +2216,174 @@ code {
     font-weight: 600;
 }
 
-/* Clearing the reveals throws away a whole evening of fog state, so it confirms first and stays
-   undoable for one step afterwards. */
-.clear-group {
-    display: inline-flex;
+/* The grid and clearing the reveals, at the map's foot. Clearing throws away a whole evening of fog
+   state, so it confirms first and stays undoable for one step afterwards. */
+.map-footer {
+    bottom: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.4rem;
-    margin-left: auto;
+    gap: 0.4rem 0.6rem;
+    max-width: calc(100% - 9rem);
+    padding: 0.3rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+.map-foot-btn {
+    padding: 0.2rem 0.6rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.map-foot-btn:hover {
+    border-color: #b8860b;
 }
 
 .clear-confirm {
     color: var(--error);
 }
 
-.clear-group button {
-    padding: 0.3rem 0.7rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 0.35rem;
-    color: var(--ink);
-    font: inherit;
-    font-size: 0.8rem;
-    cursor: pointer;
-}
-
-.clear-group button:hover {
-    border-color: #b8860b;
-}
-
-.clear-group .clear-yes {
+.map-foot-btn.clear-yes {
     border-color: var(--error);
     color: var(--error);
 }
 
-.clear-group .clear-undo {
+.map-foot-btn.clear-undo {
     border-color: var(--accent);
     color: var(--accent);
 }
 
-/* ---- Info tab: briefing + the orientation mini map ---- */
-
-.info-tab {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(15rem, 20rem);
-    gap: 1.25rem;
-    align-items: start;
-}
-
-.info-orient {
-    position: sticky;
-    top: 0.5rem;
-}
-
-.mini-map-figure {
+.map-warning {
+    bottom: 3.2rem;
     margin: 0;
+    padding: 0.35rem 0.7rem;
+}
+
+/* ---- Room tab: the room in reading order ---- */
+
+.room-empty {
+    margin: 1rem 0;
+}
+
+.room-head {
+    margin-bottom: 0.85rem;
+}
+
+.room-head-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.room-steps {
+    display: inline-flex;
+    gap: 0.25rem;
+}
+
+.room-number {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.room-chip {
+    padding: 0.05rem 0.5rem;
+    border-radius: 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.room-chip.cleared {
+    background: rgba(46, 139, 87, 0.18);
+    color: #64c08a;
+}
+
+.room-chip.revealed {
+    background: rgba(201, 162, 39, 0.14);
+    color: var(--accent);
+}
+
+.room-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-left: auto;
+}
+
+.room-action {
+    padding: 0.2rem 0.6rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.78rem;
+    white-space: nowrap;
     cursor: pointer;
 }
 
-.mini-map-figure .vector-map-host {
-    overflow: hidden;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 0.45rem;
+.room-action:hover:not(:disabled) {
+    border-color: var(--accent);
 }
 
-.mini-map-figure figcaption {
-    margin-top: 0.35rem;
-    font-size: 0.78rem;
+.room-action:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
-/* ---- Info tab: the encounter strip ---- */
+.room-action.on {
+    background: #b8860b;
+    border-color: #b8860b;
+    color: #1b1b1b;
+    font-weight: 600;
+}
+
+.room-title {
+    margin: 0.3rem 0 0;
+    font-size: 1.35rem;
+    line-height: 1.25;
+}
+
+.room-unmapped {
+    margin: 0.25rem 0 0;
+    font-size: 0.8rem;
+}
+
+/* Who is here and how they are tied together: folded at the foot of the room. */
+.room-more {
+    margin-top: 0.6rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.room-more > summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.room-more > summary:hover {
+    color: var(--accent);
+}
+
+.room-more > ul,
+.room-more > p {
+    margin: 0.45rem 0 0;
+}
+
+/* ---- Room tab: the encounter strip ---- */
 
 .encounter {
     margin: 0 0 1.25rem;
@@ -2277,31 +2513,9 @@ code {
 }
 
 .area-notes-box:focus {
+    min-height: 6rem;
     outline: none;
     border-color: #b8860b;
-}
-
-/* The same two facts on the Map tab's context rail, so "have we been here?" is answerable from the
-   map without opening the briefing. */
-.context-cleared {
-    display: inline-block;
-    margin-top: 0.4rem;
-    padding: 0.1rem 0.5rem;
-    border-radius: 0.6rem;
-    background: rgba(46, 139, 87, 0.18);
-    font-size: 0.72rem;
-    color: #64c08a;
-    font-weight: 600;
-}
-
-.context-noted {
-    margin: 0.5rem 0 0;
-    padding-left: 0.55rem;
-    border-left: 2px solid var(--border);
-    font-size: 0.8rem;
-    font-style: italic;
-    color: var(--muted);
-    white-space: pre-wrap;
 }
 
 .encounter-list {
@@ -2957,8 +3171,8 @@ input.battle-init,
 /* ---- Battle tab: the combatant detail pane ---- */
 
 /* One column until a creature is opened, then the initiative order plus a pane beside it. The pane is
-   sticky so it stays put while the DM scrolls a long stat block's own list behind it — the same shape
-   the Info tab's mini map uses. */
+   sticky so it stays put while the DM scrolls a long initiative list behind it. In a narrow dock it
+   goes under the order instead (see the dock's rules). */
 .battle-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -3375,8 +3589,7 @@ input.battle-init,
 
 /* ---- The picture on the projector ---------------------------------------------------------- */
 
-/* The player bar's art chip and its toggle. Deliberately NOT .frame-btn: that rule carries
-   margin-left:auto to take the bar's slack, and two of them would fight over it. */
+/* The player bar's art chip and its toggle. */
 .art-live {
     display: inline-flex;
     align-items: center;
