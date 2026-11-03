@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using DungeonTable.Core.Maps;
 using DungeonTable.Core.Maps.Vector;
 
@@ -13,6 +12,12 @@ namespace DungeonTable.Web.Rendering;
 /// rough field-of-view for the DM to reveal what a player with a given vision range would see from a
 /// clicked spot; it is not a precise light model.
 /// </summary>
+/// <remarks>
+/// What never changes about the map (which sample points are floor, the walls and where they meet) is
+/// worked out once per map in a <see cref="VisionIndex"/>; each lift files the walls within reach in
+/// <see cref="SightLines"/>. Both give exactly the answers the plain tests did, only without testing every
+/// point against the whole map: a 120 ft lift on a large level went from seconds to milliseconds.
+/// </remarks>
 public static class VisionReveal
 {
     /// <summary>The floor tiles visible from a point within a vision radius, stopping at walls.</summary>
@@ -34,28 +39,23 @@ public static class VisionReveal
             return Array.Empty<(int, int)>();
         }
 
-        double cell = grid.CellSizePx;
-        double radius = (radiusFeet / MapMeasure.FeetPerCell) * cell;
-        var floorRings = CorridorReveal.CollectRings(map, LayerKind.Floor);
-        if (floorRings.Count == 0)
+        VisionIndex index = VisionIndex.For(map);
+        if (!index.HasFloor)
         {
             return Array.Empty<(int, int)>();
         }
 
-        var walls = CorridorReveal.CollectWallSegments(map);
-        CorridorReveal.AddSecretDoorSegments(walls, map, grid, secretDoorIds);
-        walls = ExtendCorners(walls, cell * 0.5);
-        var openGaps = CorridorReveal.CollectOpenDoorGaps(map, openDoorIds);
+        double cell = grid.CellSizePx;
+        double radius = (radiusFeet / MapMeasure.FeetPerCell) * cell;
 
         // The viewer stands in the centre of the clicked tile.
         (int oc, int orow) = GridCells.CellAt(grid, worldX, worldY);
         double ox = grid.OriginX + ((oc + 0.5) * cell);
         double oy = grid.OriginY + ((orow + 0.5) * cell);
 
-        // Any sight ray stays within the vision radius of the viewer, so walls outside that box can
-        // never block one — drop them so the per-sample scan doesn't walk the whole map's walls.
-        double reach = radius + cell;
-        walls = CorridorReveal.SegmentsInRegion(walls, ox - reach, oy - reach, ox + reach, oy + reach);
+        // Any sight ray stays within the vision radius of the viewer (plus the far tile), so walls outside
+        // that box can never block one.
+        SightLines sight = SightLines.Around(index, map, ox, oy, radius + cell, secretDoorIds, openDoorIds);
 
         double radiusSq = radius * radius;
         int span = (int)Math.Ceiling(radius / cell) + 1;
@@ -73,7 +73,8 @@ public static class VisionReveal
                     continue;
                 }
 
-                if (Visible(ox, oy, b, floorRings, walls, openGaps))
+                ulong floor = index.FloorMask(col, row);
+                if (floor != 0 && Visible(ox, oy, b, floor, sight))
                 {
                     result.Add((col, row));
                 }
@@ -87,101 +88,31 @@ public static class VisionReveal
     // crossing a wall. A dense 7x7 grid of sample points is tested (rather than just centre + corners), so
     // a tile a slanted wall reduces to a thin floor SLIVER still reveals — the sampler has to land on the
     // floor part, and a sliver needs the density. The centre is tried first for the common fully-floored
-    // tile. Each sample must be floor AND have a clear line (Sample), so a wall-only tile or one out of
+    // tile. Only the sample points the index says are floor are tried, so a wall-only tile or one out of
     // sight is not revealed.
-    private static bool Visible(
-        double ox, double oy, MapBounds b, List<IReadOnlyList<MapPoint>> floorRings,
-        List<CorridorReveal.Segment> walls, List<MapBounds> openGaps)
+    private static bool Visible(double ox, double oy, MapBounds b, ulong floor, SightLines sight)
     {
-        if (Sample(ox, oy, (b.MinX + b.MaxX) / 2, (b.MinY + b.MaxY) / 2, floorRings, walls, openGaps))
+        if ((floor & (1UL << VisionIndex.CentreBit)) != 0
+            && !sight.Blocked(ox, oy, (b.MinX + b.MaxX) / 2, (b.MinY + b.MaxY) / 2))
         {
             return true;
         }
 
-        return Enumerable.Range(1, 7).Any(i =>
-            Enumerable.Range(1, 7).Any(j =>
-                Sample(ox, oy, b.MinX + (i / 8.0 * b.Width), b.MinY + (j / 8.0 * b.Height), floorRings, walls, openGaps)));
-    }
-
-    private static bool Sample(
-        double ox, double oy, double sx, double sy, List<IReadOnlyList<MapPoint>> floorRings,
-        List<CorridorReveal.Segment> walls, List<MapBounds> openGaps) =>
-        CorridorReveal.PointInRings(sx, sy, floorRings) && !BlockedByWall(ox, oy, sx, sy, walls, openGaps);
-
-    // A wall blocks the ray unless the crossing happens at an open door's opening — sight passes through
-    // an open doorway even where the wall geometry is drawn unbroken across it.
-    private static bool BlockedByWall(
-        double ox, double oy, double sx, double sy, List<CorridorReveal.Segment> walls, List<MapBounds> openGaps)
-    {
-        foreach (CorridorReveal.Segment w in walls)
+        for (int i = 1; i <= VisionIndex.Lattice; i++)
         {
-            if (!CorridorReveal.SegmentIntersection(ox, oy, sx, sy, w.X0, w.Y0, w.X1, w.Y1, out double ix, out double iy))
+            double x = b.MinX + (i / 8.0 * b.Width);
+            for (int j = 1; j <= VisionIndex.Lattice; j++)
             {
-                continue;
-            }
-
-            if (!openGaps.Any(g => ix >= g.MinX && ix <= g.MaxX && iy >= g.MinY && iy <= g.MaxY))
-            {
-                return true;
+                int bit = ((i - 1) * VisionIndex.Lattice) + (j - 1);
+                if ((floor & (1UL << bit)) != 0 && !sight.Blocked(ox, oy, x, b.MinY + (j / 8.0 * b.Height)))
+                {
+                    return true;
+                }
             }
         }
 
         return false;
     }
-
-    // Extends every wall segment slightly past each CORNER — a vertex shared by two or more segments —
-    // so a sight line cannot thread through the exact point where two walls meet at a 90-degree corner and
-    // leak into the next room (the strict segment-crossing test treats a ray touching a shared endpoint as
-    // NOT crossing either wall). A free wall END (a doorway jamb, belonging to a single segment) is left
-    // alone, so open doorways still see through. Collinear joints extend harmlessly along their own line.
-    private static List<CorridorReveal.Segment> ExtendCorners(List<CorridorReveal.Segment> walls, double amount)
-    {
-        var shared = new Dictionary<(long, long), int>();
-        foreach (CorridorReveal.Segment w in walls)
-        {
-            Count(shared, w.X0, w.Y0);
-            Count(shared, w.X1, w.Y1);
-        }
-
-        var result = new List<CorridorReveal.Segment>(walls.Count);
-        foreach (CorridorReveal.Segment w in walls)
-        {
-            double dx = w.X1 - w.X0, dy = w.Y1 - w.Y0;
-            double len = Math.Sqrt((dx * dx) + (dy * dy));
-            if (len < 1e-6)
-            {
-                result.Add(w);
-                continue;
-            }
-
-            double ux = dx / len * amount, uy = dy / len * amount;
-            double x0 = w.X0, y0 = w.Y0, x1 = w.X1, y1 = w.Y1;
-            if (shared[Key(w.X0, w.Y0)] >= 2)
-            {
-                x0 -= ux;
-                y0 -= uy;
-            }
-
-            if (shared[Key(w.X1, w.Y1)] >= 2)
-            {
-                x1 += ux;
-                y1 += uy;
-            }
-
-            result.Add(new CorridorReveal.Segment(x0, y0, x1, y1));
-        }
-
-        return result;
-    }
-
-    private static void Count(Dictionary<(long, long), int> counts, double x, double y)
-    {
-        (long, long) key = Key(x, y);
-        counts[key] = counts.TryGetValue(key, out int n) ? n + 1 : 1;
-    }
-
-    private static (long, long) Key(double x, double y) =>
-        ((long)Math.Round(x), (long)Math.Round(y));
 
     private static double NearestDistanceSq(MapBounds b, double x, double y)
     {

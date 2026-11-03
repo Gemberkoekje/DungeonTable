@@ -285,13 +285,11 @@ public static class CorridorReveal
         }
     }
 
-    // Wall segments whose bounding box overlaps the query rectangle — lets a local vision/reveal test
-    // skip the far-away walls it can never cross, so the per-sample scan stays cheap on a big map.
-    internal static List<Segment> SegmentsInRegion(
-        List<Segment> segments, double minX, double minY, double maxX, double maxY) =>
-        segments.Where(w =>
-            Math.Min(w.X0, w.X1) <= maxX && Math.Max(w.X0, w.X1) >= minX
-            && Math.Min(w.Y0, w.Y1) <= maxY && Math.Max(w.Y0, w.Y1) >= minY).ToList();
+    // Whether a wall segment's bounding box overlaps the query rectangle: lets a local vision test skip
+    // the far-away walls it can never cross, so it stays cheap on a big map.
+    internal static bool InRegion(Segment w, double minX, double minY, double maxX, double maxY) =>
+        Math.Min(w.X0, w.X1) <= maxX && Math.Max(w.X0, w.X1) >= minX
+        && Math.Min(w.Y0, w.Y1) <= maxY && Math.Max(w.Y0, w.Y1) >= minY;
 
     private static void AddChain(List<Segment> segments, IReadOnlyList<MapPoint> points, bool closed)
     {
