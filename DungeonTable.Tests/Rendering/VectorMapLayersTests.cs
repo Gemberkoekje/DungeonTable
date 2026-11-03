@@ -26,31 +26,22 @@ public sealed class VectorMapLayersTests
 {
     private static readonly string[] ARoomAndAMarker = { "f-a-trap", "r-a-room" };
 
-    private static readonly Lazy<(VectorMap Map, MapDefinition Notes)> Sample = new Lazy<(VectorMap, MapDefinition)>(() =>
-    {
-        var read = new DungeonScrawlMapReader().ReadFileAsync(SamplePack.MapFile, CancellationToken.None).GetAwaiter().GetResult();
-        var notes = new FileSystemMapStore(SamplePack.Maps).LoadAsync(SamplePack.MapId, CancellationToken.None).GetAwaiter().GetResult();
-        Assert.True(read.IsValid);
-        Assert.True(notes.IsValid);
-        return (read.Value, notes.Value);
-    });
+    private static VectorMap Map => SampleMap.Map;
 
-    private static VectorMap Map => Sample.Value.Map;
+    private static string[] SecretDoors => SampleMap.SecretDoors;
 
-    private static string[] SecretDoors => Ids(o => o.Kind == MapObjectKind.Door && o.IsSecret);
+    private static string[] DoubleDoors => SampleMap.DoubleDoors;
 
-    private static string[] DoubleDoors => Ids(o => o.Kind == MapObjectKind.Door && o.DoubleDoors);
+    private static string[] Concealed => SampleMap.Concealed;
 
-    private static string[] Concealed => Ids(o => o.Kind != MapObjectKind.Door && o.IsConcealed);
-
-    private static string[] PlainDoors => Map.Doors.Select(d => d.Id).Except(SecretDoors).ToArray();
+    private static string[] PlainDoors => SampleMap.PlainDoors;
 
     [Fact]
     public async Task The_canvas_draws_exactly_what_the_single_svg_did()
     {
         // Everything that reaches a layer: a revealed room and painted cells under the fog, an open door,
         // a discovered secret door, a concealed object, and the overlay's regions with one selected.
-        Region room = Sample.Value.Notes.Regions[0];
+        Region room = SampleMap.Notes.Regions[0];
         var fog = new FogOverlay
         {
             Enabled = true,
@@ -62,8 +53,8 @@ public sealed class VectorMapLayersTests
         };
         var overlay = new EditorOverlay
         {
-            Regions = Sample.Value.Notes.Regions,
-            Markers = Sample.Value.Notes.Features,
+            Regions = SampleMap.Notes.Regions,
+            Markers = SampleMap.Notes.Features,
             SelectedRegionId = room.RegionId,
             UnitSize = Map.Grid.CellSizePx,
         };
@@ -227,10 +218,7 @@ public sealed class VectorMapLayersTests
         };
     }
 
-    private static string[] Ids(Func<ObjectAnnotation, bool> which) =>
-        Sample.Value.Notes.Objects.Where(which).Select(o => o.ObjectId).ToArray();
-
-    private static async Task<string> RenderCanvas(Dictionary<string, object> parameters)
+    internal static async Task<string> RenderCanvas(Dictionary<string, object> parameters)
     {
         await using ServiceProvider services = new ServiceCollection()
             .AddSingleton<IJSRuntime, NoJavaScript>()
@@ -245,7 +233,7 @@ public sealed class VectorMapLayersTests
     }
 
     // A static render never reaches the canvas's JavaScript; the canvas only needs one to be injected.
-    private sealed class NoJavaScript : IJSRuntime
+    internal sealed class NoJavaScript : IJSRuntime
     {
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object[] args) => ValueTask.FromResult(default(TValue));
 
