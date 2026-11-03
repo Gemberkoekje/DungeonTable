@@ -41,14 +41,17 @@ public static class CorridorReveal
             return Array.Empty<(MapBounds, int)>();
         }
 
-        var floorRings = CollectRings(map, LayerKind.Floor);
-        if (floorRings.Count == 0)
+        // The floor and the walls come from the map's vision index, which answers each step's floor test
+        // and lists the walls near it without going over the whole map (see VisionIndex). Only the secret
+        // doors' blocking segments are made here, since which doors are secret changes during play.
+        VisionIndex index = VisionIndex.For(map);
+        if (!index.HasFloor)
         {
             return Array.Empty<(MapBounds, int)>();
         }
 
-        var wallSegments = CollectWallSegments(map);
-        AddSecretDoorSegments(wallSegments, map, grid, secretDoorIds);
+        var secretSegments = new List<Segment>();
+        AddSecretDoorSegments(secretSegments, map, grid, secretDoorIds);
         var openGaps = CollectOpenDoorGaps(map, openDoorIds);
 
         var seen = new HashSet<(int Col, int Row)>();
@@ -77,8 +80,8 @@ public static class CorridorReveal
             {
                 (int Col, int Row) next = (cell.Col + dc, cell.Row + dr);
                 if (seen.Contains(next)
-                    || !IsFloorCell(grid, next, floorRings)
-                    || WallBetween(grid, cell, next, wallSegments, openGaps))
+                    || !index.CorridorCentreIsFloor(next.Col, next.Row)
+                    || WallBetween(grid, cell, next, index.WallsNear(cell, next).Concat(secretSegments), openGaps))
                 {
                     continue;
                 }
@@ -165,21 +168,14 @@ public static class CorridorReveal
         }
     }
 
-    private static bool IsFloorCell(Grid grid, (int Col, int Row) cell, List<IReadOnlyList<MapPoint>> floorRings)
-    {
-        double size = grid.CellSizePx;
-        double cx = grid.OriginX + ((cell.Col + 0.5) * size);
-        double cy = grid.OriginY + ((cell.Row + 0.5) * size);
-        return PointInRings(cx, cy, floorRings);
-    }
-
     // The fill is blocked when a wall lies between the two cells. Test the segment joining their
     // centres (which crosses a wall perpendicularly) rather than the shared grid edge — walls run
     // ALONG grid lines, so a shared-edge test would be collinear with them and miss. An OPEN door
     // punches a passage: if the crossing (the segment midpoint) falls inside an open door's opening,
-    // the fill runs through regardless of the wall drawn there.
+    // the fill runs through regardless of the wall drawn there. The walls given need only include the
+    // ones near the two cells: no other wall can cross the segment between their centres.
     private static bool WallBetween(
-        Grid grid, (int Col, int Row) a, (int Col, int Row) b, List<Segment> walls, List<MapBounds> openGaps)
+        Grid grid, (int Col, int Row) a, (int Col, int Row) b, IEnumerable<Segment> walls, List<MapBounds> openGaps)
     {
         double size = grid.CellSizePx;
         double ax = grid.OriginX + ((a.Col + 0.5) * size);
