@@ -278,6 +278,14 @@ looks again from it; the Room tab shows the room it is in.
   30 ft on every reload. It is saved as `PartyTokenSnapshot`, an additive field with an empty default,
   so `TableSnapshot.CurrentVersion` did not change. It is DM-only: an HTML overlay on the DM's canvas
   (`dt-party.js`), placed from world units like the player-view box, never part of the projector's SVG.
+  It and its ring are moved by a transform, each on a compositing layer of its own. Placed by `left` and
+  `top`, they were painted in the map's layer, so each move repainted the map under them, and at 120 ft
+  the ring covers much of the map. On a 138×177-cell level, a quick 120 ft drag across about 80 squares
+  stalled the DM screen's main thread for 2.0 s over ground already revealed and 3.7 s over new ground;
+  on their own layers, 0.3 s and 1.8 s. What is left over new ground is the fog's own redraw, once per
+  square that reveals anything: at 30 ft that is nearly every square (4.2 s before, 3.6 s after). If it
+  shows at the table, the next step is fewer fog updates on the DM's map while a drag is under way: the
+  server fills in the walk anyway, so nothing would be skipped, only shown later.
 - **A drag reports itself a square at a time.** The browser reports once per square the pointer enters,
   plus where the drag ends, one report at a time: while one is on its way, the latest position waits.
   A quick drag therefore jumps several squares between two reports, so the server fills the walk in
