@@ -4,6 +4,7 @@ using DungeonTable.Core.Briefing;
 using DungeonTable.Core.Dossier;
 using DungeonTable.Core.Maps;
 using DungeonTable.Core.Maps.Vector;
+using DungeonTable.Tests.Battles;
 using DungeonTable.Web.Services;
 
 namespace DungeonTable.Tests.Web;
@@ -96,7 +97,8 @@ internal sealed class PartyHarness
         var session = new SessionState();
         table(session);
         var workspace = new DmWorkspace(
-            content, crossRefs, maps, annotations, dossiers, stats, new EncounterSource(crossRefs, content, stats), session);
+            content, crossRefs, maps, annotations, dossiers, stats, new EncounterSource(crossRefs, content, stats), session,
+            new CampaignState(new FakePartyRoster()));
         await workspace.InitialiseAsync(CancellationToken.None);
         return new PartyHarness(session, workspace, new PartyMoves(workspace, session));
     }

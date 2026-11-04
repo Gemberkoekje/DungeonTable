@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,6 +42,7 @@ public sealed class DmWorkspace
     private readonly IStatLibrary stats;
     private readonly EncounterSource encounters;
     private readonly SessionState session;
+    private readonly CampaignState campaign;
 
     private readonly NavHistory history = new NavHistory();
     private readonly List<Region> regions = new List<Region>();
@@ -64,6 +66,9 @@ public sealed class DmWorkspace
     // party has walked into another one.
     private string followedPartyArea = string.Empty;
 
+    // The creatures the shown area lists, before the ones the DM moved here are added (see Encounter).
+    private IReadOnlyList<EncounterMonster> listedEncounter = Array.Empty<EncounterMonster>();
+
     // The level name the Room Editor gave each map, which the map picker lists it under.
     private IReadOnlyDictionary<string, string> levelNames = new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -78,6 +83,7 @@ public sealed class DmWorkspace
     /// <param name="stats">The extracted monster/spell stat-block library.</param>
     /// <param name="encounters">Works out the shown area's encounter from the creatures it lists.</param>
     /// <param name="session">The shared DM/player reveal state.</param>
+    /// <param name="campaign">The table's record: what was dealt with where, and the creatures the DM moved.</param>
     public DmWorkspace(
         IContentProjection content,
         ICrossRefResolver crossRefs,
@@ -86,7 +92,8 @@ public sealed class DmWorkspace
         IDossierStore dossiers,
         IStatLibrary stats,
         EncounterSource encounters,
-        SessionState session)
+        SessionState session,
+        CampaignState campaign)
     {
         this.content = content;
         this.crossRefs = crossRefs;
@@ -96,6 +103,7 @@ public sealed class DmWorkspace
         this.stats = stats;
         this.encounters = encounters;
         this.session = session;
+        this.campaign = campaign;
     }
 
     /// <summary>Raised whenever any shared DM state changes, so the shell can re-render every tab.</summary>
@@ -271,10 +279,11 @@ public sealed class DmWorkspace
     public CharacterDossier OpenCharacter { get; private set; } = new CharacterDossier();
 
     /// <summary>
-    /// The creatures the shown area lists, with their authored counts. Computed once per shown area
-    /// rather than per render.
+    /// The creatures in the shown area: the ones it lists, with their authored counts, worked out once
+    /// per shown area, and after them the ones the DM moved here, which are table state and so are added
+    /// each time this is read (<see cref="EncounterSource.WithMoves"/>).
     /// </summary>
-    public IReadOnlyList<EncounterMonster> Encounter { get; private set; } = Array.Empty<EncounterMonster>();
+    public IReadOnlyList<EncounterMonster> Encounter => encounters.WithMoves(PanelNode, listedEncounter, campaign);
 
     /// <summary>
     /// The passage open as a sheet over the dock (a rules section, a floor's fact, a room's detail that
@@ -1080,7 +1089,112 @@ public sealed class DmWorkspace
             glances[areaNode] = glance;
         }
 
-        return glance;
+        // The creatures the DM moved here are the table's, not the content's, so they are never kept.
+        IReadOnlyList<EncounterMonster> creatures = encounters.WithMoves(areaNode, glance.Creatures, campaign);
+        return ReferenceEquals(creatures, glance.Creatures) || glance.IsEmpty ? glance : glance.WithCreatures(creatures);
+    }
+
+    // ---- Moving creatures -----------------------------------------------------------------
+
+    /// <summary>
+    /// Moves some of a creature from one area to another, as the DM decides it: the guard who stayed
+    /// behind when the boss fled, the survivors who fall back. One somebody moves whole; a kind of
+    /// creature or a band moves as many as asked, no more than are still there.
+    /// </summary>
+    /// <param name="fromAreaNodeId">The area they are in now.</param>
+    /// <param name="row">The creature, as the area's encounter lists it.</param>
+    /// <param name="toAreaNodeId">The area they go to.</param>
+    /// <param name="count">How many go; ignored for one somebody.</param>
+    public void MoveCreature(string fromAreaNodeId, EncounterMonster row, string toAreaNodeId, int count)
+    {
+        if (row is null
+            || string.IsNullOrWhiteSpace(fromAreaNodeId)
+            || string.IsNullOrWhiteSpace(toAreaNodeId)
+            || string.Equals(fromAreaNodeId, toAreaNodeId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        CreatureStanding standing = CreatureStanding.Of(fromAreaNodeId, row, campaign);
+        if (standing.Gone)
+        {
+            return;
+        }
+
+        // A count still to be rolled is as many as the DM says; any other is no more than are left.
+        int most = standing.Rolled ? EncounterCount.MaxCount : standing.Left;
+        string listedIn = row.MovedHere
+            ? campaign.MovesInto(fromAreaNodeId).LastOrDefault(move => string.Equals(move.CreatureId, row.NodeId, StringComparison.Ordinal))?.ListedInAreaNodeId ?? fromAreaNodeId
+            : fromAreaNodeId;
+
+        campaign.Move(
+            new CreatureMove
+            {
+                CreatureId = row.NodeId,
+                FromAreaNodeId = fromAreaNodeId,
+                ToAreaNodeId = toAreaNodeId,
+                Count = row.Individual ? 1 : Math.Clamp(count, 1, most),
+                ListedInAreaNodeId = listedIn,
+            },
+            ListedCount(toAreaNodeId, row.NodeId),
+            row.Individual);
+    }
+
+    /// <summary>
+    /// The rooms a creature in the shown area can be moved to, best first. With nothing typed, the rooms
+    /// this one leads to, then the rest of its floor; with something typed, the rooms whose title has it
+    /// (or whose number it is), this floor's first. Never the shown area itself.
+    /// </summary>
+    /// <param name="filter">What the DM typed; blank for none.</param>
+    /// <param name="limit">How many rooms at most.</param>
+    /// <returns>The rooms, as their dossiers.</returns>
+    public IReadOnlyList<AreaDossier> MoveTargets(string filter, int limit)
+    {
+        string typed = (filter ?? string.Empty).Trim();
+        string floor = LevelDossier.LevelNodeId;
+        string[] exits = Briefing.Connections
+            .Where(exit => exit is not null && exit.TargetRoomId.Length > 0)
+            .Select(exit => exit.TargetRoomId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return dossiers.AllAreas()
+            .Where(area => area.AreaNodeId.Length > 0 && !string.Equals(area.AreaNodeId, PanelNode, StringComparison.Ordinal))
+            .Where(area => typed.Length == 0 || Matches(area, typed))
+            .Select(area => (Area: area, Exit: Array.IndexOf(exits, area.AreaNodeId), SameFloor: IsOnFloor(area.AreaNodeId, floor)))
+            .Where(choice => typed.Length > 0 || choice.Exit >= 0 || choice.SameFloor)
+            .OrderBy(choice => typed.Length == 0 && choice.Exit >= 0 ? choice.Exit : int.MaxValue)
+            .ThenBy(choice => choice.SameFloor ? 0 : 1)
+            .ThenBy(choice => choice.Area.AreaNumber)
+            .ThenBy(choice => choice.Area.Title, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(limit, 0))
+            .Select(choice => choice.Area)
+            .ToArray();
+    }
+
+    private static bool Matches(AreaDossier area, string typed) =>
+        area.Title.Contains(typed, StringComparison.OrdinalIgnoreCase)
+        || (int.TryParse(typed, NumberStyles.None, CultureInfo.InvariantCulture, out int number) && number == area.AreaNumber);
+
+    private bool IsOnFloor(string areaNodeId, string floor)
+    {
+        if (floor.Length == 0)
+        {
+            return false;
+        }
+
+        Result<LevelDossier> level = dossiers.GetLevelForArea(areaNodeId);
+        return level.IsValid && string.Equals(level.Value.LevelNodeId, floor, StringComparison.Ordinal);
+    }
+
+    // How many of a creature an area lists itself: what a whole-listing tick there covered.
+    private int ListedCount(string areaNodeId, string creatureNodeId)
+    {
+        Result<RoomBriefing> briefing = content.GetBriefing(areaNodeId);
+        EncounterMonster listed = briefing.IsValid
+            ? encounters.For(briefing.Value).FirstOrDefault(row => string.Equals(row.NodeId, creatureNodeId, StringComparison.Ordinal))
+            : null;
+        return listed is null ? 0 : Math.Max(listed.SuggestedCount, 1);
     }
 
     /// <summary>
@@ -1204,8 +1318,8 @@ public sealed class DmWorkspace
         var quests = dossiers.GetQuests();
         QuestLog = quests.IsValid ? quests.Value : new QuestLog();
 
-        var campaign = dossiers.GetCampaign();
-        CampaignDossier = campaign.IsValid ? campaign.Value : new CampaignDossier();
+        var background = dossiers.GetCampaign();
+        CampaignDossier = background.IsValid ? background.Value : new CampaignDossier();
 
         var party = dossiers.GetParty();
         PartyDossier = party.IsValid ? party.Value : new PartyDossier();
@@ -1407,7 +1521,7 @@ public sealed class DmWorkspace
         var level = dossiers.GetLevelForArea(node);
         LevelDossier = level.IsValid ? level.Value : new LevelDossier();
 
-        Encounter = encounters.For(Briefing);
+        listedEncounter = encounters.For(Briefing);
     }
 
     private RoomGlance BuildGlance(string areaNode)

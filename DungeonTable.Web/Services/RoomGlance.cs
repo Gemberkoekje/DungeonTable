@@ -15,7 +15,9 @@ namespace DungeonTable.Web.Services;
 /// Everything comes from what the content already holds (the area's creatures, its blocks tagged loot,
 /// its checks and exits) and what the Room Editor marked on the map (<see cref="RoomMarks"/>).
 /// Nothing is read out of the prose. What changes during the evening (which creatures are ticked off,
-/// the DM's note) is not here but in <see cref="RoomBadges"/>, worked out at each render.
+/// the DM's note) is not here but in <see cref="RoomBadges"/>, worked out at each render. The creatures
+/// the DM moved into the room are added to <see cref="Creatures"/> each time the glance is asked for
+/// (<see cref="WithCreatures"/>), never kept in it.
 /// </remarks>
 public sealed class RoomGlance
 {
@@ -100,6 +102,22 @@ public sealed class RoomGlance
             Exits = exits,
         };
     }
+
+    /// <summary>The same glance with other creatures: the ones the area lists, and the ones moved here.</summary>
+    /// <param name="creatures">The rows to show.</param>
+    /// <returns>A copy of this glance with those creatures.</returns>
+    public RoomGlance WithCreatures(IReadOnlyList<EncounterMonster> creatures) => new RoomGlance
+    {
+        AreaNodeId = AreaNodeId,
+        Title = Title,
+        AreaNumber = AreaNumber,
+        Creatures = creatures ?? Array.Empty<EncounterMonster>(),
+        Loot = Loot,
+        Checks = Checks,
+        Hazards = Hazards,
+        Secrets = Secrets,
+        Exits = Exits,
+    };
 
     private static string[] Headings(IEnumerable<DossierBlock> blocks) =>
         blocks

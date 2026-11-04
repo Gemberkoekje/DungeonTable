@@ -63,6 +63,36 @@ public sealed class EncounterMonster
     /// </summary>
     public int BandSize { get; init; }
 
+    /// <summary>
+    /// True when the area does not list it and it is here only because the DM moved it here (see
+    /// <see cref="Core.Session.CreatureMove"/>): the row of the room that lists it, with none of its
+    /// own listing.
+    /// </summary>
+    public bool MovedHere { get; init; }
+
+    /// <summary>
+    /// This row as it shows in a room the DM moved it to that does not list it: no listing of its own,
+    /// no dice and no notes, since those were written about the other room.
+    /// </summary>
+    /// <param name="count">How many were moved here.</param>
+    /// <returns>A copy of this row, moved here.</returns>
+    public EncounterMonster Moved(int count) => new EncounterMonster
+    {
+        NodeId = NodeId,
+        StatBlockNodeId = StatBlockNodeId,
+        Name = Name,
+        SuggestedCount = Math.Max(count, 1),
+        CountExpression = string.Empty,
+        Context = string.Empty,
+        Citation = Citation,
+        HasStatBlock = HasStatBlock,
+        Individual = Individual,
+        Secret = false,
+        Shared = Shared,
+        BandSize = BandSize,
+        MovedHere = true,
+    };
+
     /// <summary>The same row with another count, as the badges show what is left of it.</summary>
     /// <param name="count">The count to carry instead of the authored one.</param>
     /// <returns>A copy of this row with that count and no dice.</returns>
@@ -80,5 +110,6 @@ public sealed class EncounterMonster
         Secret = Secret,
         Shared = Shared,
         BandSize = BandSize,
+        MovedHere = MovedHere,
     };
 }

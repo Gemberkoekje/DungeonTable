@@ -17,6 +17,10 @@
     A row of several counts down one at a time (-1, and +1 to take one back). One somebody or one band
     listed in several rooms is the same somebody in each (CreatureStanding): dealt with here is dealt
     with everywhere, so such a row can also flee, which takes it out of this room only.
+
+    Move puts a creature in another room, whether that room lists it or not: the guard who stayed behind
+    when the boss fled. The room it went to shows it with "moved here from", and either room's arrow
+    takes the move back.
 *@
 
 <section class="encounter @(AllCleared ? "encounter-cleared" : string.Empty)" aria-label="Encounter">
@@ -95,6 +99,24 @@
                     {
                         <span class="encounter-band" title="@($"A band: {standing.BandLeft} of {standing.BandSize} still up, across every room that lists them")">@($"{standing.BandLeft} of {standing.BandSize} in all")</span>
                     }
+                    @if (standing.MovedHere > 0 && standing.MovedFrom.Length > 0)
+                    {
+                        <span class="encounter-moved" title="@($"You moved {MovedWhat(row, standing.MovedHere)} here from {AreaLabel(standing.MovedFrom)}")">
+                            @($"moved here from {ShortTitle(AreaLabel(standing.MovedFrom))}")
+                            <button type="button" class="moved-undo" aria-label="@($"Send {row.Name} back to {AreaLabel(standing.MovedFrom)}")"
+                                    title="@($"Take the move back: {MovedWhat(row, 0)} go back to {AreaLabel(standing.MovedFrom)}")"
+                                    @onclick="() => Campaign.UndoMove(row.NodeId, AreaNodeId, into: true)">&#x21A9;</button>
+                        </span>
+                    }
+                    @if (standing.MovedAway > 0 && standing.MovedTo.Length > 0)
+                    {
+                        <span class="encounter-moved moved-away" title="@($"You moved {MovedWhat(row, standing.MovedAway)} to {AreaLabel(standing.MovedTo)}")">
+                            @MovedAwayText(row, standing)
+                            <button type="button" class="moved-undo" aria-label="@($"Bring {row.Name} back here")"
+                                    title="Take the move back: they are here again"
+                                    @onclick="() => BringBack(row)">&#x21A9;</button>
+                        </span>
+                    }
 
                     <span class="encounter-context" title="@row.Context">@row.Context</span>
 
@@ -135,6 +157,13 @@
                         }
                     </span>
 
+                    @if (OnMove is not null && !cleared)
+                    {
+                        <button type="button" class="encounter-move" aria-expanded="@(IsMoving(row) ? "true" : "false")"
+                                title="Move them to another room: the room they go to shows them from then on"
+                                @onclick="() => ToggleMove(row, standing)"><span aria-hidden="true">&#x21A6;</span> Move</button>
+                    }
+
                     <span class="encounter-stepper">
                         <button type="button" title="One fewer" @onclick="() => Step(row.NodeId, -1)">&minus;</button>
                         <input type="number" min="1" max="99" aria-label="@($"How many {row.Name}")"
@@ -145,6 +174,48 @@
                     <button type="button" class="encounter-add" title="Add these to the battle"
                             @onclick="() => Add(row)">Add</button>
                 </li>
+                @if (IsMoving(row) && !cleared)
+                {
+                    IReadOnlyList<AreaDossier> targets = MoveTargets(moveFilter) ?? Array.Empty<AreaDossier>();
+                    <li class="encounter-move-panel" aria-label="@($"Move {row.Name}")">
+                        <div class="move-head">
+                            <span class="move-what">Move</span>
+                            @if (!row.Individual && (standing.Rolled || standing.Left > 1))
+                            {
+                                <span class="encounter-stepper">
+                                    <button type="button" title="One fewer" @onclick="() => StepMove(-1, standing)">&minus;</button>
+                                    <input type="number" min="1" max="@MostToMove(standing)" aria-label="@($"How many {row.Name} to move")"
+                                           value="@moveCount" @onchange="e => SetMoveCount(e.Value, standing)" />
+                                    <button type="button" title="One more" @onclick="() => StepMove(1, standing)">+</button>
+                                </span>
+                            }
+                            <span class="move-what">@row.Name to</span>
+                            @* Keys stop here: Esc cancels the move rather than going back to the party's room. *@
+                            <input type="search" class="move-filter" placeholder="Find a room&hellip;" @ref="moveInput"
+                                   aria-label="Find the room to move them to" value="@moveFilter"
+                                   @oninput="e => moveFilter = e.Value as string ?? string.Empty"
+                                   @onkeydown="e => MoveKey(e, row, targets)" @onkeydown:stopPropagation="true" />
+                            <button type="button" class="move-cancel" @onclick="CancelMove">Cancel</button>
+                        </div>
+                        @if (targets.Count == 0)
+                        {
+                            <p class="muted move-none">No room matches.</p>
+                        }
+                        else
+                        {
+                            <ul class="move-targets">
+                                @foreach (AreaDossier target in targets)
+                                {
+                                    string to = target.AreaNodeId;
+                                    <li>
+                                        <button type="button" class="move-target" title="@($"Move them to {target.Title}")"
+                                                @onclick="() => FinishMove(row, to)">@target.Title</button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </li>
+                }
             }
         </ul>
     }
@@ -184,6 +255,17 @@
     [Parameter]
     public Func<string, string> AreaLabel { get; set; } = id => id;
 
+    /// <summary>The rooms a creature here can be moved to, best first, for what the DM typed (see <see cref="DmWorkspace.MoveTargets"/>).</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<AreaDossier>> MoveTargets { get; set; } = _ => Array.Empty<AreaDossier>();
+
+    /// <summary>
+    /// Moves a creature from this area: the row, the area it goes to and how many. Without it the rows
+    /// offer no Move.
+    /// </summary>
+    [Parameter]
+    public Action<EncounterMonster, string, int> OnMove { get; set; }
+
     // Steppers the DM has adjusted, keyed by node id. Anything absent shows the authored pre-fill, so
     // navigating to another area and back does not strand a count from a different room.
     private readonly Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -193,6 +275,13 @@
     private bool pendingAll;
     private bool confirming;
     private string lastArea = string.Empty;
+
+    // The row whose Move is open, by node id, what the DM typed to find the room, and how many go.
+    private string movingId = string.Empty;
+    private string moveFilter = string.Empty;
+    private int moveCount = 1;
+    private bool focusMove;
+    private ElementReference moveInput;
 
     protected override void OnInitialized()
     {
@@ -246,7 +335,9 @@
     // band elsewhere loses no more than this room had.
     private void DealWith(EncounterMonster row, CreatureStanding standing)
     {
-        if (!row.Shared)
+        // A row some were moved into or out of is counted, never ticked whole: taking a move back must
+        // bring creatures back that a whole tick would hide.
+        if (!row.Shared && standing.MovedHere == 0 && standing.MovedAway == 0)
         {
             if (!Campaign.RecordOf(AreaNodeId, row.NodeId).Whole)
             {
@@ -261,12 +352,120 @@
 
     // Back on the board as the book lists them. One somebody or a band still gone after that was dealt
     // with in another room, and putting them back means everywhere: he is alive again, and so is the band.
+    // Moved away, they come back here first.
     private void PutBack(EncounterMonster row)
     {
+        if (StandingOf(row).MovedElsewhere)
+        {
+            BringBack(row);
+        }
+
         Campaign.PutBack(AreaNodeId, row.NodeId);
         if (row.Shared && StandingOf(row).Gone)
         {
             Campaign.PutBackEverywhere(row.NodeId);
+        }
+    }
+
+    // Moved away from here, and brought back: one somebody this room lists is where the book has him
+    // again; anything else comes back from the last room it was moved to from here.
+    private void BringBack(EncounterMonster row)
+    {
+        if (row.Individual && !row.MovedHere)
+        {
+            Campaign.ForgetMoves(row.NodeId, AreaNodeId, oneSomebody: true);
+        }
+        else
+        {
+            Campaign.UndoMove(row.NodeId, AreaNodeId, into: false);
+        }
+    }
+
+    private bool IsMoving(EncounterMonster row) => string.Equals(movingId, row.NodeId, StringComparison.Ordinal);
+
+    private void ToggleMove(EncounterMonster row, CreatureStanding standing)
+    {
+        if (IsMoving(row))
+        {
+            CancelMove();
+            return;
+        }
+
+        movingId = row.NodeId;
+        moveFilter = string.Empty;
+        moveCount = Math.Clamp(standing.Rolled ? CountOf(row) : standing.Left, 1, MostToMove(standing));
+        focusMove = true;
+    }
+
+    private void CancelMove()
+    {
+        movingId = string.Empty;
+        moveFilter = string.Empty;
+        focusMove = false;
+    }
+
+    // A count still to be rolled moves as many as the DM says; any other no more than are left.
+    private static int MostToMove(CreatureStanding standing) =>
+        standing.Rolled ? EncounterCount.MaxCount : Math.Max(standing.Left, 1);
+
+    private void StepMove(int delta, CreatureStanding standing) =>
+        moveCount = Math.Clamp(moveCount + delta, 1, MostToMove(standing));
+
+    private void SetMoveCount(object value, CreatureStanding standing)
+    {
+        if (int.TryParse(value as string, out int typed))
+        {
+            moveCount = Math.Clamp(typed, 1, MostToMove(standing));
+        }
+    }
+
+    // Enter takes the first room listed, Esc puts the move away.
+    private void MoveKey(KeyboardEventArgs e, EncounterMonster row, IReadOnlyList<AreaDossier> targets)
+    {
+        if (e.Key == "Escape")
+        {
+            CancelMove();
+        }
+        else if (e.Key == "Enter" && targets.Count > 0)
+        {
+            FinishMove(row, targets[0].AreaNodeId);
+        }
+    }
+
+    private void FinishMove(EncounterMonster row, string toAreaNodeId)
+    {
+        int count = moveCount;
+        CancelMove();
+        counts.Remove(row.NodeId);
+        OnMove?.Invoke(row, toAreaNodeId, count);
+    }
+
+    // "Grask", "3 goblins", or the row's name when the number does not matter.
+    private static string MovedWhat(EncounterMonster row, int count) =>
+        row.Individual || count <= 1 ? row.Name : $"{count} {row.Name}";
+
+    private string MovedAwayText(EncounterMonster row, CreatureStanding standing)
+    {
+        string where = ShortTitle(AreaLabel(standing.MovedTo));
+        return row.Individual || standing.MovedAway <= 1 || standing.MovedElsewhere
+            ? "moved to " + where
+            : $"{standing.MovedAway} moved to {where}";
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focusMove && movingId.Length > 0)
+        {
+            focusMove = false;
+            try
+            {
+                await moveInput.FocusAsync();
+            }
+            catch (InvalidOperationException)
+            {
+                // The panel closed before the focus got there.
+            }
         }
     }
 
@@ -327,6 +526,11 @@
                 : "Dealt with in another room. Untick to put them back on the board everywhere";
         }
 
+        if (standing.MovedElsewhere)
+        {
+            return "Moved to another room. Untick to bring them back here";
+        }
+
         if (standing.Gone)
         {
             return "Put these back on the board";
@@ -346,6 +550,7 @@
             lastArea = AreaNodeId;
             counts.Clear();
             CancelReplace();
+            CancelMove();
         }
     }
 

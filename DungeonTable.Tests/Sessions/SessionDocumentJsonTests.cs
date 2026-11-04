@@ -96,6 +96,28 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal("They spiked the door open.", area.Note);
 
         Assert.Equal(PinsInOrder, restored.Campaign.Pins);
+
+        CreatureMove move = Assert.Single(restored.Campaign.Moves);
+        Assert.Equal("grask", move.CreatureId);
+        Assert.Equal("data_dossiers_level_1_area_2", move.FromAreaNodeId);
+        Assert.Equal("data_dossiers_level_1_area_5", move.ToAreaNodeId);
+        Assert.Equal(1, move.Count);
+        Assert.Equal("data_dossiers_level_1_area_2", move.ListedInAreaNodeId);
+    }
+
+    [Fact]
+    public void A_document_written_before_moves_existed_restores_with_none()
+    {
+        // The moves went into CampaignSnapshot additively, without bumping CurrentVersion: a document from
+        // an earlier build restores everything else and arrives with nobody moved.
+        JsonNode document = JsonNode.Parse(SessionDocuments.Serializer().ToJson(Sample()));
+        Assert.True(document["campaign"].AsObject().Remove("moves"));
+
+        TableSnapshot restored = Read(document.ToJsonString());
+
+        Assert.Equal(PinsInOrder, restored.Campaign.Pins);
+        Assert.NotNull(restored.Campaign.Moves);
+        Assert.Empty(restored.Campaign.Moves);
     }
 
     [Fact]
@@ -451,6 +473,17 @@ public sealed class SessionDocumentJsonTests
                 },
             },
             Pins = new[] { "text:rules/darkness-below", "card:grask" },
+            Moves = new[]
+            {
+                new CreatureMove
+                {
+                    CreatureId = "grask",
+                    FromAreaNodeId = "data_dossiers_level_1_area_2",
+                    ToAreaNodeId = "data_dossiers_level_1_area_5",
+                    Count = 1,
+                    ListedInAreaNodeId = "data_dossiers_level_1_area_2",
+                },
+            },
         },
     };
 }

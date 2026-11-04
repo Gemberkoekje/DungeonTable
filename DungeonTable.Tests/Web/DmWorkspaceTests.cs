@@ -1,12 +1,15 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DungeonTable.Core.Briefing;
 using DungeonTable.Core.Dossier;
 using DungeonTable.Core.Maps;
 using DungeonTable.Core.Maps.Vector;
+using DungeonTable.Core.Session;
 using DungeonTable.Core.Stats;
 using DungeonTable.Infrastructure.Content;
+using DungeonTable.Tests.Battles;
 using DungeonTable.Web.Services;
 
 namespace DungeonTable.Tests.Web;
@@ -23,6 +26,12 @@ public sealed class DmWorkspaceTests
     private const string Level1 = "data_dossiers_level_1";
 
     private static readonly string[] LandingRegionIds = { "r-entry-a", "r-entry-b" };
+
+    private static readonly string[] WayOutThenFloor = { "l1-well", Pillars };
+
+    private static readonly string[] WellsThisFloorFirst = { "l1-well", "l2-hall" };
+
+    private static readonly string[] PillarsOnly = { Pillars };
 
     private static readonly string[] PillarFindTargets = { Pillars, "data_dossiers_level_1_area_2a", "the-old-mill", "rules/darkness-below" };
 
@@ -1226,6 +1235,170 @@ public sealed class DmWorkspaceTests
         Assert.Empty(harness.Workspace.Encounter);
     }
 
+    [Fact]
+    public async Task Bandits_moved_to_a_room_that_does_not_list_them_show_there_and_leave_the_rest()
+    {
+        Harness harness = await WithBanditsOnTheLanding();
+        EncounterMonster bandits = Assert.Single(harness.Workspace.Encounter);
+
+        harness.Workspace.MoveCreature(Landing, bandits, Pillars, 3);
+
+        CreatureStanding landing = CreatureStanding.Of(Landing, bandits, harness.Campaign);
+        Assert.Equal(1, landing.Left);
+        Assert.Equal(Pillars, landing.MovedTo);
+
+        harness.Workspace.NavigateTo(Pillars);
+        EncounterMonster moved = Assert.Single(harness.Workspace.Encounter);
+        Assert.True(moved.MovedHere);
+        Assert.Equal("Bandit", moved.Name);
+        Assert.Equal("data_statblocks_monsters_bandit", moved.StatBlockNodeId);
+        Assert.True(moved.HasStatBlock);
+        Assert.Equal(string.Empty, moved.Context);
+        Assert.Equal(3, CreatureStanding.Of(Pillars, moved, harness.Campaign).Left);
+
+        // The map's badges and the peek card read the glance, which has them too, kept or not.
+        RoomGlance glance = harness.Workspace.GlanceOf(Pillars);
+        Assert.Equal("3", RoomBadges.For(glance, harness.Campaign).Creatures);
+        Assert.Equal("1", RoomBadges.For(harness.Workspace.GlanceOf(Landing), harness.Campaign).Creatures);
+
+        // Taken back, they are gone from the room they went to.
+        harness.Campaign.UndoMove(bandits.NodeId, Pillars, into: true);
+        Assert.Empty(harness.Workspace.Encounter);
+        Assert.Empty(harness.Workspace.GlanceOf(Pillars).Creatures);
+    }
+
+    [Fact]
+    public async Task One_somebody_moved_to_a_room_that_does_not_list_him_shows_there_as_himself()
+    {
+        // The golem that stayed behind at the bottom of the well when its mistress fled: a room that
+        // never mentions him lists him by his own name, fighting with his own stat block.
+        Harness harness = await Harness.Started();
+        harness.Dossiers.Areas[Pillars] = new AreaDossier { AreaNodeId = Pillars, Title = "Pillars" };
+        harness.Content.Briefings[Landing] = new RoomBriefing
+        {
+            RoomId = Landing,
+            Occupants = new[] { new OccupantEntry { NodeId = "nib", Label = "Nib", MonsterRef = "data_statblocks_monsters_bandit" } },
+        };
+        harness.Workspace.NavigateTo(Landing);
+        EncounterMonster nib = Assert.Single(harness.Workspace.Encounter);
+
+        harness.Workspace.MoveCreature(Landing, nib, Pillars, 5);
+
+        Assert.True(CreatureStanding.Of(Landing, nib, harness.Campaign).MovedElsewhere);
+        harness.Workspace.NavigateTo(Pillars);
+        EncounterMonster moved = Assert.Single(harness.Workspace.Encounter);
+        Assert.Equal("Nib", moved.Name);
+        Assert.True(moved.Individual);
+        Assert.Equal("data_statblocks_monsters_bandit", moved.StatBlockNodeId);
+        Assert.Equal(1, CreatureStanding.Of(Pillars, moved, harness.Campaign).Left);
+        Assert.Equal(1, Assert.Single(harness.Campaign.MovesOf("nib")).Count);
+    }
+
+    [Fact]
+    public async Task A_move_is_never_more_than_are_left_and_never_from_a_room_they_are_gone_from()
+    {
+        Harness harness = await WithBanditsOnTheLanding();
+        EncounterMonster bandits = Assert.Single(harness.Workspace.Encounter);
+        harness.Campaign.Count(Landing, bandits.NodeId, 1, 0);
+
+        harness.Workspace.MoveCreature(Landing, bandits, Pillars, 20);
+        Assert.Equal(3, Assert.Single(harness.Campaign.MovesOf(bandits.NodeId)).Count);
+
+        harness.Workspace.MoveCreature(Landing, bandits, Pillars, 1);
+        harness.Workspace.MoveCreature(Pillars, bandits, Pillars, 1);
+        Assert.Single(harness.Campaign.MovesOf(bandits.NodeId));
+    }
+
+    [Fact]
+    public async Task Moved_on_from_a_room_that_does_not_list_them_they_keep_the_listing_room_s_row()
+    {
+        Harness harness = await WithBanditsOnTheLanding();
+        harness.Dossiers.Areas["data_dossiers_level_1_area_3"] = new AreaDossier { AreaNodeId = "data_dossiers_level_1_area_3", Title = "Crypt" };
+        harness.Workspace.MoveCreature(Landing, Assert.Single(harness.Workspace.Encounter), Pillars, 4);
+        harness.Workspace.NavigateTo(Pillars);
+        EncounterMonster moved = Assert.Single(harness.Workspace.Encounter);
+
+        harness.Workspace.MoveCreature(Pillars, moved, "data_dossiers_level_1_area_3", 2);
+
+        CreatureMove onward = harness.Campaign.MovesInto("data_dossiers_level_1_area_3")[0];
+        Assert.Equal(Landing, onward.ListedInAreaNodeId);
+        harness.Workspace.NavigateTo("data_dossiers_level_1_area_3");
+        Assert.Equal("Bandit", Assert.Single(harness.Workspace.Encounter).Name);
+        Assert.Equal(2, CreatureStanding.Of(Pillars, moved, harness.Campaign).Left);
+
+        // Once the last of them moves on, with nothing recorded of them there, the room has no row for them.
+        harness.Workspace.MoveCreature(Pillars, moved, "data_dossiers_level_1_area_3", 2);
+        harness.Workspace.NavigateTo(Pillars);
+        Assert.Empty(harness.Workspace.Encounter);
+    }
+
+    [Fact]
+    public async Task A_room_that_lists_them_already_gets_no_second_row()
+    {
+        Harness harness = await WithBanditsOnTheLanding();
+        harness.Content.Briefings[Pillars] = new RoomBriefing { RoomId = Pillars, Occupants = harness.Content.Briefings[Landing].Occupants };
+        harness.Workspace.MoveCreature(Landing, Assert.Single(harness.Workspace.Encounter), Pillars, 2);
+
+        harness.Workspace.NavigateTo(Pillars);
+
+        EncounterMonster bandits = Assert.Single(harness.Workspace.Encounter);
+        Assert.False(bandits.MovedHere);
+        Assert.Equal(6, CreatureStanding.Of(Pillars, bandits, harness.Campaign).Left);
+    }
+
+    [Fact]
+    public async Task The_rooms_to_move_to_are_this_room_s_ways_out_then_its_floor_and_never_itself()
+    {
+        Harness harness = await Harness.Started();
+        var level2 = new LevelDossier { LevelNodeId = "data_dossiers_level_2", Title = "Level 2" };
+        harness.Dossiers.Areas[Landing] = new AreaDossier { AreaNodeId = Landing, Title = "Undercroft Landing", AreaNumber = 1 };
+        harness.Dossiers.Areas[Pillars] = new AreaDossier { AreaNodeId = Pillars, Title = "Pillars", AreaNumber = 2 };
+        harness.Dossiers.Areas["l1-well"] = new AreaDossier { AreaNodeId = "l1-well", Title = "Bottom of the Well", AreaNumber = 3 };
+        harness.Dossiers.Areas["l2-hall"] = new AreaDossier { AreaNodeId = "l2-hall", Title = "Well Hall", AreaNumber = 1 };
+        harness.Dossiers.LevelsByArea["l1-well"] = harness.Dossiers.LevelsByArea[Landing];
+        harness.Dossiers.LevelsByArea["l2-hall"] = level2;
+        harness.Content.Briefings[Landing] = new RoomBriefing
+        {
+            RoomId = Landing,
+            Connections = new[] { new ConnectionEntry { TargetRoomId = "l1-well", Label = "Bottom of the Well" } },
+        };
+        harness.Workspace.NavigateTo(Landing);
+
+        // Nothing typed: the way out first, then the rest of the floor; another floor waits to be asked for.
+        Assert.Equal(WayOutThenFloor, harness.Workspace.MoveTargets(string.Empty, 8).Select(area => area.AreaNodeId));
+
+        // Typed: whatever has it, this floor's first, by name or by number.
+        Assert.Equal(WellsThisFloorFirst, harness.Workspace.MoveTargets("well", 8).Select(area => area.AreaNodeId));
+        Assert.Equal(PillarsOnly, harness.Workspace.MoveTargets("2", 8).Select(area => area.AreaNodeId));
+        Assert.Empty(harness.Workspace.MoveTargets("landing", 8));
+        Assert.Single(harness.Workspace.MoveTargets(string.Empty, 1));
+    }
+
+    private static async Task<Harness> WithBanditsOnTheLanding()
+    {
+        Harness harness = await Harness.Started();
+        harness.Dossiers.Areas[Landing] = new AreaDossier { AreaNodeId = Landing, Title = "Undercroft Landing" };
+        harness.Dossiers.Areas[Pillars] = new AreaDossier { AreaNodeId = Pillars, Title = "Pillars" };
+        harness.Content.Briefings[Landing] = new RoomBriefing
+        {
+            RoomId = Landing,
+            Label = "Undercroft Landing",
+            Occupants = new[]
+            {
+                new OccupantEntry
+                {
+                    NodeId = "data_statblocks_monsters_bandit",
+                    Label = "Bandit",
+                    MonsterRef = "data_statblocks_monsters_bandit",
+                    Count = "4",
+                    Note = "Dicing by the stair.",
+                },
+            },
+        };
+        harness.Workspace.NavigateTo(Landing);
+        return harness;
+    }
+
     // ---- Harness --------------------------------------------------------------------------
 
     private sealed class Harness
@@ -1243,6 +1416,8 @@ public sealed class DmWorkspaceTests
         public FakeCrossRefResolver CrossRefs { get; private set; }
 
         public SessionState Session { get; private set; }
+
+        public CampaignState Campaign { get; private set; }
 
         public DmWorkspace Workspace { get; private set; }
 
@@ -1304,6 +1479,7 @@ public sealed class DmWorkspaceTests
             dossiers.Campaign = new CampaignDossier { StartAreaNodeId = Landing };
 
             var encounters = new EncounterSource(crossRefs, content, stats);
+            var campaign = new CampaignState(new FakePartyRoster());
             return new Harness
             {
                 Content = content,
@@ -1313,7 +1489,8 @@ public sealed class DmWorkspaceTests
                 Dossiers = dossiers,
                 CrossRefs = crossRefs,
                 Session = session,
-                Workspace = new DmWorkspace(content, crossRefs, maps, annotations, dossiers, stats, encounters, session),
+                Campaign = campaign,
+                Workspace = new DmWorkspace(content, crossRefs, maps, annotations, dossiers, stats, encounters, session, campaign),
             };
         }
 
