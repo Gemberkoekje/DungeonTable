@@ -1,0 +1,38 @@
+@* One passage, out of its document: where it sits, its heading, and its prose with the links working,
+   read on the passage's own floor (a room's or a floor's own, none for the rules). The sheet over the dock
+   and a pin's popover show passages through this, so they read the same. *@
+
+<article class="passage kind-@Passage.Kind.ToString().ToLowerInvariant() @(Passage.Secret ? "secret" : string.Empty)">
+    @if (!string.IsNullOrWhiteSpace(Passage.Trail))
+    {
+        <p class="passage-trail">@Passage.Trail</p>
+    }
+    <h3 class="passage-title">
+        @Passage.Title
+        @if (Passage.Secret)
+        {
+            <span class="secret-badge" title="DM only — don't read this aloud">DM</span>
+        }
+    </h3>
+    <div class="passage-body"><CrossRefProse Text="@Passage.Body" ResolveRefs="Resolve" OnActivate="OnOpenReference" /></div>
+</article>
+
+@code {
+    /// <summary>The passage to show.</summary>
+    [Parameter]
+    public Passage Passage { get; set; } = new Passage();
+
+    /// <summary>
+    /// Resolves prose on a floor (the text, then the level node id or an empty string for none). When null,
+    /// the prose is plain text.
+    /// </summary>
+    [Parameter]
+    public Func<string, string, IReadOnlyList<CrossRef>> ResolveRefsOn { get; set; }
+
+    /// <summary>Raised with the id of a link the DM clicks.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    private Func<string, IReadOnlyList<CrossRef>> Resolve =>
+        ResolveRefsOn is null ? null : text => ResolveRefsOn(text, Passage.Floor);
+}

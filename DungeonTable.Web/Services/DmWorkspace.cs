@@ -26,8 +26,9 @@ namespace DungeonTable.Web.Services;
 /// </summary>
 public sealed class DmWorkspace
 {
-    // The Campaign tab's Search shows at most this many matches per query.
-    private const int SearchLimit = 20;
+    // Find anything lists at most this many things by name, then this many passages by their words.
+    private const int NameLimit = 6;
+    private const int TextLimit = 24;
 
     /// <summary>How many grid cells around a fight's room the battle layout's map shows.</summary>
     public const int SurroundingCells = 3;
@@ -275,6 +276,14 @@ public sealed class DmWorkspace
     /// </summary>
     public IReadOnlyList<EncounterMonster> Encounter { get; private set; } = Array.Empty<EncounterMonster>();
 
+    /// <summary>
+    /// The passage open as a sheet over the dock (a rules section, a floor's fact, a room's detail that
+    /// Find anything found); its <see cref="Passage.Key"/> is blank when none is. It stands outside the
+    /// reference history: it is a lookup, put away with Esc, and following a link in it or going to a room
+    /// puts it away too.
+    /// </summary>
+    public Passage OpenPassage { get; private set; } = new Passage();
+
     /// <summary>The reference history behind Back / Forward and the breadcrumb trail.</summary>
     public NavHistory History => history;
 
@@ -359,11 +368,15 @@ public sealed class DmWorkspace
         glances.Clear();
         if (changes.HasFlag(ContentChanges.Documents))
         {
+            string passage = OpenPassage.Key;
             LoadCampaignDocuments();
             if (history.Cursor >= 0)
             {
                 Render();
             }
+
+            // The passage on the sheet, read from the new content; gone when its block is.
+            OpenPassage = passage.Length > 0 ? PassageFor(passage) : new Passage();
         }
 
         if (changes.HasFlag(ContentChanges.Maps))
@@ -842,13 +855,172 @@ public sealed class DmWorkspace
     // ---- Lookups --------------------------------------------------------------------------
 
     /// <summary>
-    /// The Campaign tab's Search, capped for the panel: the same search the Room Editor's node picker
-    /// uses, over the campaign's own content and then the book index.
+    /// Find anything: the things whose names match first (the search the Room Editor's node picker uses,
+    /// over the campaign's own content and then the book index), then the passages whose words match,
+    /// each with the words around the match.
     /// </summary>
-    /// <param name="query">The search query.</param>
-    /// <returns>The ranked matches, best first.</returns>
-    public IReadOnlyList<SearchMatch> SearchNodes(string query) =>
-        content.SearchNodes(query, SearchLimit);
+    /// <param name="query">What the DM typed.</param>
+    /// <returns>The rows, best first; none for a blank query.</returns>
+    public IReadOnlyList<FindResult> Find(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return Array.Empty<FindResult>();
+        }
+
+        IEnumerable<FindResult> names = content.SearchNodes(query, NameLimit).Select(match => new FindResult
+        {
+            Kind = FindResultKind.Name,
+            Label = match.Label.Length > 0 ? match.Label : match.Id,
+            Category = PassageWording.NameCategory(match.Category),
+            Where = match.Citation,
+            Target = match.Id,
+        });
+
+        IEnumerable<FindResult> text = content.FindText(query, TextLimit).Select(hit => new FindResult
+        {
+            Kind = FindResultKind.Text,
+            Label = hit.Passage.Title,
+            Category = PassageWording.Category(hit.Passage.Kind),
+            Where = hit.Passage.Trail,
+            Snippet = hit.Snippet,
+            Secret = hit.Passage.Secret,
+            Target = hit.Passage.Key,
+        });
+
+        return names.Concat(text).ToList();
+    }
+
+    /// <summary>
+    /// Opens a passage as a sheet over the dock, by its key: a Find result's, or a pinned one's. A key that
+    /// names nothing (any more) puts the sheet away.
+    /// </summary>
+    /// <param name="key">The passage's key.</param>
+    public void ShowPassage(string key)
+    {
+        OpenPassage = PassageFor(key);
+        Notify();
+    }
+
+    /// <summary>Puts away the passage open over the dock, if one is.</summary>
+    public void ClosePassage()
+    {
+        if (OpenPassage.Key.Length == 0)
+        {
+            return;
+        }
+
+        OpenPassage = new Passage();
+        Notify();
+    }
+
+    /// <summary>A passage as the content holds it now, by its key.</summary>
+    /// <param name="key">The passage's key.</param>
+    /// <returns>The passage; an empty one (its key blank) when no passage has that key.</returns>
+    public Passage PassageFor(string key)
+    {
+        Result<Passage> found = content.GetPassage(key);
+        return found.IsValid ? found.Value : new Passage();
+    }
+
+    /// <summary>
+    /// Everything a card shows for an id, worked out the way the card sheet works it out: a roster
+    /// person's own card (with the block an NPC fights with), a player character's, an entity's with the
+    /// block it uses, a stat block or a spell with itself, and what the book adds under the same id.
+    /// </summary>
+    /// <param name="id">The id a link opens the card by.</param>
+    /// <returns>The card's content; an empty card (its node id blank) when nothing has the id.</returns>
+    public CardContent CardFor(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return new CardContent();
+        }
+
+        string node = id.Trim();
+        NpcDossier npc = FindNpc(node);
+        CharacterDossier character = FindCharacter(node);
+        ReferenceCard card;
+        StatBlock block = new StatBlock();
+        SpellEntry spell = new SpellEntry();
+        if (npc.Id.Length > 0)
+        {
+            // An NPC who fights shows the block they use beneath their own card, as an entity does.
+            string uses = content.StatBlockOf(npc.Id);
+            card = new ReferenceCard
+            {
+                NodeId = npc.Id,
+                Label = npc.Name,
+                Kind = CrossRefKind.Npc,
+                Relations = content.RelationsOf(npc.Id),
+                StatBlockId = uses,
+            };
+            block = uses.Length > 0 ? ResultOrEmpty(stats.GetMonster(uses)) : new StatBlock();
+        }
+        else if (character.Id.Length > 0)
+        {
+            card = new ReferenceCard
+            {
+                NodeId = character.Id,
+                Label = character.Name,
+                Kind = CrossRefKind.Character,
+                Relations = content.RelationsOf(character.Id),
+            };
+        }
+        else
+        {
+            Result<ReferenceCard> found = content.GetReferenceCard(node);
+            card = found.IsValid ? found.Value : new ReferenceCard();
+
+            // An authored individual shows the block it uses beneath its own description; a stat block
+            // shows itself. Anything else (a creature with no extracted block, a faction, a book entry)
+            // keeps the plain reference card.
+            if (card.StatBlockId.Length > 0)
+            {
+                block = ResultOrEmpty(stats.GetMonster(card.StatBlockId));
+            }
+            else if (card.Kind == CrossRefKind.Monster)
+            {
+                block = ResultOrEmpty(stats.GetMonster(node));
+            }
+
+            if (card.Kind == CrossRefKind.Spell)
+            {
+                spell = ResultOrEmptySpell(stats.GetSpell(node));
+            }
+        }
+
+        // The campaign's own card, extended by what the book says under the same id.
+        ReferenceCard book = new ReferenceCard();
+        if (card.Kind != CrossRefKind.Book)
+        {
+            Result<ReferenceCard> found = content.GetBookCard(node);
+            book = found.IsValid ? found.Value : new ReferenceCard();
+        }
+
+        return new CardContent
+        {
+            Card = card,
+            BookCard = book,
+            StatBlock = block,
+            SpellEntry = spell,
+            StatBlockCitation = CitationOf(block.NodeId),
+            SpellCitation = CitationOf(spell.NodeId),
+            Npc = npc,
+            Character = character,
+        };
+    }
+
+    /// <summary>
+    /// Resolves the cross-references in a card's prose on the card's own floor: an entity a level declares
+    /// on that level, anything else on the shown floor, as <see cref="ResolveCardRefs"/> does for the card
+    /// on the sheet.
+    /// </summary>
+    /// <param name="card">The card the prose belongs to.</param>
+    /// <param name="text">The prose to scan.</param>
+    /// <returns>The resolved reference spans.</returns>
+    public IReadOnlyList<CrossRef> ResolveRefsOnCard(ReferenceCard card, string text) =>
+        crossRefs.Resolve(text, card is not null && card.LevelNodeId.Length > 0 ? card.LevelNodeId : LevelDossier.LevelNodeId);
 
     /// <summary>
     /// What is in a room at a glance: its creatures, loot, checks, traps, secrets and ways out, for the
@@ -956,6 +1128,30 @@ public sealed class DmWorkspace
 
         var card = content.GetReferenceCard(node);
         return card.IsValid && card.Value.Label.Length > 0 ? card.Value.Label : node;
+    }
+
+    /// <summary>
+    /// What a card is called, for a pin's chip: one of the campaign's people by their name, anything else
+    /// by its card's label. Cheaper than <see cref="CardFor"/>, which also builds the stat block.
+    /// </summary>
+    /// <param name="id">The id a link opens the card by.</param>
+    /// <returns>The card's name; an empty string when nothing has the id.</returns>
+    public string CardLabel(string id)
+    {
+        NpcDossier npc = FindNpc(id ?? string.Empty);
+        if (npc.Id.Length > 0)
+        {
+            return npc.Name.Length > 0 ? npc.Name : npc.Id;
+        }
+
+        CharacterDossier character = FindCharacter(id ?? string.Empty);
+        if (character.Id.Length > 0)
+        {
+            return character.Name.Length > 0 ? character.Name : character.Id;
+        }
+
+        Result<ReferenceCard> card = content.GetReferenceCard(id);
+        return card.IsValid ? card.Value.Label : string.Empty;
     }
 
     // ---- Internals ------------------------------------------------------------------------
@@ -1110,6 +1306,10 @@ public sealed class DmWorkspace
             return;
         }
 
+        // Wherever the history goes, a passage open over the dock is put away: the DM followed a link in it,
+        // went to a room, or the dock followed the party.
+        OpenPassage = new Passage();
+
         NavEntry current = history.Current;
         if (current.Kind == CrossRefKind.Area)
         {
@@ -1121,66 +1321,15 @@ public sealed class DmWorkspace
         }
 
         CardNode = current.NodeId;
-        ClearCard();
-        OpenNpc = FindNpc(CardNode);
-        OpenCharacter = FindCharacter(CardNode);
-        if (OpenNpc.Id.Length > 0)
-        {
-            // An NPC who fights shows the block they use beneath their own card, as an entity does.
-            string block = content.StatBlockOf(OpenNpc.Id);
-            ReferenceCard = new ReferenceCard
-            {
-                NodeId = OpenNpc.Id,
-                Label = OpenNpc.Name,
-                Kind = CrossRefKind.Npc,
-                Relations = content.RelationsOf(OpenNpc.Id),
-                StatBlockId = block,
-            };
-            OpenStatBlock = block.Length > 0 ? ResultOrEmpty(stats.GetMonster(block)) : new StatBlock();
-        }
-        else if (OpenCharacter.Id.Length > 0)
-        {
-            ReferenceCard = new ReferenceCard
-            {
-                NodeId = OpenCharacter.Id,
-                Label = OpenCharacter.Name,
-                Kind = CrossRefKind.Character,
-                Relations = content.RelationsOf(OpenCharacter.Id),
-            };
-        }
-        else
-        {
-            var card = content.GetReferenceCard(CardNode);
-            ReferenceCard = card.IsValid ? card.Value : new ReferenceCard();
-
-            // An authored individual shows the block it uses beneath its own description; a stat
-            // block shows itself. Anything else (a creature with no extracted block, a faction, a
-            // book entry) keeps the plain reference card.
-            if (ReferenceCard.StatBlockId.Length > 0)
-            {
-                OpenStatBlock = ResultOrEmpty(stats.GetMonster(ReferenceCard.StatBlockId));
-            }
-            else
-            {
-                OpenStatBlock = ReferenceCard.Kind == CrossRefKind.Monster
-                    ? ResultOrEmpty(stats.GetMonster(CardNode))
-                    : new StatBlock();
-            }
-
-            OpenSpellEntry = ReferenceCard.Kind == CrossRefKind.Spell
-                ? ResultOrEmptySpell(stats.GetSpell(CardNode))
-                : new SpellEntry();
-        }
-
-        OpenStatBlockCitation = CitationOf(OpenStatBlock.NodeId);
-        OpenSpellCitation = CitationOf(OpenSpellEntry.NodeId);
-
-        // The campaign's own card, extended by what the book says under the same id.
-        if (ReferenceCard.Kind != CrossRefKind.Book)
-        {
-            Result<ReferenceCard> book = content.GetBookCard(CardNode);
-            BookCard = book.IsValid ? book.Value : new ReferenceCard();
-        }
+        CardContent shown = CardFor(CardNode);
+        ReferenceCard = shown.Card;
+        BookCard = shown.BookCard;
+        OpenStatBlock = shown.StatBlock;
+        OpenSpellEntry = shown.SpellEntry;
+        OpenStatBlockCitation = shown.StatBlockCitation;
+        OpenSpellCitation = shown.SpellCitation;
+        OpenNpc = shown.Npc;
+        OpenCharacter = shown.Character;
 
         string area = history.NearestArea();
         if (area.Length > 0 && !string.Equals(area, PanelNode, StringComparison.Ordinal))

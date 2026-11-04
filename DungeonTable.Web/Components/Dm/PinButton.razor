@@ -1,0 +1,42 @@
+@inject CampaignState Campaign
+@implements IDisposable
+@* The 📌 that pins something along the foot of the dock, or takes its pin away. The pins are the table's
+   (CampaignState), so this button listens to them itself: pinning from a rules section lights the same
+   section's button in another DM window, and taking a pin off the strip unlights it here. *@
+
+<button type="button" class="pin-btn @(Pinned ? "on" : string.Empty)"
+        aria-pressed="@(Pinned ? "true" : "false")"
+        title="@(Pinned ? $"Take {What} off the pins" : $"Pin {What} along the foot of the dock")"
+        @onclick="Toggle">
+    <span aria-hidden="true">&#x1F4CC;</span>
+    @if (ShowLabel)
+    {
+        <span class="pin-btn-label">@(Pinned ? "Pinned" : "Pin")</span>
+    }
+</button>
+
+@code {
+    /// <summary>What is pinned: a card's or a passage's pin (see <see cref="PinKeys"/>).</summary>
+    [Parameter]
+    public string Pin { get; set; } = string.Empty;
+
+    /// <summary>What the button pins, for its tooltip ("this section", "Grask").</summary>
+    [Parameter]
+    public string What { get; set; } = "this";
+
+    /// <summary>True to say "Pin" or "Pinned" beside the pin.</summary>
+    [Parameter]
+    public bool ShowLabel { get; set; }
+
+    private bool Pinned => Campaign.IsPinned(Pin);
+
+    /// <inheritdoc />
+    protected override void OnInitialized() => Campaign.Changed += OnPinsChanged;
+
+    private void Toggle() => Campaign.TogglePin(Pin);
+
+    private void OnPinsChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>Stops listening to the table's pins, which outlive this button.</summary>
+    public void Dispose() => Campaign.Changed -= OnPinsChanged;
+}

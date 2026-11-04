@@ -30,7 +30,7 @@ the DM screen, and the frame you draw takes that shape.
 
 ### The DM screen
 
-![The DM screen: the map with three rooms revealed and badges under each room's name, the party token in the Goblin Den with its vision ring, the player view framed on the Nave, the Workshop's peek card under the pointer, and the Goblin Den on the Room tab, party here, with the rooms around it under Nearby](images/dm-screen.png)
+![The DM screen: the map with badges under each room's name, the party token in the Goblin Den with its vision ring, the player view framed on the Nave, the Workshop's peek card under the pointer, Find anything in the bar, the Goblin Den on the Room tab, party here, with the rooms around it under Nearby, and two pins along the foot of the dock](images/dm-screen.png)
 
 The DM screen is the map, which never leaves the screen, and beside it the **dock**, with four tabs:
 **Room**, **Battle**, **Campaign** and **Art**. **Ctrl+1** to **Ctrl+4** switch the dock from
@@ -43,6 +43,8 @@ whichever tab is up. The bar across the top is in view all the time:
   room on this map.
 - **Follow party**, beside it, keeps the projector on the party: while it is on, the projector frames
   the party again whenever the token leaves the middle of its view. It is off until you turn it on.
+- **Find anything** (**Ctrl+K**, or **/**) looks up a room, a person, a rule or any line of the
+  campaign's text (see [finding anything](#finding-anything-and-pins)).
 - When the campaign has more than one map, the **map picker** switches between them. The projector
   follows. Each map keeps what you revealed on it, its open doors, where the projector was framed and
   where the party stands, so when the party goes back to a floor they see it as they left it. A map shown for the first time
@@ -148,8 +150,9 @@ The room is laid out in the order you need it at the table:
 - **The header**: the area number, the title, and whether the **party is here** and the room is
   **cleared** and **revealed**. **Reveal** shows the whole room to the players (a room drawn as several
   regions is revealed whole), **Frame** frames the projector on it, **Centre** brings it to the middle of
-  your map, and **Pin** keeps the tab here while the party moves. **←** and **→** step back and forth
-  through what you opened.
+  your map, and **Pin** keeps the tab here while the party moves. **ⓘ Floor** opens the floor's standing
+  facts under the header: what dwells here, the factions and the wandering monsters, so "who else is on
+  this floor?" needs no other tab. **←** and **→** step back and forth through what you opened.
 - **The text to read aloud**, in a box, first.
 - **Skill checks** as DC pills, then **At a glance**, the short list to read next.
 - **The encounter**: each creature the room lists, with where its stat block comes from and how many
@@ -164,11 +167,12 @@ The room is laid out in the order you need it at the table:
   is kept with the table.
 - At the foot, folded: who is here and how they are tied to each other.
 
-![A card over the Room tab: Nib, with the breadcrumb back to the Goblin Den](images/dm-card.png)
+![A card over the Room tab: Nib, with the breadcrumb back to the Goblin Den and the card's pin beside it](images/dm-card.png)
 
 Every underlined name is a link. A person, a monster, a spell or a faction opens a **card** over the
-dock: who they are, their stat block, where they appear and how they are tied to others. **Esc**, or
-the card's **×**, puts it away, and the room is still there underneath. **←** and **→** (or **Alt+←**
+dock: who they are, their stat block, where they appear and how they are tied to others. Its **📌**
+pins it along the foot of the dock (see [pins](#finding-anything-and-pins)). **Esc**, or the card's
+**×**, puts it away, and the room is still there underneath. **←** and **→** (or **Alt+←**
 and **Alt+→**) walk back and forth through what you opened, and the row of names beside them jumps
 straight to one. A link to a room shows that room on the Room tab.
 
@@ -185,9 +189,38 @@ The **Campaign** tab (**Ctrl+3**) holds the rest of the campaign, in tabs of its
 | Story | what happened before this campaign |
 | Session | tonight's prep, scene by scene |
 | Rules | the campaign's rules, and its card decks: **Draw** hands out a card. A deck whose cards the players keep remembers which are out until you reset it |
-| Search | everything above, and the books the campaign indexes, by name |
 
-The tab you leave it on stays put when you look at another room.
+The tab you leave it on stays put when you look at another room. Each rules section and each of the
+floor's facts has a **📌** in its corner, to keep it along the foot of the dock. Searching is not a tab
+here: it is [Find anything](#finding-anything-and-pins), over the map.
+
+### Finding anything, and pins
+
+![Find anything over the map: "darkness" typed, with the Darkness spell, a book entry and the Darkness Below rules section, the word marked in each](images/dm-find.png)
+
+**Find anything** is one box over the map. Open it with **Ctrl+K**, **/**, or the box in the bar, and
+type: it looks through names (rooms, people, monsters, spells, the books the campaign indexes) and
+through words, in every rules section, the floor's facts, each room's read-aloud and detail, the
+people's entries, the quests, the session prep, the decks, the background, the party and the story.
+"ceiling" finds the paragraph that says how high the ceilings are, wherever it is.
+
+- Things found by their name come first, then passages found by their words, each with the words
+  around the match and what you typed marked. Most lookups end there, in the list.
+- **↑** and **↓** choose a row; **Enter** or a click opens it. A name opens as a link would: a room on
+  the Room tab, anything else as its card. A passage opens as a sheet over the dock, with its links
+  working, and **Read the room** or **Open the card** when it comes from one.
+- **Esc** puts the box, then the sheet, away; nothing moves the map. Open the box again and your last
+  search is still there.
+- Every word must be somewhere in the passage, in any order: "goblin fire" finds the rules section that
+  mentions the goblins' fire.
+
+**Pins** keep what you look up every session one click away. Pin a rules section or a floor's fact by
+the **📌** in its corner, a card or a passage by the **📌** at its top. Pinned things sit as chips along
+the foot of the dock, on every tab, the Battle tab included: click a chip to read it in a popover over
+the dock, click it again or press **Esc** to put it away, and **×** on the chip takes the pin off. A
+pinned card is the whole card, so a player character's pin has their armour class and passive
+Perception in it. The pins are kept with the table, like your notes. A pin whose section was renamed
+or deleted stays, dashed, until you take it off.
 
 ### A fight
 

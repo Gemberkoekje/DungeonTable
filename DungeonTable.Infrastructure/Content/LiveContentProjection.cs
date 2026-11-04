@@ -31,6 +31,12 @@ public sealed class LiveContentProjection : IContentProjection
     public IReadOnlyList<SearchMatch> SearchNodes(string query, int limit) => Now.SearchNodes(query, limit);
 
     /// <inheritdoc />
+    public IReadOnlyList<TextMatch> FindText(string query, int limit) => Now.FindText(query, limit);
+
+    /// <inheritdoc />
+    public Result<Passage> GetPassage(string key) => Now.GetPassage(key);
+
+    /// <inheritdoc />
     public Result<ReferenceCard> GetReferenceCard(string nodeId) => Now.GetReferenceCard(nodeId);
 
     /// <inheritdoc />

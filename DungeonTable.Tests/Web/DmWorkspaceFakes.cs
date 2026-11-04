@@ -36,6 +36,19 @@ internal sealed class FakeContentProjection : IContentProjection
 
     public IReadOnlyList<SearchMatch> SearchNodes(string query, int limit) => Matches;
 
+    /// <summary>The text matches every text search returns, whatever the query.</summary>
+    public List<TextMatch> TextMatches { get; } = new List<TextMatch>();
+
+    /// <summary>Passages keyed by their key; a missing key yields an invalid result.</summary>
+    public Dictionary<string, Passage> Passages { get; } = new Dictionary<string, Passage>(StringComparer.Ordinal);
+
+    public IReadOnlyList<TextMatch> FindText(string query, int limit) => TextMatches;
+
+    public Result<Passage> GetPassage(string key) =>
+        Passages.TryGetValue(key ?? string.Empty, out Passage passage)
+            ? Result.For(passage)
+            : Result.WithMessages<Passage>(ValidationMessage.Error($"No passage '{key}'.", nameof(key)));
+
     public Result<ReferenceCard> GetReferenceCard(string nodeId) =>
         Cards.TryGetValue(nodeId, out ReferenceCard card)
             ? Result.For(card)
@@ -159,7 +172,10 @@ internal sealed class FakeDossierStore : IDossierStore
             ? Result.For(number)
             : Result.WithMessages<int>(ValidationMessage.Error("No number.", nameof(levelNodeId)));
 
-    public Result<ReferenceLibrary> GetReference() => Result.For(new ReferenceLibrary());
+    /// <summary>The rules reference every <see cref="GetReference"/> call returns.</summary>
+    public ReferenceLibrary Reference { get; set; } = new ReferenceLibrary();
+
+    public Result<ReferenceLibrary> GetReference() => Result.For(Reference);
 
     /// <summary>The quest log every <see cref="GetQuests"/> call returns.</summary>
     public QuestLog Quests { get; set; } = new QuestLog();

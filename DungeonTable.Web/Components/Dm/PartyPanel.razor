@@ -1,9 +1,9 @@
 @*
-    The Info panel's Party sub-tab: who the DM is running the dungeon for.
+    The Campaign tab's Party section: who the DM is running the dungeon for.
 
     A roster table across the top — the six numbers that get asked for mid-turn, all visible at
-    once without opening anything — then a card per character, then the party-wide notes that
-    belong to no single player.
+    once without opening anything — then a card per character, each with a pin that keeps the sheet
+    along the foot of the dock, then the party-wide notes that belong to no single player.
 *@
 
 <section class="party-panel" aria-label="The party">
@@ -49,10 +49,15 @@
 
             @foreach (Keyed<CharacterDossier> character in RenderKeys.Of(Party.Characters, character => character.Id))
             {
-                <CharacterCard @key="character.Key"
-                               Character="character.Item"
-                               ResolveRefs="ResolveRefs"
-                               OnOpenReference="OnOpenReference" />
+                <div @key="character.Key" class="pinnable">
+                    <CharacterCard Character="character.Item"
+                                   ResolveRefs="ResolveRefs"
+                                   OnOpenReference="OnOpenReference" />
+                    @if (Pinnable && character.Item.Id.Length > 0)
+                    {
+                        <PinButton Pin="@PinKeys.Card(character.Item.Id)" What="@($"{character.Item.Name}'s sheet")" />
+                    }
+                </div>
             }
         }
 
@@ -84,6 +89,10 @@
     /// <summary>The authored party dossier.</summary>
     [Parameter]
     public PartyDossier Party { get; set; } = new PartyDossier();
+
+    /// <summary>True to offer a pin on each character's sheet; the DM screen does, a static render does not.</summary>
+    [Parameter]
+    public bool Pinnable { get; set; }
 
     /// <summary>
     /// Resolves cross-references in the party's prose. Character backstories name monsters and NPCs

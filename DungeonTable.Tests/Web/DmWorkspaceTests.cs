@@ -24,7 +24,9 @@ public sealed class DmWorkspaceTests
 
     private static readonly string[] LandingRegionIds = { "r-entry-a", "r-entry-b" };
 
-    private static readonly string[] PillarSearchIds = { Pillars, "data_dossiers_level_1_area_2a" };
+    private static readonly string[] PillarFindTargets = { Pillars, "data_dossiers_level_1_area_2a", "the-old-mill", "rules/darkness-below" };
+
+    private static readonly FindResultKind[] NamesThenText = { FindResultKind.Name, FindResultKind.Name, FindResultKind.Name, FindResultKind.Text };
 
     private static readonly string[] FloorTwoThenNone = { "data_dossiers_level_2", string.Empty };
 
@@ -848,7 +850,7 @@ public sealed class DmWorkspaceTests
     }
 
     [Fact]
-    public async Task The_search_tab_is_the_projections_search()
+    public async Task Find_anything_lists_names_first_then_passages_with_their_words()
     {
         Harness harness = await Harness.Started();
         harness.Content.Matches.Add(new SearchMatch { Id = Pillars, Label = "Pillars", Category = "area" });
@@ -858,10 +860,102 @@ public sealed class DmWorkspaceTests
             Label = "Demon Reliefs (Level 1, Area 2a)",
             Category = "area",
         });
+        harness.Content.Matches.Add(new SearchMatch { Id = "the-old-mill", Label = "The Old Mill", Category = "book", Citation = "ALMANAC, p. 6" });
+        harness.Content.TextMatches.Add(new TextMatch
+        {
+            Passage = new Passage { Key = "rules/darkness-below", Title = "Darkness Below", Trail = "Rules", Kind = PassageKind.Rule, Secret = true },
+            Snippet = "…two thick square pillars…",
+        });
 
-        IReadOnlyList<SearchMatch> matches = harness.Workspace.SearchNodes("pillar");
+        IReadOnlyList<FindResult> rows = harness.Workspace.Find("pillar");
 
-        Assert.Equal(PillarSearchIds, matches.Select(match => match.Id));
+        Assert.Equal(PillarFindTargets, rows.Select(row => row.Target));
+        Assert.Equal(NamesThenText, rows.Select(row => row.Kind));
+
+        // An area is called a room, as everywhere else on the DM screen; a book entry says where it is printed.
+        Assert.Equal("room", rows[0].Category);
+        Assert.Equal("book", rows[2].Category);
+        Assert.Equal("ALMANAC, p. 6", rows[2].Where);
+
+        FindResult passage = rows[3];
+        Assert.Equal("Darkness Below", passage.Label);
+        Assert.Equal("rules", passage.Category);
+        Assert.Equal("Rules", passage.Where);
+        Assert.Equal("…two thick square pillars…", passage.Snippet);
+        Assert.True(passage.Secret);
+
+        Assert.Empty(harness.Workspace.Find("   "));
+    }
+
+    [Fact]
+    public async Task A_passage_opens_over_the_dock_and_goes_when_the_DM_goes_elsewhere()
+    {
+        Harness harness = await Harness.Started();
+        harness.Content.Passages["rules/darkness-below"] = new Passage { Key = "rules/darkness-below", Title = "Darkness Below", Body = "No light." };
+
+        harness.Workspace.ShowPassage("rules/darkness-below");
+        Assert.Equal("Darkness Below", harness.Workspace.OpenPassage.Title);
+
+        // It is a lookup over the dock, not a stop in the history: a card opened from it puts it away...
+        harness.Workspace.OpenReference("data_statblocks_monsters_bandit");
+        Assert.Equal(string.Empty, harness.Workspace.OpenPassage.Key);
+        Assert.Equal("data_statblocks_monsters_bandit", harness.Workspace.CardNode);
+
+        // ...and so does going to a room, or closing it.
+        harness.Workspace.ShowPassage("rules/darkness-below");
+        harness.Workspace.NavigateTo(Pillars);
+        Assert.Equal(string.Empty, harness.Workspace.OpenPassage.Key);
+
+        harness.Workspace.ShowPassage("rules/darkness-below");
+        harness.Workspace.ClosePassage();
+        Assert.Equal(string.Empty, harness.Workspace.OpenPassage.Key);
+
+        // A key that names nothing opens nothing.
+        harness.Workspace.ShowPassage("rules/no-such-section");
+        Assert.Equal(string.Empty, harness.Workspace.OpenPassage.Key);
+    }
+
+    [Fact]
+    public async Task The_passage_on_the_sheet_is_read_again_when_the_content_changes()
+    {
+        Harness harness = await Harness.Started();
+        harness.Content.Passages["rules/darkness-below"] = new Passage { Key = "rules/darkness-below", Title = "Darkness Below", Body = "No light." };
+        harness.Workspace.ShowPassage("rules/darkness-below");
+
+        harness.Content.Passages["rules/darkness-below"] = new Passage { Key = "rules/darkness-below", Title = "Darkness Below", Body = "No light but the furnace." };
+        await harness.Workspace.RefreshAsync(ContentChanges.Documents, CancellationToken.None);
+        Assert.Equal("No light but the furnace.", harness.Workspace.OpenPassage.Body);
+
+        // Gone from the content, gone from the sheet.
+        harness.Content.Passages.Clear();
+        await harness.Workspace.RefreshAsync(ContentChanges.Documents, CancellationToken.None);
+        Assert.Equal(string.Empty, harness.Workspace.OpenPassage.Key);
+    }
+
+    [Fact]
+    public async Task A_pinned_card_is_worked_out_as_the_card_sheet_works_it_out()
+    {
+        Harness harness = Harness.Build();
+        harness.Dossiers.Npcs = new NpcRoster { Npcs = new[] { new NpcDossier { Id = "wenna-brask", Name = "Wenna Brask" } } };
+        await harness.Workspace.InitialiseAsync(CancellationToken.None);
+
+        CardContent bandit = harness.Workspace.CardFor("data_statblocks_monsters_bandit");
+        harness.Workspace.OpenReference("data_statblocks_monsters_bandit");
+
+        Assert.Equal("Bandit", bandit.Card.Label);
+        Assert.Equal("data_statblocks_monsters_bandit", bandit.StatBlock.NodeId);
+        Assert.Equal(harness.Workspace.OpenStatBlock.NodeId, bandit.StatBlock.NodeId);
+
+        CardContent wenna = harness.Workspace.CardFor("wenna-brask");
+        Assert.Equal("Wenna Brask", wenna.Npc.Name);
+        Assert.Equal(CrossRefKind.Npc, wenna.Card.Kind);
+
+        Assert.Equal(string.Empty, harness.Workspace.CardFor(" ").Card.NodeId);
+
+        // A chip names a card cheaply: a person by name, anything else by its card's label, nothing as nothing.
+        Assert.Equal("Wenna Brask", harness.Workspace.CardLabel("wenna-brask"));
+        Assert.Equal("Bandit", harness.Workspace.CardLabel("data_statblocks_monsters_bandit"));
+        Assert.Equal(string.Empty, harness.Workspace.CardLabel("no-such-card"));
     }
 
     [Fact]

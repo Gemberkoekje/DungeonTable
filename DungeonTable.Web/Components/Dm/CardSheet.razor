@@ -1,9 +1,9 @@
 @inherits DmTabBase
 @*
     A card (a monster, a person, a spell, a faction, a book entry) as a sheet over the dock, with the
-    history's back and forward and its breadcrumb above it. Esc or the card's close button puts the
-    sheet away and the room is underneath, where the DM left it: a card used to sit at the top of the
-    old Info tab and push the room down under it.
+    history's back and forward and its breadcrumb above it, and a pin to keep the card along the foot of
+    the dock. Esc or the card's close button puts the sheet away and the room is underneath, where the
+    DM left it: a card used to sit at the top of the old Info tab and push the room down under it.
 
     The shell shows the sheet only while a card is open and the dock is on the Room or Campaign tab;
     the Battle tab has a detail pane of its own.
@@ -33,6 +33,7 @@
                 </li>
             }
         </ol>
+        <PinButton Pin="@PinKeys.Card(Workspace.CardNode)" What="@Workspace.ReferenceCard.Label" />
     </nav>
 
     <ReferenceDrawer Card="Workspace.ReferenceCard"

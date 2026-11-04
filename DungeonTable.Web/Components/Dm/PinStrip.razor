@@ -1,0 +1,171 @@
+@inherits DmTabBase
+@inject CampaignState Campaign
+@*
+    The pins, along the foot of the dock on every dock tab: the rules sections, floor facts, cards and
+    passages the DM looks up every session, one click away all evening (Darkness Below, a player
+    character's armour class). A click on a chip shows its text in a popover over the dock, a passage through
+    PassageView and a card through ReferenceDrawer, worked out as the card sheet works it out
+    (DmWorkspace.CardFor); a second click, the close button or Esc puts it away. The pins are the table's
+    (CampaignState), saved with it.
+
+    A pin whose passage or card the content no longer holds stays, greyed, until the DM takes it off: a
+    heading renamed in an edit should not make a pin vanish without a word.
+*@
+
+@if (pins.Count > 0)
+{
+    <div class="pin-strip" role="toolbar" aria-label="Pinned">
+        @if (openPin.Length > 0)
+        {
+            <div class="pin-popover" role="dialog" aria-label="@LabelOf(openPin)">
+                @if (PinKeys.IsPassage(openPin))
+                {
+                    Passage passage = Workspace.PassageFor(PinKeys.Target(openPin));
+                    <header class="pin-popover-head">
+                        @if (passage.Key.Length > 0)
+                        {
+                            <button type="button" class="room-action" title="Open it as a sheet over the dock"
+                                    @onclick="() => OpenPassage(passage.Key)">Open</button>
+                        }
+                        <button type="button" class="room-action" title="Take it off the pins"
+                                @onclick="() => Campaign.TogglePin(openPin)">Unpin</button>
+                        <button type="button" class="reference-close" title="Close (Esc)" aria-label="Close"
+                                @onclick="Close">&times;</button>
+                    </header>
+                    @if (passage.Key.Length > 0)
+                    {
+                        <PassageView Passage="passage" ResolveRefsOn="Workspace.ResolveRefsOn" OnOpenReference="OpenReference" />
+                    }
+                    else
+                    {
+                        <p class="muted">This passage is not in the content any more. Its heading may have changed.</p>
+                    }
+                }
+                else
+                {
+                    CardContent card = Workspace.CardFor(PinKeys.Target(openPin));
+                    <ReferenceDrawer Card="card.Card"
+                                     BookCard="card.BookCard"
+                                     StatBlock="card.StatBlock"
+                                     SpellEntry="card.SpellEntry"
+                                     StatBlockCitation="@card.StatBlockCitation"
+                                     SpellCitation="@card.SpellCitation"
+                                     Npc="card.Npc"
+                                     Character="card.Character"
+                                     ResolveRefs="CardRefs(card.Card)"
+                                     ResolveEntityRefs="Workspace.ResolveEntityRefs"
+                                     ResolveRefsOn="Workspace.ResolveRefsOn"
+                                     OnOpenReference="OpenReference"
+                                     OnClose="Close" />
+                }
+            </div>
+        }
+
+        <span class="pin-strip-glyph" aria-hidden="true">&#x1F4CC;</span>
+        @foreach (string pin in pins)
+        {
+            string label = LabelOf(pin);
+            bool gone = label.Length == 0;
+            <span @key="pin" class="pin-chip @(pin == openPin ? "open" : string.Empty) @(gone ? "gone" : string.Empty)">
+                <button type="button" class="pin-chip-open"
+                        aria-expanded="@(pin == openPin ? "true" : "false")"
+                        title="@(gone ? "Not in the content any more" : $"Show {label}")"
+                        @onclick="() => Toggle(pin)">@(gone ? Fallback(pin) : label)</button>
+                <button type="button" class="pin-chip-remove" title="Take it off the pins" aria-label="Unpin"
+                        @onclick="() => Campaign.TogglePin(pin)">&times;</button>
+            </span>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// Raised when a link in a pinned passage or card, or a passage's Open, put something on the dock: a
+    /// card or a passage over it, or a room on the Room tab. The shell shows whichever it is.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnOpened { get; set; }
+
+    private IReadOnlyList<string> pins = Array.Empty<string>();
+    private string openPin = string.Empty;
+
+    /// <summary>
+    /// Puts away the pin's popover, if one is open: Esc's first job while one is.
+    /// </summary>
+    /// <returns><c>true</c> when a popover was open.</returns>
+    public bool CloseOpen()
+    {
+        if (openPin.Length == 0)
+        {
+            return false;
+        }
+
+        openPin = string.Empty;
+        StateHasChanged();
+        return true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        pins = Campaign.Pins();
+        Campaign.Changed += OnPinsChanged;
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Campaign.Changed -= OnPinsChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void OnPinsChanged() => InvokeAsync(() =>
+    {
+        pins = Campaign.Pins();
+        if (!pins.Contains(openPin, StringComparer.Ordinal))
+        {
+            openPin = string.Empty;
+        }
+
+        StateHasChanged();
+    });
+
+    private void Toggle(string pin) => openPin = pin == openPin ? string.Empty : pin;
+
+    private void Close() => openPin = string.Empty;
+
+    // What a chip says: the passage's heading, or the card's name; empty when the content has neither.
+    private string LabelOf(string pin) =>
+        PinKeys.IsPassage(pin)
+            ? Workspace.PassageFor(PinKeys.Target(pin)).Title
+            : Workspace.CardLabel(PinKeys.Target(pin));
+
+    // A pin the content no longer answers to, by the last part of what it named.
+    private static string Fallback(string pin)
+    {
+        string target = PinKeys.Target(pin);
+        int slash = target.LastIndexOf('/');
+        return slash >= 0 ? target[(slash + 1)..] : target;
+    }
+
+    private Func<string, IReadOnlyList<CrossRef>> CardRefs(ReferenceCard card) => text => Workspace.ResolveRefsOnCard(card, text);
+
+    private Task OpenPassage(string key)
+    {
+        openPin = string.Empty;
+        Workspace.ShowPassage(key);
+        return OnOpened.InvokeAsync();
+    }
+
+    private Task OpenReference(string node)
+    {
+        openPin = string.Empty;
+        Workspace.OpenReference(node);
+        return OnOpened.InvokeAsync();
+    }
+}

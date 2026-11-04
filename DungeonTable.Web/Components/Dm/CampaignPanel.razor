@@ -1,8 +1,8 @@
 @* The Campaign tab's panel: everything the DM reads that is not the room in front of the party. Level
    (the floor's "what dwells here", its factions, and the campaign's background below), Quests (the
    adventure hooks and their beat chains), Party (the player characters), NPCs (the campaign's named
-   people), Story (what came before), Session (tonight's prep and running order), Rules (the rules
-   reference and the card decks) and Search (find any area, person, creature, spell or book entry).
+   people), Story (what came before), Session (tonight's prep and running order) and Rules (the rules
+   reference and the card decks). Searching is Find anything's (Ctrl+K), over the map, not a section here.
 
    These belong to the floor or the campaign, not to a room, so the tab shown stays put when the room
    in the Room tab changes. All of this prose except the floor's own is read on no floor
@@ -28,49 +28,7 @@
         <div class="briefing-panel" role="tabpanel" id="campaign-panel-Level" aria-labelledby="campaign-tab-Level">
             @if (HasLevel)
             {
-                <section class="level-dossier">
-                    <h2 class="level-title">@Level.Title</h2>
-
-                    @if (!string.IsNullOrWhiteSpace(Level.DesignedFor))
-                    {
-                        <p class="designed-for"><span class="field-label">Designed for</span>@Level.DesignedFor</p>
-                    }
-
-                    @if (!string.IsNullOrWhiteSpace(Level.WhatDwellsHere))
-                    {
-                        <blockquote class="what-dwells"><CrossRefProse Text="@Level.WhatDwellsHere" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></blockquote>
-                    }
-
-                    @if (Level.Factions.Count > 0)
-                    {
-                        <div class="detail">
-                            <h3>Factions</h3>
-                            @foreach (DossierBlock faction in Level.Factions)
-                            {
-                                <DossierBlockView Block="faction" ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
-                            }
-                        </div>
-                    }
-
-                    @if (Level.WanderingMonsters.Count > 0)
-                    {
-                        <div class="detail">
-                            <h3>Wandering monsters</h3>
-                            @foreach (DossierBlock wander in Level.WanderingMonsters)
-                            {
-                                <DossierBlockView Block="wander" ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
-                            }
-                        </div>
-                    }
-
-                    @if (!string.IsNullOrWhiteSpace(Level.Aftermath))
-                    {
-                        <div class="detail">
-                            <h3>Aftermath</h3>
-                            <p class="aftermath"><CrossRefProse Text="@Level.Aftermath" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
-                        </div>
-                    }
-                </section>
+                <LevelFacts Level="Level" Pinnable="Pinnable" ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
             }
             else
             {
@@ -118,6 +76,7 @@
                the shown floor, so it resolves through ResolveEntityRefs: a "level 3" in a backstory
                is not this floor's area 3. *@
             <PartyPanel Party="Party"
+                        Pinnable="Pinnable"
                         ResolveRefs="NoFloorRefs"
                         OnOpenReference="OnOpenReference" />
         </div>
@@ -151,14 +110,16 @@
         <div class="briefing-panel" role="tabpanel" id="campaign-panel-Rules" aria-labelledby="campaign-tab-Rules">
             @if (Reference.Sections.Count > 0)
             {
+                IReadOnlyList<string> ruleKeys = PassageKeys.Rules(Reference.Sections);
                 <div class="detail">
                     @if (!string.IsNullOrWhiteSpace(Reference.Title))
                     {
                         <h3>@Reference.Title</h3>
                     }
-                    @foreach (DossierBlock section in Reference.Sections)
+                    @for (int i = 0; i < Reference.Sections.Count; i++)
                     {
-                        <DossierBlockView Block="section" ResolveRefs="NoFloorRefs" OnOpenReference="OnOpenReference" />
+                        <PinnableBlock @key="ruleKeys[i]" Block="Reference.Sections[i]" PassageKey="@ruleKeys[i]" Pinnable="Pinnable"
+                                       ResolveRefs="NoFloorRefs" OnOpenReference="OnOpenReference" />
                     }
                 </div>
             }
@@ -177,55 +138,6 @@
                 <DeckPanel @key="deck.Id" Deck="deck"
                            ResolveRefs="NoFloorRefs"
                            OnOpenReference="OnOpenReference" />
-            }
-        </div>
-    }
-    else if (activeTab == CampaignSubTab.Search)
-    {
-        <div class="briefing-panel" role="tabpanel" id="campaign-panel-Search" aria-labelledby="campaign-tab-Search">
-            @if (SearchNodes is null)
-            {
-                <p class="muted">Search is unavailable.</p>
-            }
-            else
-            {
-                <div class="briefing-search">
-                    <input type="search" placeholder="Search areas, people, monsters, the book…" aria-label="Search"
-                           @bind="searchQuery" @bind:event="oninput" @bind:after="RunSearch" />
-
-                    @if (string.IsNullOrWhiteSpace(searchQuery))
-                    {
-                        <p class="muted">Type to find any area, person, monster, spell or book entry and jump to it.</p>
-                    }
-                    else if (searchResults.Count == 0)
-                    {
-                        <p class="muted">No matches for &ldquo;@searchQuery&rdquo;.</p>
-                    }
-                    else
-                    {
-                        <ul class="search-results">
-                            @foreach (SearchMatch match in searchResults)
-                            {
-                                <li>
-                                    <button type="button" class="search-result" title="Open this node"
-                                            @onclick="() => ActivateSearch(match)">
-                                        <span class="search-label">@match.Label</span>
-                                        @if (!string.IsNullOrEmpty(match.Category))
-                                        {
-                                            @* A book index hit is badged as the book's: machine-made, and lower-trust than the campaign's own. *@
-                                            <span class="@(match.Category == "book" ? "search-cat search-book" : "search-cat")">@match.Category</span>
-                                        }
-                                        @if (!string.IsNullOrEmpty(match.Citation))
-                                        {
-                                            <span class="search-cite">@match.Citation</span>
-                                        }
-                                        <span class="search-id">@match.Id</span>
-                                    </button>
-                                </li>
-                            }
-                        </ul>
-                    }
-                </div>
             }
         </div>
     }
@@ -297,11 +209,11 @@
     public Func<int, bool> IsFloorAuthored { get; set; }
 
     /// <summary>
-    /// Searches the content for what matches a query, for the Search tab. When null, the Search tab
-    /// shows an "unavailable" notice instead of a search box.
+    /// True to offer a pin on each rules section and each of the floor's facts. The DM screen does; a static
+    /// render of the panel, which has no table to pin to, does not.
     /// </summary>
     [Parameter]
-    public Func<string, IReadOnlyList<SearchMatch>> SearchNodes { get; set; }
+    public bool Pinnable { get; set; }
 
     /// <summary>
     /// Raised with an area's node id when the DM clicks a quest beat's destination, to read that room.
@@ -311,8 +223,8 @@
     public EventCallback<string> OnNavigate { get; set; }
 
     /// <summary>
-    /// Raised with an id when the DM clicks a cross-reference or a search result, to open its card (an
-    /// area navigates instead). When no delegate is attached, prose links are inert.
+    /// Raised with an id when the DM clicks a cross-reference, to open its card (an area navigates
+    /// instead). When no delegate is attached, prose links are inert.
     /// </summary>
     [Parameter]
     public EventCallback<string> OnOpenReference { get; set; }
@@ -352,7 +264,6 @@
         Story,
         Session,
         Rules,
-        Search,
     }
 
     private static readonly CampaignSubTab[] AllTabs =
@@ -364,16 +275,12 @@
         CampaignSubTab.Story,
         CampaignSubTab.Session,
         CampaignSubTab.Rules,
-        CampaignSubTab.Search,
     };
 
     // Every tab is spelled the way its enum member is, except the acronym: nobody writes "Npcs".
     private static string TabLabel(CampaignSubTab tab) => tab == CampaignSubTab.Npcs ? "NPCs" : tab.ToString();
 
     private CampaignSubTab activeTab = CampaignSubTab.None;
-
-    private string searchQuery = string.Empty;
-    private IReadOnlyList<SearchMatch> searchResults = Array.Empty<SearchMatch>();
 
     private Func<string, IReadOnlyList<CrossRef>> NoFloorRefs => ResolveEntityRefs ?? ResolveRefs;
 
@@ -385,13 +292,6 @@
         }
     }
 
-    private void RunSearch()
-    {
-        searchResults = string.IsNullOrWhiteSpace(searchQuery) || SearchNodes is null
-            ? Array.Empty<SearchMatch>()
-            : SearchNodes(searchQuery);
-    }
-
     private bool HasLevel =>
         !string.IsNullOrWhiteSpace(Level.Title)
         || !string.IsNullOrWhiteSpace(Level.WhatDwellsHere)
@@ -399,8 +299,4 @@
         || Level.WanderingMonsters.Count > 0;
 
     private bool HasCampaign => Campaign.Sections.Count > 0 || Campaign.Levels.Count > 0;
-
-    // A search result opens a reference card. Routing by kind is the workspace's job: OpenReference
-    // navigates to the room instead whenever the id is an area's.
-    private Task ActivateSearch(SearchMatch match) => OnOpenReference.InvokeAsync(match.Id);
 }

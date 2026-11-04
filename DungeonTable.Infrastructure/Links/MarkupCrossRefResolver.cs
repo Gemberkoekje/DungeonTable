@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using DungeonTable.Application.Abstractions;
 using DungeonTable.Core.Dossier;
 using Qowaiv.Validation.Abstractions;
@@ -49,6 +50,34 @@ public sealed class MarkupCrossRefResolver : ICrossRefResolver
         }
 
         return cache.GetOrAdd((levelNodeId ?? string.Empty, text), static (key, self) => self.Scan(key.Text, key.Level), this);
+    }
+
+    /// <summary>
+    /// The prose as the DM reads it: each link replaced by the words it shows on the page (its shown text,
+    /// or the name of what it resolves to, or its own words when it is broken). Not cached, since it is
+    /// asked once per text, by the text index.
+    /// </summary>
+    /// <param name="text">The prose.</param>
+    /// <param name="levelNodeId">The floor the prose is read on, or an empty string for none.</param>
+    /// <returns>The prose without markup.</returns>
+    public string Words(string text, string levelNodeId)
+    {
+        if (!LinkMarkup.Contains(text))
+        {
+            return text ?? string.Empty;
+        }
+
+        var words = new StringBuilder(text.Length);
+        int position = 0;
+        foreach (CrossRef link in Scan(text, levelNodeId ?? string.Empty))
+        {
+            words.Append(text, position, link.Start - position);
+            words.Append(link.Text);
+            position = link.Start + link.Length;
+        }
+
+        words.Append(text, position, text.Length - position);
+        return words.ToString();
     }
 
     private CrossRef[] Scan(string text, string level) =>

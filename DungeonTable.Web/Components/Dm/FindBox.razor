@@ -1,0 +1,177 @@
+@inherits DmTabBase
+@inject IJSRuntime JS
+@*
+    Find anything: one box over the map (Ctrl+K or /) that searches names and text. A row is a thing
+    found by its name (a room, a person, a monster, a spell, a book entry) or a passage found by its
+    words, with the words around the match marked, so most lookups end in the results. Enter or a click
+    opens the row: a name as a link would (a room on the Room tab, anything else as a card), a passage as a
+    sheet over the dock. Esc puts the box away; nothing moves the map or loses the DM's place.
+
+    The arrow keys and Enter are dt-find.js's: whether the browser's own arrow-key caret move is to be
+    swallowed is decided when the key arrives, which Blazor cannot do. The script marks the row the arrows
+    are on and Enter clicks it, so a click and Enter run the same handler.
+*@
+
+@if (open)
+{
+    <div class="find-box" role="dialog" aria-label="Find anything" @ref="box">
+        <div class="find-input-row">
+            <span class="find-glyph" aria-hidden="true">&#x2315;</span>
+            <input type="search" class="find-input" aria-label="Find anything" autocomplete="off" spellcheck="false"
+                   placeholder="Find anything: a room, a person, a rule, a word&hellip;"
+                   @ref="input" @bind="query" @bind:event="oninput" @bind:after="Run" />
+            <button type="button" class="reference-close" title="Close (Esc)" aria-label="Close" @onclick="Close">&times;</button>
+        </div>
+
+        @if (string.IsNullOrWhiteSpace(query))
+        {
+            <p class="find-empty">Names and words: a room, a person, a monster, a rules section, a line of read-aloud. &uarr;&darr; to choose, Enter to open, Esc to close.</p>
+        }
+        else if (results.Count == 0)
+        {
+            <p class="find-empty">Nothing has &ldquo;@query&rdquo;.</p>
+        }
+        else
+        {
+            <ol class="find-results" role="listbox" aria-label="Results">
+                @foreach (FindResult row in results)
+                {
+                    <li role="option">
+                        <button type="button" class="find-hit find-@row.Kind.ToString().ToLowerInvariant()" @onclick="() => OpenRow(row)">
+                            <span class="find-head">
+                                <span class="find-cat find-cat-@row.Category">@row.Category</span>
+                                <span class="find-label">@Marked(row.Label)</span>
+                                @if (row.Secret)
+                                {
+                                    <span class="secret-badge" title="DM only — don't read this aloud">DM</span>
+                                }
+                                @if (row.Where.Length > 0)
+                                {
+                                    <span class="find-where">@row.Where</span>
+                                }
+                            </span>
+                            @if (row.Snippet.Length > 0)
+                            {
+                                <span class="find-snippet">@Marked(row.Snippet)</span>
+                            }
+                        </button>
+                    </li>
+                }
+            </ol>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Raised with the row the DM opened, once the box has put itself away.</summary>
+    [Parameter]
+    public EventCallback<FindResult> OnOpen { get; set; }
+
+    private bool open;
+    private bool focusPending;
+    private string query = string.Empty;
+    private IReadOnlyList<FindResult> results = Array.Empty<FindResult>();
+    private ElementReference box;
+    private ElementReference input;
+    private DotNetObjectReference<FindBox> selfRef;
+
+    /// <summary>True while the box is up.</summary>
+    public bool IsOpen => open;
+
+    /// <summary>
+    /// Puts the box up, with the last query still in it and selected, so typing replaces it and the arrows
+    /// go back over the last results.
+    /// </summary>
+    public void Show()
+    {
+        open = true;
+        focusPending = true;
+        results = Workspace.Find(query);
+        StateHasChanged();
+    }
+
+    /// <summary>Puts the box away; the query stays for the next time.</summary>
+    public void Close()
+    {
+        if (!open)
+        {
+            return;
+        }
+
+        open = false;
+        StateHasChanged();
+    }
+
+    /// <summary>Called from dt-find.js when the DM presses outside the box.</summary>
+    /// <returns>A task that completes once the box is away.</returns>
+    [JSInvokable]
+    public Task FindDismissed() => InvokeAsync(Close);
+
+    /// <inheritdoc />
+    protected override void OnSharedStateChanged()
+    {
+        // The content may have changed under the results; the same query, read again.
+        if (open)
+        {
+            results = Workspace.Find(query);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusPending)
+        {
+            return;
+        }
+
+        focusPending = false;
+        try
+        {
+            selfRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dtFind.attach", box, input, selfRef);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit dropped; there is no box to focus.
+        }
+        catch (OperationCanceledException)
+        {
+            // The render was cancelled during teardown.
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            selfRef?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void Run() => results = Workspace.Find(query);
+
+    private Task OpenRow(FindResult row)
+    {
+        open = false;
+        return OnOpen.InvokeAsync(row);
+    }
+
+    private RenderFragment Marked(string text) => __builder =>
+    {
+        foreach (HighlightPart part in TextHighlight.Split(text, query))
+        {
+            if (part.Marked)
+            {
+                <mark>@part.Text</mark>
+            }
+            else
+            {
+                @part.Text
+            }
+        }
+    };
+}

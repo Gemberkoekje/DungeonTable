@@ -32,6 +32,24 @@ public interface IContentProjection
     IReadOnlyList<SearchMatch> SearchNodes(string query, int limit);
 
     /// <summary>
+    /// Searches the campaign's text, for Find anything: every passage of prose (the rules, the floors'
+    /// facts, the rooms, the people, the quests, the session prep, the decks, the background, the party,
+    /// the story) that holds every word of the query, ranked best-first, each with the stretch of it
+    /// around the match.
+    /// </summary>
+    /// <param name="query">The words looked for; a blank query returns no matches.</param>
+    /// <param name="limit">The maximum number of matches to return.</param>
+    /// <returns>The ranked matches, best first (possibly empty).</returns>
+    IReadOnlyList<TextMatch> FindText(string query, int limit);
+
+    /// <summary>
+    /// The passage with a key, as the content holds it now: what a Find result or a pin opens.
+    /// </summary>
+    /// <param name="key">The passage's key (see <see cref="PassageKeys"/>).</param>
+    /// <returns>The passage, or an invalid result when no passage has that key.</returns>
+    Result<Passage> GetPassage(string key);
+
+    /// <summary>
     /// Builds a link-out <see cref="ReferenceCard"/> for what a cross-reference points at: an entity
     /// a level declares, from its description, stat block and the areas it appears in; a stat block or
     /// spell, from its name and source; or a book index entry, from what the book says. The DM panel

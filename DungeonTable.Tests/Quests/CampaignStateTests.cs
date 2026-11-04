@@ -37,6 +37,12 @@ public sealed class CampaignStateTests
 
     private static readonly string[] RepeatedDeckRestored = { "the-millers-debt", "the-sextons-key" };
 
+    // Two pins: a rules section and a card.
+    private const string DarknessPin = "text:rules/darkness-below";
+    private const string GraskPin = "card:grask";
+
+    private static readonly string[] PinnedInOrder = { DarknessPin, GraskPin };
+
     // What a hand-edited document's second entry for the same deck, and a nameless deck, hold.
     private static readonly string[] SecondEntryForRumours = { "the-sextons-key", "the-millers-debt" };
     private static readonly string[] OrphanCard = { "orphan" };
@@ -544,6 +550,48 @@ public sealed class CampaignStateTests
 
         Assert.Empty(campaign.Capture().Areas);
         Assert.Equal(0, changes);
+    }
+
+    [Fact]
+    public void A_pin_goes_on_at_the_end_and_comes_off_when_pinned_again()
+    {
+        CampaignState campaign = State();
+        int changes = 0;
+        campaign.Changed += () => changes++;
+
+        campaign.TogglePin(DarknessPin);
+        campaign.TogglePin(GraskPin);
+        Assert.Equal(PinnedInOrder, campaign.Pins());
+        Assert.True(campaign.IsPinned(GraskPin));
+
+        campaign.TogglePin(DarknessPin);
+        Assert.Equal(GraskPin, Assert.Single(campaign.Pins()));
+        Assert.False(campaign.IsPinned(DarknessPin));
+        Assert.Equal(3, changes);
+
+        // A blank pin names nothing and changes nothing.
+        campaign.TogglePin("  ");
+        Assert.Single(campaign.Pins());
+        Assert.Equal(3, changes);
+    }
+
+    [Fact]
+    public void The_pins_are_captured_and_put_back_in_order_each_once()
+    {
+        CampaignState campaign = State();
+        campaign.TogglePin(DarknessPin);
+        campaign.TogglePin(GraskPin);
+
+        CampaignSnapshot saved = campaign.Capture();
+        Assert.Equal(PinnedInOrder, saved.Pins);
+
+        CampaignState restored = State();
+        restored.Restore(new CampaignSnapshot { Pins = new[] { DarknessPin, " ", DarknessPin, GraskPin } });
+        Assert.Equal(PinnedInOrder, restored.Pins());
+
+        // A document from before the pins arrives with none, not with whatever was held.
+        restored.Restore(new CampaignSnapshot { Pins = null });
+        Assert.Empty(restored.Pins());
     }
 
     private static CampaignState State() => new CampaignState(new FakePartyRoster());

@@ -1,0 +1,46 @@
+@inherits DmTabBase
+@*
+    A passage as a sheet over the dock: a rules section, a floor's fact, a room's detail, a person's hooks,
+    whatever Find anything found by its words. It is a lookup, so it stands outside the reference history:
+    Esc or the close button puts it away and the dock is as it was. A link in it opens as any link does,
+    which puts the sheet away. When the passage belongs to a room or a person, one button reads the room or
+    opens the card in full.
+
+    The shell shows it over the Room and Campaign tabs, as the card sheet.
+*@
+
+<div class="card-sheet passage-sheet" role="dialog" aria-label="@Workspace.OpenPassage.Title">
+    <header class="passage-sheet-head">
+        <PinButton Pin="@PinKeys.Passage(Workspace.OpenPassage.Key)" What="@Workspace.OpenPassage.Title" ShowLabel="true" />
+        @if (Workspace.OpenPassage.OwnerId.Length > 0)
+        {
+            <button type="button" class="room-action passage-owner" title="@OwnerTitle" @onclick="OpenOwner">@OwnerLabel</button>
+        }
+        <button type="button" class="reference-close" title="Close (Esc)" aria-label="Close" @onclick="Workspace.ClosePassage">&times;</button>
+    </header>
+
+    <PassageView Passage="Workspace.OpenPassage" ResolveRefsOn="Workspace.ResolveRefsOn" OnOpenReference="OpenReference" />
+</div>
+
+@code {
+    /// <summary>
+    /// Raised when the sheet led to a room (a room's link, or the room the passage belongs to), so the dock
+    /// can show the Room tab.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnShowRoom { get; set; }
+
+    private bool OwnerIsRoom => Workspace.OpenPassage.Kind == PassageKind.Area;
+
+    private string OwnerLabel => OwnerIsRoom ? "Read the room" : "Open the card";
+
+    private string OwnerTitle => OwnerIsRoom ? "Show this passage's room on the Room tab" : "Open the whole card this passage is from";
+
+    private Task OpenOwner() => OpenReference(Workspace.OpenPassage.OwnerId);
+
+    private Task OpenReference(string node)
+    {
+        Workspace.OpenReference(node);
+        return Workspace.CardNode.Length == 0 ? OnShowRoom.InvokeAsync() : Task.CompletedTask;
+    }
+}
