@@ -308,6 +308,64 @@ internal static class LinkAudit
         return bad;
     }
 
+    /// <summary>
+    /// Every kind of creature (a stat block listed as itself) that one area and its lettered rooms list
+    /// more than once: bugbears in area 2 and again in 2b. A published adventure lists the same creatures
+    /// under a numbered area and again in the room they stand in, or again where they gather or retreat
+    /// to, and the table counts each listing of a kind on its own, so they would be counted twice. One
+    /// band (an entity with a count of how many there are in all), or one somebody, listed in each of
+    /// those rooms is counted once; a band whose count is all of them is right even when the listings
+    /// are different creatures, so the rule asks for it whenever a kind is repeated.
+    /// </summary>
+    /// <param name="dossiers">The loaded content.</param>
+    /// <param name="targets">What a reference can name in it.</param>
+    /// <returns>The faults (empty when there are none).</returns>
+    internal static IReadOnlyList<string> RepeatedKinds(IDossierStore dossiers, LinkTargets targets)
+    {
+        var entityIds = new HashSet<string>(
+            dossiers.AllLevels().SelectMany(level => level.AllEntities()).Select(entity => entity.Id),
+            StringComparer.Ordinal);
+
+        // (floor, numbered area, kind) -> the keys of the rooms that list it, in the order they load.
+        var listed = new Dictionary<(string Floor, string Family, string Kind), List<string>>();
+        foreach ((AreaDossier area, string floor) in AreasWithFloors(dossiers))
+        {
+            string key = LinkTargets.PrintedKeyOf(area.Title);
+            if (key.Length == 0 && area.AreaNumber > 0)
+            {
+                key = area.AreaNumber.ToString(CultureInfo.InvariantCulture);
+            }
+
+            string family = new string(key.TakeWhile(char.IsAsciiDigit).ToArray());
+            if (family.Length == 0)
+            {
+                continue;
+            }
+
+            IEnumerable<string> kinds = area.Creatures
+                .Where(creature => creature is not null)
+                .Select(creature => targets.Resolve(creature.Ref, floor))
+                .Where(resolved => resolved.IsValid && resolved.Value.Kind == CrossRefKind.Monster && !entityIds.Contains(resolved.Value.TargetId))
+                .Select(resolved => resolved.Value.TargetId)
+                .Distinct(StringComparer.Ordinal);
+            foreach (string kind in kinds)
+            {
+                if (!listed.TryGetValue((floor, family, kind), out List<string> rooms))
+                {
+                    rooms = new List<string>();
+                    listed[(floor, family, kind)] = rooms;
+                }
+
+                rooms.Add(key);
+            }
+        }
+
+        return listed
+            .Where(entry => entry.Value.Count > 1)
+            .Select(entry => $"level {entry.Key.Floor}, area {entry.Key.Family} and its lettered rooms: '{entry.Key.Kind}' is listed as a kind of creature in areas {string.Join(", ", entry.Value)}, so the table counts each listing on its own. Give them an entity (a band with a count of how many there are in all, or one somebody) and list that in each of those areas.")
+            .ToList();
+    }
+
     // How many make up an entity that is a band: its count when that is a whole number from 2 up, one
     // when it is 1, and zero when it says nothing or does not read.
     private static int BandSize(Entity entity)

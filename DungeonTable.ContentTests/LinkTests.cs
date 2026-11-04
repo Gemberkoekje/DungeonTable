@@ -46,6 +46,12 @@ public sealed class LinkTests
     }
 
     [Fact]
+    public void No_kind_of_creature_is_listed_twice_in_one_area_and_its_rooms()
+    {
+        Report.None(LinkAudit.RepeatedKinds(ContentRoot.Dossiers, ContentRoot.Targets), "Kinds of creature listed twice in one area and its rooms");
+    }
+
+    [Fact]
     public void Every_exit_leads_to_an_area_or_waits_for_its_floor()
     {
         Report.None(LinkAudit.BrokenExits(ContentRoot.Dossiers, ContentRoot.Targets), "Broken exits");

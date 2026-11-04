@@ -399,7 +399,11 @@ rooms, and the map counted the gang two or three times over.
   is alive again. Who fled from where is kept.
 - **The content checks keep a band's numbers honest**: an entity's count reads as a whole number, only
   a creature has one, and no room lists more of one somebody or a band than there are
-  (`LinkAudit.OverfullListings`). At the table the rule is fail-soft: a listing larger than the band
+  (`LinkAudit.OverfullListings`). And no numbered area and its lettered rooms list the same kind of
+  creature twice (`LinkAudit.RepeatedKinds`): that is the shape the double counting took on every
+  floor of the first campaign run with this, a room's creatures listed under its numbered area too,
+  and nothing at the table could tell it from two groups. A band whose count is all of them is right
+  either way, so the rule needs no judgement. At the table the rule is fail-soft: a listing larger than the band
   widens it rather than hiding creatures the room says are there.
 
 ## Answers that come to you

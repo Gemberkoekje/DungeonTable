@@ -475,7 +475,11 @@ What the parts do:
   or a person: dealt with in one room, they are dealt with in all of them. For a gang listed in parts
   (two at the gate, four in the barracks, all of them where they gather), give the level an entity with
   a `count`, `{ "id": "gang-bandit", "kind": "creature", "name": "Gang bandit", "statBlock": "bandit",
-  "count": 7 }`, and list it instead of the stat block.
+  "count": 7 }`, and list it instead of the stat block. The content checks insist on it within one
+  numbered area and its lettered rooms: list goblins under area 3 and again in 3a, and they fail
+  until the goblins are a band.
+- **A named person or monster is an entity**, or a person in `npcs.json`, never a stat block with their
+  name in the note: only then is the somebody in the vault the same somebody in the hall.
 - **`exits`** are where the party can go: they become jumps to those rooms.
 
 Every field is described in [content-format.md §5.2](content-format.md#52-level-njson-a-floor).

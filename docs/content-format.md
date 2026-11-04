@@ -285,6 +285,11 @@ hall, beside two at the gate and four in the barracks) never shows more than are
 for a person (`npcs.json`) and a player character. A stat block listed as itself (`"bugbear"`) is a
 kind of creature: the bugbears of one room are not the bugbears of the next, and each room counts its
 own. To make two rooms' bandits the same bandits, give them an entity with a count and list that.
+The content checks ask for exactly that when one numbered area and its lettered rooms (3, 3a, 3b)
+list the same kind of creature more than once: a published adventure lists a room's creatures under
+its numbered area too, and again where they gather or flee to. A band whose count is all of them is
+right even where the rooms hold different creatures, so no judgement is needed: repeat a kind, make
+it a band.
 
 **An area** (`areas`), shown on the Room tab:
 
@@ -616,6 +621,11 @@ What it checks:
 - **Every reference resolves.** Every link, creature, exit, relation end, contact, quest giver,
   prerequisite, quest destination, map region and start area leads somewhere, or waits for a floor
   that is not written yet; no link target means two things; links sit only in prose fields.
+- **Everyone is counted once.** An entity's `count` is a whole number, on a creature only; no area lists
+  more of one somebody or a band than there are; and no kind of creature (a stat block listed as
+  itself) is listed in more than one room of one numbered area and its lettered rooms, such as goblins
+  in area 3 and again in 3a. Those are the same creatures listed twice, or a group the table should
+  count as one: give them a band.
 - **Every card has what it shows.** NPCs, characters, sessions and scenes, story chapters, quests and
   beats, decks and cards, level rows and blocks have the fields their cards display; beats and scenes
   are numbered in order.
