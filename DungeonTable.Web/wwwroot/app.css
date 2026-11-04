@@ -3166,9 +3166,10 @@ code {
 }
 
 /* The prose quote takes whatever room is left and truncates rather than wrapping the row open —
-   it is a reminder of why the creature is listed, not something to read at length. */
+   it is a reminder of why the creature is listed, not something to read at length, and the first thing
+   to give way when the counting controls need the room. */
 .encounter-context {
-    flex: 1 1 5rem;
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

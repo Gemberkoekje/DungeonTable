@@ -287,12 +287,20 @@
                 return $"all {standing.BandSize} dealt with";
             }
 
-            return standing.DealtIn.Count > 0 ? "dealt with in " + AreaLabel(standing.DealtIn[0]) : "dealt with elsewhere";
+            return standing.DealtIn.Count > 0 ? "dealt with in " + ShortTitle(AreaLabel(standing.DealtIn[0])) : "dealt with elsewhere";
         }
 
         return !standing.Rolled && standing.Left > 0 && standing.Left < standing.Listed
             ? $"{standing.Left} of {standing.Listed} left"
             : string.Empty;
+    }
+
+    // A room's name without its key in brackets, for the chip: "Bell-Founder's Workshop (Level 1, Area 4)"
+    // reads "Bell-Founder's Workshop". The chip's tooltip keeps the whole title.
+    private static string ShortTitle(string title)
+    {
+        int key = title.LastIndexOf(" (", StringComparison.Ordinal);
+        return key > 0 && title.EndsWith(')') ? title[..key] : title;
     }
 
     private string StatusTitle(EncounterMonster row, CreatureStanding standing)

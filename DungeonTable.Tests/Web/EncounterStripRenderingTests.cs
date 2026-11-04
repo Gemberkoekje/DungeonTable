@@ -43,8 +43,8 @@ public sealed class EncounterStripRenderingTests
 
         string html = await Render(rows, campaign);
 
-        // Grask: gone, and the chip says where, by the area's name.
-        Assert.Contains("dealt with in The Workshop", html, StringComparison.Ordinal);
+        // Grask: gone, and the chip says where, by the area's name without its key.
+        Assert.Contains("dealt with in The Workshop<", html, StringComparison.Ordinal);
 
         // The crew: one dealt with here, one in the den, so two of the three listed here are left, and
         // three of the band's five.
@@ -99,7 +99,7 @@ public sealed class EncounterStripRenderingTests
         await using ServiceProvider provider = services.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(provider, NullLoggerFactory.Instance);
 
-        Func<string, string> label = id => id == "area-workshop" ? "The Workshop" : id;
+        Func<string, string> label = id => id == "area-workshop" ? "The Workshop (Level 1, Area 4)" : id;
         var parameters = new Dictionary<string, object>
         {
             [nameof(EncounterStrip.Monsters)] = rows,
