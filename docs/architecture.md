@@ -137,7 +137,8 @@ worse than none, because nothing flags it.
 - `RelationIndex` holds every relation (who serves whom, who is at odds with whom) from both ends, so
   a card can show the lines that involve it.
 - `AuthoredProjection` builds what the DM screen shows from all of this: a room's briefing from its
-  own creatures and exits, a card for anything a link can name, and search.
+  own creatures and exits, a card for anything a link can name, and search: by name, and by words
+  through its `PassageIndex` (see [Answers that come to you](#answers-that-come-to-you)).
 
 An area's creature list is the encounter. The Battle tab's encounter strip is built from it, with the
 authored counts, and never from names in the prose: "an empty list means nobody is there".
@@ -150,8 +151,8 @@ Blazor Server keeps one circuit per browser tab. The state of the table is share
 |---|---|---|
 | `SessionState` | singleton | what the projector shows: the map, revealed regions and features, fog cells, open doors, concealed objects, the framing, the picture over the map; the party token and the undo of what it revealed; and the same per map the table has left |
 | `BattleState` | singleton | the one running fight |
-| `CampaignState` | singleton | quest progress, each deck's drawn cards, per-area checklists and notes |
-| `DmWorkspace` | scoped | one DM tab's own view: the loaded map, the room shown, the reference history, whether the dock is pinned |
+| `CampaignState` | singleton | quest progress, each deck's drawn cards, per-area checklists and notes, the pins along the foot of the dock |
+| `DmWorkspace` | scoped | one DM tab's own view: the loaded map, the room shown, the reference history, the passage open over the dock, whether the dock is pinned |
 | `PartyMoves` | scoped | works out what the party sees as one DM tab moves the token, from that tab's map |
 
 The app assumes **one live table**. The shared state is a singleton so that a refreshed DM tab, a
@@ -188,6 +189,8 @@ whichever dock tab is up.
 - **Cards are a sheet over the dock** (`CardSheet`), with the history's back, forward and breadcrumb,
   so Esc puts the card away and the room is still there, scrolled where it was. The sheet covers the
   Room and Campaign tabs only: the fight has its own detail pane.
+- **Answers come to the DM**: Find anything over the map, pins along the foot of the dock, and the
+  floor's facts behind the Room tab's ⓘ (see [Answers that come to you](#answers-that-come-to-you)).
 - **Every dock tab stays mounted**, stacked and hidden with CSS, so a tab keeps its scroll position,
   half-typed boxes and the fight's open pane. The map pane is mounted once and never hidden, because
   the canvas keeps its pan and zoom in JS.
@@ -363,6 +366,64 @@ next to the party's. Now the map says it, and the Room tab lists the rooms aroun
 - **Nearby** (`NearbyRooms`): one line per exit, with the badges and the creatures still up of the room
   it leads to, and that room's card on hover, shown by CSS since it is in the page already. It took the
   place of the Connections list at the foot of the Room tab, which listed the same exits with less.
+
+## Answers that come to you
+
+General lookups were three clicks deep and found by name only: how big the rooms are here was Campaign,
+Rules, open a section, and a search for "ceiling" found nothing, because search matched names. Now one
+box finds names and words, what the DM looks up every session is pinned, and the floor's standing facts
+are beside the room.
+
+- **Find anything** (`FindBox`, Ctrl+K or /) is one box over the map, never over the dock, so the DM
+  keeps the room in view while looking something up. It lists things found by name first (the same
+  search the Room Editor's node picker uses), then passages found by their words, each with the words
+  around the match and the query marked (`TextHighlight`), so most lookups end in the list. A name opens
+  as a link would; a passage opens as a sheet over the dock (`PassageSheet`). It replaced the Campaign
+  tab's Search, which matched names only.
+- **A passage is a block of prose as the content already holds it** (`Passage`): a rules section, one
+  of a floor's facts, a room's read-aloud, at-a-glance bullet or detail, a person's entry, a quest's hook
+  or beat, a scene, a deck's card, the background, the party, the story. Nothing new is authored.
+  `PassageIndex` reads them once per content snapshot, inside `AuthoredProjection`, so a reload rebuilds
+  it with everything else. A heading with nothing under it (a room with no read-aloud) is not a passage.
+- **A passage matches when it holds every word of the query**, anywhere in its heading or body, in any
+  order. Hits rank by where the words are: the whole query in the heading, every word in the heading,
+  the whole query in the body, then every word anywhere; within a rank the rules and the floor's facts
+  come first (they are what is looked up mid-session), then the rooms, then the rest, then the content's
+  own order. The words matched are the words the DM reads: each link as the name it shows, through the
+  same resolver the page uses (`MarkupCrossRefResolver.Words`), so a passage is found by "Grask" and not
+  by `[[grask]]`'s markup. Plain substring tests over a few thousand passages take well under a
+  millisecond a keystroke on a large campaign, so there is no index cleverer than a list of lower-cased
+  strings.
+- **The result shows the answer.** A long passage shows about 200 characters around the first match,
+  cut at words, with an ellipsis where it was cut; a short one shows whole, on one line.
+- **A passage's key is where it sits and its heading** (`PassageKeys`): `rules/darkness-below`,
+  `level/<floor>/factions/grasks-crew` (a block's id wins over its heading), `area/<area>/detail/...`.
+  Never its place in the list, so a section inserted above another does not move a pin onto the wrong
+  one; two blocks with one heading get `-2`, `-3`. The index and the DM screen's pin buttons build keys
+  with the same functions, so they cannot drift apart.
+- **The passage sheet is a lookup, not a stop in the history.** It stands outside `NavHistory`: Esc puts
+  it away and the dock is as it was, a card underneath included. Following a link in it, going to a room
+  or the dock following the party puts it away too (`DmWorkspace.Render`). A content reload reads it
+  again by its key, and closes it when its block is gone.
+- **Pins** keep what the DM looks up every session one click away (Darkness Below, Resting in the
+  Undercroft, a player character's armour class). A rules section, a floor's fact, a card or any passage gets a 📌
+  (`PinButton`); the pins sit as chips along the foot of the dock on every tab, the fight's included
+  (`PinStrip`), and a click shows the text in a popover over the dock. A pin is `text:` and a passage's
+  key, or `card:` and the id a link opens the card by (`PinKeys`). A pinned card is worked out exactly as
+  the card sheet works it out (`DmWorkspace.CardFor`, which `Render` uses too), so it is the whole card.
+- **The pins are the table's**, on `CampaignState` beside the notes, saved as `CampaignSnapshot.Pins`,
+  an additive field with an empty default, so `TableSnapshot.CurrentVersion` did not change. A second DM
+  window and a restart show the same pins. A pin whose passage or card the content no longer holds stays,
+  dashed, until the DM takes it off: a heading renamed in an edit should not make a pin vanish without a
+  word.
+- **The floor's ⓘ** on the Room tab's header opens the floor's standing facts under it (`LevelFacts`:
+  what dwells here, the factions, the wandering monsters), the same component the Campaign tab's Level
+  section shows, so "who else is on this floor" needs no other tab.
+- **Ctrl+K needs a round trip before the box exists**, and a DM who types straight away lost the first
+  letters to the page. `dt-find.js` therefore holds what is typed from the moment the shortcut is pressed
+  until the box is up, keeps it from the other shortcuts (a "3" typed early is a letter, not a tool), and
+  puts it into the box. The arrow keys and Enter in the box are the script's too, since swallowing the
+  arrows' caret move is decided when the key arrives.
 
 ## What a reveal sends
 

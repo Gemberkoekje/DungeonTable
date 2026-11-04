@@ -121,6 +121,12 @@ Each of these compiled, passed every test, and still broke something.
 - **The player page carries the canvas's inline CSS**, which names DM-only classes (`dt-party`,
   `dt-badges`). A test that the projector shows none of them looks for the elements (`class="dt-badge`),
   not the words.
+- **A shortcut that opens a box the circuit draws loses what is typed straight after it**: the box exists
+  a round trip later, and the first letters go to the page (or to another shortcut). Hold the keys in JS
+  until it is up, as `dtFind.expect` does for Find anything.
+- **A render test that expects `\n` fails on a Windows checkout with `core.autocrlf=true`** (one in
+  `EnemyGlanceTests` does): the `.razor` files are CRLF there, and `HtmlRenderer` keeps the markup's own
+  line breaks. CI checks out LF; a local run there reports that one test only.
 - **NTFS lists a folder case-insensitively.** A test of ordinal file ordering passes on Windows by
   accident unless its names sort differently by case (`monsters-alpha`, `monsters-Zeta`).
 - **Sonar rules that fail the build and surprise:** a comment line ending in `;` reads as commented-out

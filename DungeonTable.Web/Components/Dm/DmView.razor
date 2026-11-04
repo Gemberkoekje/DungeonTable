@@ -15,8 +15,9 @@
 
     The shell owns which dock tab is up, the dock's width modes and the bar, and nothing else: the map
     and its tools live in MapPane, the room in RoomTab, the campaign in CampaignTab, cards in
-    CardSheet, the fight in BattleTab, and every piece of state they share lives in the scoped
-    DmWorkspace rather than in parameters threaded through here.
+    CardSheet, passages in PassageSheet, the fight in BattleTab, Find anything in FindBox and the pins
+    in PinStrip, and every piece of state they share lives in the scoped DmWorkspace (or, for the pins,
+    the table's CampaignState) rather than in parameters threaded through here.
 
     All four dock tabs stay mounted; the inactive ones are hidden with CSS. That is deliberate: a tab
     keeps its scroll position, its half-typed boxes and the fight's open pane when the DM looks
@@ -76,6 +77,12 @@
                     @onclick="ToggleArt">@(Session.ShownArtVisible ? "Hide art" : "Show art")</button>
         }
 
+        @* Find anything belongs to the bar, as the frame does: a lookup is wanted whichever dock tab is up. *@
+        <button type="button" class="find-open-btn" title="Find anything: rooms, people, rules and words (Ctrl+K or /)"
+                @onclick="OpenFind">
+            <span aria-hidden="true">&#x2315;</span> Find anything&hellip; <kbd>Ctrl+K</kbd>
+        </button>
+
         <span class="bar-spacer"></span>
 
         <select class="map-picker" aria-label="Map" title="The map on the table; the projector follows"
@@ -100,6 +107,7 @@
     <div class="dm-body">
         <section class="dm-map" aria-label="Map">
             <MapPane @ref="mapPane" OnLooked="ShowRoom" />
+            <FindBox @ref="findBox" OnOpen="OpenFound" />
         </section>
 
         <div class="dm-divider" role="separator" aria-orientation="vertical" aria-label="Dock width" tabindex="0"
@@ -151,7 +159,16 @@
                 {
                     <CardSheet OnShowRoom="ShowRoom" />
                 }
+
+                @* A passage is a lookup over whatever the dock shows, a card included, so Esc puts it away
+                   and the card or the room is still there. *@
+                @if (PassageShown)
+                {
+                    <PassageSheet OnShowRoom="ShowRoom" />
+                }
             </div>
+
+            <PinStrip @ref="pinStrip" OnOpened="RevealDock" />
         </aside>
     </div>
 </div>
@@ -171,6 +188,8 @@
 
     private DockTab activeTab = DockTab.Room;
     private MapPane mapPane;
+    private FindBox findBox;
+    private PinStrip pinStrip;
     private BattleTab battleTab;
     private ArtTab artTab;
     private ElementReference shellRef;
@@ -237,9 +256,48 @@
     private void ToggleDrawer() => drawerOpen = !drawerOpen;
 
     // A card is a sheet over the reading tabs. The fight has a detail pane of its own, and the art tray
-    // is about pictures, so the sheet waits behind those until the DM comes back.
-    private bool SheetShown =>
-        Workspace.CardNode.Length > 0 && (activeTab == DockTab.Room || activeTab == DockTab.Campaign);
+    // is about pictures, so the sheet waits behind those until the DM comes back. A passage is the same.
+    private bool SheetTab => activeTab == DockTab.Room || activeTab == DockTab.Campaign;
+
+    private bool SheetShown => Workspace.CardNode.Length > 0 && SheetTab;
+
+    private bool PassageShown => Workspace.OpenPassage.Key.Length > 0 && SheetTab;
+
+    private void OpenFind() => findBox?.Show();
+
+    // A row of Find anything was opened: a passage as a sheet, anything else as a link would open it.
+    private void OpenFound(FindResult row)
+    {
+        if (row.Kind == FindResultKind.Text)
+        {
+            Workspace.ShowPassage(row.Target);
+        }
+        else
+        {
+            Workspace.OpenReference(row.Target);
+        }
+
+        RevealDock();
+    }
+
+    // Something was put on the dock, from Find anything or a pin: a room, which is read on the Room tab, or
+    // a card or a passage over the dock, which shows over the reading tabs; from the Battle or Art tab the
+    // dock goes to the Room tab to show it.
+    private void RevealDock()
+    {
+        if (Workspace.CardNode.Length == 0 && Workspace.OpenPassage.Key.Length == 0)
+        {
+            ShowRoom();
+            return;
+        }
+
+        if (!SheetTab)
+        {
+            SetTab(DockTab.Room);
+        }
+
+        drawerOpen = true;
+    }
 
     private static int TabIndex(DockTab tab) => Array.FindIndex(Tabs, entry => entry.Tab == tab) + 1;
 
@@ -413,7 +471,8 @@
 
     /// <summary>
     /// Invoked from JS for the DM screen's shortcuts: <c>"tab:N"</c> (Ctrl+1..4) switches the dock,
-    /// <c>"undo"</c> (Ctrl+Z) takes back the party's last move,
+    /// <c>"find"</c> (Ctrl+K or /) puts up Find anything, <c>"undo"</c> (Ctrl+Z) takes back the party's
+    /// last move,
     /// <c>"tool:N"</c> (a bare 1..8) picks a map tool and <c>"tool:N:keep"</c> (Shift+1..8) keeps a
     /// one-click tool up, <c>"bare:esc"</c> puts the map back in Look and closes what is open in the
     /// dock, <c>"bare:drawer"</c> (Tab, on a narrow screen) opens and closes the dock, <c>"bare:c"</c>
@@ -445,6 +504,10 @@
         {
             Escape();
         }
+        else if (string.Equals(key, "find", StringComparison.Ordinal))
+        {
+            OpenFind();
+        }
         else if (string.Equals(key, "undo", StringComparison.Ordinal))
         {
             Session.UndoPartyMove();
@@ -469,12 +532,30 @@
         return InvokeAsync(StateHasChanged);
     }
 
-    // Esc always puts the map back in Look, and closes what is open in the dock: the card sheet over
-    // the room or the campaign, the fight's detail pane, whatever the art tray has open. On the Room tab,
-    // looking at another room than the party's, it goes back to the party's room.
+    // Esc always puts the map back in Look, and closes what is open, the topmost first: Find anything, a
+    // pin's popover, the passage sheet, the card sheet over the room or the campaign, the fight's detail
+    // pane, whatever the art tray has open. On the Room tab, looking at another room than the party's, it
+    // goes back to the party's room.
     private void Escape()
     {
         mapPane?.ResetTool();
+        if (findBox is not null && findBox.IsOpen)
+        {
+            findBox.Close();
+            return;
+        }
+
+        if (pinStrip is not null && pinStrip.CloseOpen())
+        {
+            return;
+        }
+
+        if (PassageShown)
+        {
+            Workspace.ClosePassage();
+            return;
+        }
+
         if (SheetShown)
         {
             Workspace.CloseDrawer();

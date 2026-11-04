@@ -1,0 +1,33 @@
+@* A folded dossier block with a 📌 beside it, for the blocks the DM looks up all evening: a rules section,
+   a floor's faction or wandering monster. The pin sits beside the block rather than in its summary, so a
+   click on it pins and never also folds the block open or shut. Without Pinnable it is the block alone. *@
+
+<div class="pinnable">
+    <DossierBlockView Block="Block" ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
+    @if (Pinnable && !string.IsNullOrEmpty(PassageKey))
+    {
+        <PinButton Pin="@PinKeys.Passage(PassageKey)" What="@Block.Heading" />
+    }
+</div>
+
+@code {
+    /// <summary>The block to show.</summary>
+    [Parameter]
+    public DossierBlock Block { get; set; } = new DossierBlock();
+
+    /// <summary>The block's passage key (see <see cref="PassageKeys"/>), which its pin names.</summary>
+    [Parameter]
+    public string PassageKey { get; set; } = string.Empty;
+
+    /// <summary>True to offer the pin; the DM screen does, a static render of the panel does not.</summary>
+    [Parameter]
+    public bool Pinnable { get; set; }
+
+    /// <summary>Resolves the links in the body. When null, the body is plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with the id of a link the DM clicks in the body.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+}

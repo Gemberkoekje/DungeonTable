@@ -1,0 +1,85 @@
+@* A floor's standing facts: what it is designed for, what dwells there, its factions and its wandering
+   monsters, and, on the Campaign tab, what changes once it is cleared. The Campaign tab's Level section
+   shows them, and so does the Room tab's ⓘ, so "who else is on this floor" is answered beside the room
+   without leaving it. Each fact can be pinned, when Pinnable: the keys are PassageKeys', the same the
+   text index files the facts under, so a pin made here opens the same passage from the strip. *@
+
+<section class="level-dossier">
+    <h2 class="level-title">@Level.Title</h2>
+
+    @if (!string.IsNullOrWhiteSpace(Level.DesignedFor))
+    {
+        <p class="designed-for"><span class="field-label">Designed for</span>@Level.DesignedFor</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Level.WhatDwellsHere))
+    {
+        <div class="pinnable">
+            <blockquote class="what-dwells"><CrossRefProse Text="@Level.WhatDwellsHere" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></blockquote>
+            @if (Pinnable)
+            {
+                <PinButton Pin="@PinKeys.Passage(PassageKeys.LevelOverview(Level.LevelNodeId))" What="what dwells on this floor" />
+            }
+        </div>
+    }
+
+    @if (Level.Factions.Count > 0)
+    {
+        IReadOnlyList<string> keys = PassageKeys.Factions(Level.LevelNodeId, Level.Factions);
+        <div class="detail">
+            <h3>Factions</h3>
+            @for (int i = 0; i < Level.Factions.Count; i++)
+            {
+                <PinnableBlock @key="keys[i]" Block="Level.Factions[i]" PassageKey="@keys[i]" Pinnable="Pinnable"
+                               ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
+            }
+        </div>
+    }
+
+    @if (Level.WanderingMonsters.Count > 0)
+    {
+        IReadOnlyList<string> keys = PassageKeys.WanderingMonsters(Level.LevelNodeId, Level.WanderingMonsters);
+        <div class="detail">
+            <h3>Wandering monsters</h3>
+            @for (int i = 0; i < Level.WanderingMonsters.Count; i++)
+            {
+                <PinnableBlock @key="keys[i]" Block="Level.WanderingMonsters[i]" PassageKey="@keys[i]" Pinnable="Pinnable"
+                               ResolveRefs="ResolveRefs" OnOpenReference="OnOpenReference" />
+            }
+        </div>
+    }
+
+    @if (ShowAftermath && !string.IsNullOrWhiteSpace(Level.Aftermath))
+    {
+        <div class="detail pinnable">
+            <h3>Aftermath</h3>
+            <p class="aftermath"><CrossRefProse Text="@Level.Aftermath" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></p>
+            @if (Pinnable)
+            {
+                <PinButton Pin="@PinKeys.Passage(PassageKeys.LevelAftermath(Level.LevelNodeId))" What="this floor's aftermath" />
+            }
+        </div>
+    }
+</section>
+
+@code {
+    /// <summary>The floor's dossier.</summary>
+    [Parameter]
+    public LevelDossier Level { get; set; } = new LevelDossier();
+
+    /// <summary>True to show the aftermath too, as the Campaign tab does; the Room tab's ⓘ leaves it out.</summary>
+    [Parameter]
+    public bool ShowAftermath { get; set; } = true;
+
+    /// <summary>True to offer a pin on each fact; the DM screen does, a static render does not.</summary>
+    [Parameter]
+    public bool Pinnable { get; set; }
+
+    /// <summary>Resolves the links in the floor's prose, on that floor. When null, the prose is plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+
+    /// <summary>Raised with the id of a link the DM clicks.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+}

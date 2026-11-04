@@ -20,6 +20,8 @@ namespace DungeonTable.Tests.Sessions;
 /// </summary>
 public sealed class SessionDocumentJsonTests
 {
+    private static readonly string[] PinsInOrder = { "text:rules/darkness-below", "card:grask" };
+
     [Fact]
     public void A_whole_table_survives_the_stored_json()
     {
@@ -92,6 +94,23 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal("data_dossiers_level_1_area_1", area.AreaNodeId);
         Assert.Equal("data_statblocks_monsters_bugbear", Assert.Single(area.ClearedCreatureIds));
         Assert.Equal("They spiked the door open.", area.Note);
+
+        Assert.Equal(PinsInOrder, restored.Campaign.Pins);
+    }
+
+    [Fact]
+    public void A_document_written_before_pins_existed_restores_with_none()
+    {
+        // The pins went into CampaignSnapshot additively, without bumping CurrentVersion: a document from
+        // an earlier build restores everything else and arrives with nothing pinned.
+        JsonNode document = JsonNode.Parse(SessionDocuments.Serializer().ToJson(Sample()));
+        Assert.True(document["campaign"].AsObject().Remove("pins"));
+
+        TableSnapshot restored = Read(document.ToJsonString());
+
+        Assert.Equal("the-millers-son", Assert.Single(restored.Campaign.Quests).QuestId);
+        Assert.NotNull(restored.Campaign.Pins);
+        Assert.Empty(restored.Campaign.Pins);
     }
 
     [Fact]
@@ -431,6 +450,7 @@ public sealed class SessionDocumentJsonTests
                     Note = "They spiked the door open.",
                 },
             },
+            Pins = new[] { "text:rules/darkness-below", "card:grask" },
         },
     };
 }

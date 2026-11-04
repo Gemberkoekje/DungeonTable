@@ -1,6 +1,7 @@
 // Global keyboard shortcuts for the DM screen: Ctrl+1..4 switch the dock (Room / Battle / Campaign /
-// Art), Ctrl+Z takes back the party's last move, a bare 1-8 picks a map tool (Shift+1-8 keeps a one-click tool up), Esc puts the map back in
-// Look and closes what is open in the dock, "\" swaps the dock between narrow and wide, Tab opens and
+// Art), Ctrl+K or / puts up Find anything, Ctrl+Z takes back the party's last move, a bare 1-8 picks a
+// map tool (Shift+1-8 keeps a one-click tool up), Esc puts the map back in Look and closes what is open
+// over the map or in the dock, "\" swaps the dock between narrow and wide, Tab opens and
 // closes the dock on a screen too narrow to show it beside the map, c switches the badges on the map
 // off and on, and a bare letter (n / p / r / h) goes to whichever dock tab is on show - the turn order
 // on Battle, the art tray on Art.
@@ -46,6 +47,12 @@ window.dtDmKeys = (function () {
                     if (e.key >= '1' && e.key <= '4' && !e.shiftKey) {
                         e.preventDefault();
                         dotnet.invokeMethodAsync('DmKey', 'tab:' + e.key);
+                    } else if ((e.key === 'k' || e.key === 'K') && !e.shiftKey) {
+                        // Ctrl+K is the browser's own search box otherwise; Find anything takes it, even
+                        // from inside a text box, as it is a chord that types nothing.
+                        e.preventDefault();
+                        if (window.dtFind) { window.dtFind.expect(); }
+                        dotnet.invokeMethodAsync('DmKey', 'find');
                     } else if ((e.key === 'z' || e.key === 'Z') && !e.shiftKey && !isTyping(e)) {
                         // Ctrl+Z in a box undoes the typing; anywhere else it takes back the party's
                         // last move.
@@ -65,6 +72,15 @@ window.dtDmKeys = (function () {
                 }
 
                 if (isTyping(e)) { return; }
+
+                // '/' is Shift+7 on some layouts, so it is read by the character it types, before the
+                // digits (read by their place on the keyboard) and before Shift turns bare keys away.
+                if (e.key === '/') {
+                    e.preventDefault();
+                    if (window.dtFind) { window.dtFind.expect(); }
+                    dotnet.invokeMethodAsync('DmKey', 'find');
+                    return;
+                }
 
                 const digit = digitOf(e);
                 if (digit) {

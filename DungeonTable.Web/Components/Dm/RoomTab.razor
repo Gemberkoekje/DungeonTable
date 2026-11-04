@@ -10,6 +10,9 @@
     (reveal it, frame the projector on it, centre the DM's map on it). Back and forward walk the same
     history the card sheet's breadcrumb does.
 
+    The header's ⓘ opens the floor's standing facts under it (LevelFacts: what dwells here, the factions,
+    the wandering monsters), so "who else is on this floor" is answered without the Campaign tab.
+
     The tab follows the party: walk the token into a room and the room is here. Looking at another room
     lasts until the party moves on, and a strip above the header says so and goes back (Esc); the pin
     keeps the dock where the DM put it while the party moves (DmWorkspace.FollowParty).
@@ -78,6 +81,15 @@
                 }
 
                 <span class="room-actions">
+                    @if (HasLevelFacts)
+                    {
+                        <button type="button" class="room-action level-info @(levelOpen ? "on" : string.Empty)"
+                                aria-pressed="@(levelOpen ? "true" : "false")" aria-controls="room-level"
+                                title="This floor's standing facts: what dwells here, its factions, its wandering monsters"
+                                @onclick="() => levelOpen = !levelOpen">
+                            <span aria-hidden="true">&#x24D8;</span> Floor
+                        </button>
+                    }
                     @if (Workspace.RoomRegionIds.Count > 0)
                     {
                         <button type="button" class="room-action @(Workspace.RoomRevealed() ? "on" : string.Empty)"
@@ -115,6 +127,14 @@
             }
         </header>
 
+        @if (levelOpen && HasLevelFacts)
+        {
+            <section class="room-level" id="room-level" aria-label="This floor">
+                <LevelFacts Level="Workspace.LevelDossier" ShowAftermath="false" Pinnable="true"
+                            ResolveRefs="Workspace.ResolveRefs" OnOpenReference="Workspace.OpenReference" />
+            </section>
+        }
+
         @if (!string.IsNullOrEmpty(Workspace.RegionNotice))
         {
             <p class="muted" role="status">@Workspace.RegionNotice</p>
@@ -149,6 +169,14 @@
         Workspace.Encounter.Count > 0
         && Campaign.ClearedCount(Workspace.PanelNode, Workspace.Encounter.Select(monster => monster.NodeId))
             == Workspace.Encounter.Count;
+
+    // The floor's ⓘ stays as the DM left it from room to room: it is about the floor, not the room.
+    private bool levelOpen;
+
+    private bool HasLevelFacts =>
+        !string.IsNullOrWhiteSpace(Workspace.LevelDossier.WhatDwellsHere)
+        || Workspace.LevelDossier.Factions.Count > 0
+        || Workspace.LevelDossier.WanderingMonsters.Count > 0;
 
     private bool PartyHere =>
         Workspace.PanelNode.Length > 0

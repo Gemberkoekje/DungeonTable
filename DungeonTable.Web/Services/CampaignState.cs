@@ -48,6 +48,9 @@ public sealed class CampaignState
     private readonly Dictionary<string, AreaProgress> areas =
         new Dictionary<string, AreaProgress>(StringComparer.Ordinal);
 
+    // What the DM pinned along the foot of the dock, in the order they pinned it (see PinKeys).
+    private readonly List<string> pins = new List<string>();
+
     private readonly IPartyRoster party;
 
     /// <summary>Creates the campaign state over the roster its level prerequisites read.</summary>
@@ -57,7 +60,7 @@ public sealed class CampaignState
         this.party = party;
     }
 
-    /// <summary>Raised whenever quest progress, a deck's drawn cards or an area's progress changes.</summary>
+    /// <summary>Raised whenever quest progress, a deck's drawn cards, an area's progress or the pins change.</summary>
     public event Action Changed;
 
     // ---- Reading ----------------------------------------------------------------------------
@@ -301,6 +304,53 @@ public sealed class CampaignState
         }
     }
 
+    // ---- Pins -------------------------------------------------------------------------------
+
+    /// <summary>
+    /// What the DM pinned along the foot of the dock, oldest first: rules sections, a floor's facts, cards,
+    /// any passage (see <see cref="PinKeys"/>). The table's, not one DM window's, so a second window and
+    /// a restart show the same pins.
+    /// </summary>
+    /// <returns>The pins, as a copy.</returns>
+    public IReadOnlyList<string> Pins()
+    {
+        lock (gate)
+        {
+            return pins.ToArray();
+        }
+    }
+
+    /// <summary>True when something is pinned.</summary>
+    /// <param name="pin">The pin (see <see cref="PinKeys"/>).</param>
+    /// <returns><c>true</c> when it is among the pins.</returns>
+    public bool IsPinned(string pin)
+    {
+        lock (gate)
+        {
+            return pins.Contains(pin ?? string.Empty, StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>Pins something at the end of the pins, or takes its pin away when it is pinned already.</summary>
+    /// <param name="pin">The pin (see <see cref="PinKeys"/>); a blank one is ignored.</param>
+    public void TogglePin(string pin)
+    {
+        if (string.IsNullOrWhiteSpace(pin))
+        {
+            return;
+        }
+
+        lock (gate)
+        {
+            if (!pins.Remove(pin))
+            {
+                pins.Add(pin);
+            }
+        }
+
+        Notify();
+    }
+
     // ---- Prerequisites ----------------------------------------------------------------------
 
     /// <summary>
@@ -511,6 +561,7 @@ public sealed class CampaignState
                     .Select(pair => new DeckProgress { DeckId = pair.Key, DrawnCardIds = pair.Value.ToArray() })
                     .ToArray(),
                 Areas = areas.Values.Select(Copy).ToArray(),
+                Pins = pins.ToArray(),
             };
         }
     }
@@ -532,6 +583,12 @@ public sealed class CampaignState
             progress.Clear();
             drawnCards.Clear();
             areas.Clear();
+            pins.Clear();
+
+            // Each pin once, in the order it was pinned, as a hand-edited document might repeat one.
+            pins.AddRange((snapshot.Pins ?? Array.Empty<string>())
+                .Where(pin => !string.IsNullOrWhiteSpace(pin))
+                .Distinct(StringComparer.Ordinal));
 
             IEnumerable<AreaProgress> storedAreas = (snapshot.Areas ?? Array.Empty<AreaProgress>())
                 .Where(entry => entry is not null && !string.IsNullOrEmpty(entry.AreaNodeId));

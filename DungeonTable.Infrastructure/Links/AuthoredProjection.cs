@@ -36,6 +36,9 @@ public sealed class AuthoredProjection : IContentProjection
     private readonly Backlinks backlinks;
     private readonly RelationIndex relations;
 
+    // Every passage of prose, for Find anything's text half.
+    private readonly PassageIndex passages;
+
     // Every entity a level declares, by id, with the floor its prose belongs to. A later level wins on
     // a duplicate id, as the store does for areas; the link index reports the duplicate as ambiguous.
     private readonly Dictionary<string, (Entity Entity, string Floor)> entities = new(StringComparer.Ordinal);
@@ -113,6 +116,10 @@ public sealed class AuthoredProjection : IContentProjection
         }
 
         IndexNames();
+
+        // The words a passage is matched on are the words the DM reads: each link as the name it shows.
+        var words = new MarkupCrossRefResolver(targets);
+        passages = PassageIndex.Build(dossiers, words.Words);
     }
 
     /// <inheritdoc />
@@ -214,6 +221,12 @@ public sealed class AuthoredProjection : IContentProjection
             .Take(limit)
             .ToList();
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<TextMatch> FindText(string query, int limit) => passages.Find(query, limit);
+
+    /// <inheritdoc />
+    public Result<Passage> GetPassage(string key) => passages.Get(key);
 
     /// <inheritdoc />
     /// <remarks>

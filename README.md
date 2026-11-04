@@ -25,8 +25,10 @@ people, quests and monsters. This repository ships one small original adventure,
   yours), resting the pointer on a room shows a card with the rest, and the Room tab lists the rooms
   around the one on show with the same badges.
 - **The campaign around it:** the level and its factions, the quest log with tickable story beats, the
-  party, the NPCs, the backstory, the evening's session prep, the rules, card decks to draw from, and a
-  search across all of it and the books the campaign indexes.
+  party, the NPCs, the backstory, the evening's session prep, the rules and card decks to draw from.
+  **Find anything** (Ctrl+K) searches all of it by names and words, the books the campaign indexes
+  too, and shows the answer in the results; what the DM looks up every session can be pinned along the
+  foot of the dock.
 - **The fight.** Start a battle from the room: the creatures it lists join the party in an initiative
   order, with hit points, conditions, and each monster's full stat block and spells a click away.
 - **Pictures on the projector**: the campaign's art, or anything the DM uploads, framed over the map.

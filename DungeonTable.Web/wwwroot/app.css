@@ -254,7 +254,7 @@ code {
     color: var(--error);
 }
 
-/* ---- The Campaign tab's sections: Level / Quests / Party / NPCs / Story / Session / Rules / Search ---- */
+/* ---- The Campaign tab's sections: Level / Quests / Party / NPCs / Story / Session / Rules ---- */
 
 .briefing-tabs {
     display: flex;
@@ -773,81 +773,6 @@ code {
 
 .deck-browse .detail-body {
     white-space: normal;
-}
-
-/* Search tab: jump to anything the content or the book index names. */
-.briefing-search {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.briefing-search input {
-    padding: 0.5rem 0.65rem;
-    background: var(--panel);
-    color: var(--ink);
-    border: 1px solid var(--border);
-    border-radius: 0.35rem;
-}
-
-.search-results {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-}
-
-.search-result {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.4rem 0.6rem;
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 0.35rem;
-    color: var(--accent);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-}
-
-.search-result:hover,
-.search-result:focus-visible {
-    border-color: var(--accent);
-}
-
-.search-result .search-cat {
-    margin-left: auto;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--accent);
-    white-space: nowrap;
-}
-
-.search-result .search-id {
-    font-family: ui-monospace, monospace;
-    font-size: 0.7rem;
-    color: var(--muted);
-    white-space: nowrap;
-}
-
-/* A book index hit: badged as the book's, with where to look it up. */
-.search-result .search-book {
-    padding: 0 0.3rem;
-    border: 1px solid var(--xref-book);
-    border-radius: 0.25rem;
-    color: var(--xref-book);
-}
-
-.search-result .search-cite {
-    font-size: 0.7rem;
-    font-style: italic;
-    color: var(--xref-book);
-    white-space: nowrap;
 }
 
 /* ---- Party tab: the characters the dungeon is being run for ----
@@ -1988,6 +1913,374 @@ code {
 
 .card-sheet .nav-history {
     margin-bottom: 0.6rem;
+}
+
+/* ---- Answers that come to you: Find anything, passages and pins ---- */
+
+/* The bar's way into Find anything, which Ctrl+K and / also open. */
+.find-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 15rem;
+    padding: 0.28rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.82rem;
+    text-align: left;
+    cursor: text;
+}
+
+.find-open-btn:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+
+.find-open-btn kbd {
+    margin-left: auto;
+    padding: 0 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    font-family: inherit;
+    font-size: 0.7rem;
+}
+
+/* One box over the map, never over the dock: the DM keeps reading the room while looking something up. */
+.find-box {
+    position: absolute;
+    top: 0.6rem;
+    left: 50%;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    width: min(46rem, calc(100% - 1.2rem));
+    max-height: calc(100% - 1.2rem);
+    transform: translateX(-50%);
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 0.5rem;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.find-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.find-glyph {
+    color: var(--accent);
+    font-size: 1.1rem;
+}
+
+.find-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.35rem 0.4rem;
+    background: transparent;
+    border: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 1rem;
+    outline: none;
+}
+
+/* The box has a close button of its own; the browser's clear button beside it would be a second cross. */
+.find-input::-webkit-search-cancel-button {
+    display: none;
+}
+
+.find-empty {
+    margin: 0;
+    padding: 0.7rem 0.9rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.find-results {
+    list-style: none;
+    margin: 0;
+    padding: 0.3rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.find-hit {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.find-hit:hover,
+.find-hit.active {
+    background: rgba(201, 162, 39, 0.1);
+    border-color: rgba(201, 162, 39, 0.45);
+}
+
+.find-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2rem 0.5rem;
+}
+
+.find-cat {
+    flex: none;
+    min-width: 4.2rem;
+    padding: 0 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    color: var(--muted);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.find-cat-rules,
+.find-cat-floor {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.find-cat-room {
+    border-color: var(--xref-area);
+    color: var(--xref-area);
+}
+
+.find-cat-book {
+    border-color: var(--xref-book);
+    color: var(--xref-book);
+}
+
+.find-label {
+    font-weight: 600;
+}
+
+.find-where {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.find-snippet {
+    padding-left: 4.7rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.find-hit mark {
+    padding: 0 0.1rem;
+    border-radius: 0.15rem;
+    background: rgba(201, 162, 39, 0.35);
+    color: var(--ink);
+}
+
+/* A passage out of its document: in the sheet over the dock and in a pin's popover. */
+.passage-sheet-head {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.passage-sheet-head .reference-close {
+    margin-left: auto;
+}
+
+.passage-trail {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+}
+
+.passage-title {
+    margin: 0.15rem 0 0.5rem;
+    font-size: 1.1rem;
+}
+
+.passage.secret .passage-title {
+    color: var(--error);
+}
+
+.passage-body {
+    white-space: pre-line;
+}
+
+/* The pin beside a block or in a sheet's header; lit while the thing is pinned. */
+.pin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.1rem 0.4rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    filter: grayscale(1);
+    opacity: 0.7;
+}
+
+.pin-btn:hover {
+    border-color: var(--accent);
+    opacity: 1;
+}
+
+.pin-btn.on {
+    border-color: var(--accent);
+    color: var(--accent);
+    filter: none;
+    opacity: 1;
+}
+
+/* A pinnable block keeps its pin in its top right corner, beside the block and not in its summary, so a
+   click on the pin never also folds the block. The summary leaves the corner free. */
+.pinnable {
+    position: relative;
+}
+
+.pinnable > .pin-btn {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.4rem;
+}
+
+.pinnable > .detail-block > summary,
+.pinnable > .what-dwells,
+.pinnable > .character-card .character-head {
+    padding-right: 2.6rem;
+}
+
+.card-sheet .nav-history .pin-btn {
+    margin-left: auto;
+}
+
+/* The Room tab's floor facts, under the header. */
+.room-level {
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.8rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+}
+
+.room-level .level-title {
+    margin: 0 0 0.4rem;
+    font-size: 1rem;
+}
+
+/* The pins, along the foot of the dock on every tab, with a pin's popover over the dock above them. */
+.pin-strip {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.5rem;
+    background: #191512;
+    border-top: 1px solid var(--border);
+}
+
+.pin-strip-glyph {
+    font-size: 0.8rem;
+}
+
+.pin-chip {
+    display: inline-flex;
+    align-items: stretch;
+    max-width: 16rem;
+    border: 1px solid var(--border);
+    border-radius: 0.8rem;
+    font-size: 0.78rem;
+}
+
+.pin-chip.open {
+    border-color: var(--accent);
+    background: rgba(201, 162, 39, 0.12);
+}
+
+.pin-chip.gone {
+    opacity: 0.55;
+    border-style: dashed;
+}
+
+.pin-chip-open,
+.pin-chip-remove {
+    padding: 0.12rem 0.3rem 0.12rem 0.6rem;
+    background: none;
+    border: none;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+}
+
+.pin-chip-open {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pin-chip-remove {
+    padding: 0.12rem 0.5rem 0.12rem 0.2rem;
+    color: var(--muted);
+}
+
+.pin-chip-open:hover,
+.pin-chip-remove:hover {
+    color: var(--accent);
+}
+
+.pin-popover {
+    position: absolute;
+    right: 0.5rem;
+    bottom: calc(100% + 0.35rem);
+    left: 0.5rem;
+    z-index: 15;
+    max-height: min(60vh, 34rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.7rem 0.9rem;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+
+.pin-popover .reference-drawer {
+    margin-bottom: 0;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+}
+
+.pin-popover-head {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
+}
+
+.pin-popover-head .reference-close {
+    margin-left: auto;
 }
 
 /* The fight in the dock: the order and the detail pane side by side, sharing the width evenly. A row

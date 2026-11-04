@@ -1,8 +1,9 @@
 @inherits DmTabBase
 @*
-    The dock's Campaign tab: the floor, the quests, the party, the people, the story, tonight's prep,
-    the rules and search (CampaignPanel), beside the map. A link to a room shows that room on the Room
-    tab, which is where the DM reads rooms; a link to anything else opens its card over the dock.
+    The dock's Campaign tab: the floor, the quests, the party, the people, the story, tonight's prep
+    and the rules (CampaignPanel), beside the map, with a pin on each rules section and floor fact. A
+    link to a room shows that room on the Room tab, which is where the DM reads rooms; a link to
+    anything else opens its card over the dock.
 *@
 
 <div class="campaign-tab">
@@ -17,7 +18,7 @@
                    Decks="Workspace.Decks"
                    IsAreaAuthored="Workspace.IsAreaAuthored"
                    IsFloorAuthored="Workspace.IsFloorAuthored"
-                   SearchNodes="Workspace.SearchNodes"
+                   Pinnable="true"
                    OnNavigate="Navigate"
                    OnOpenReference="OpenReference"
                    ResolveRefs="Workspace.ResolveRefs"
