@@ -1,0 +1,89 @@
+@* Nearby: the rooms around this one, one line per way out, each with the badges and the creatures of
+   the room it leads to, so "what is around the party" needs no click. A secret way is marked. Resting
+   the pointer on a line shows that room's peek card, the same card the map shows; a click reads the
+   room. A way to a floor nobody has written yet waits as a label, and one that names no area is shown
+   as broken. *@
+
+<section class="nearby">
+    <h3>Nearby</h3>
+    @if (Rooms.Count == 0)
+    {
+        <p class="muted">No way out is written for this room.</p>
+    }
+    else
+    {
+        <ul class="nearby-list">
+            @foreach (NearbyRoom room in Rooms)
+            {
+                ConnectionEntry exit = room.Exit;
+                <li class="nearby-row@(exit.Secret ? " secret" : string.Empty)">
+                    <div class="nearby-line">
+                        <span class="nearby-arrow" aria-hidden="true">&rarr;</span>
+                        @if (exit.TargetRoomId.Length == 0 && exit.Pending)
+                        {
+                            <span class="xref-pending" title="Not authored yet: @exit.Label is on a floor with no dossier">@exit.Label</span>
+                        }
+                        else if (exit.TargetRoomId.Length == 0)
+                        {
+                            <span class="xref-unresolved" title="Broken: @exit.Label names no authored area">@exit.Label</span>
+                        }
+                        else if (OnNavigate.HasDelegate)
+                        {
+                            <button type="button" class="nav-link nearby-go" title="Read this room"
+                                    @onclick="() => OnNavigate.InvokeAsync(exit.TargetRoomId)">@exit.Label</button>
+                        }
+                        else
+                        {
+                            <span class="label">@exit.Label</span>
+                        }
+                        <RoomBadgeList Badges="room.Badges" />
+                        @if (exit.Secret)
+                        {
+                            <span class="secret-badge" title="DM only — the players don't know this way exists">DM</span>
+                        }
+                    </div>
+
+                    @if (room.Badges.StillUp.Count > 0 || !string.IsNullOrWhiteSpace(exit.Note))
+                    {
+                        <div class="nearby-sub">
+                            @if (room.Badges.StillUp.Count > 0)
+                            {
+                                <span class="nearby-who">@CreatureTally.Names(room.Badges.StillUp)</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(exit.Note))
+                            {
+                                <span class="briefing-note"><CrossRefProse Text="@exit.Note" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></span>
+                            }
+                        </div>
+                    }
+
+                    @if (!room.Glance.IsEmpty)
+                    {
+                        <div class="nearby-peek"><RoomPeek Glance="room.Glance" Badges="room.Badges" /></div>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    /// <summary>The room's ways out, each with the room it leads to, in the order the area lists them.</summary>
+    [Parameter]
+    public IReadOnlyList<NearbyRoom> Rooms { get; set; } = Array.Empty<NearbyRoom>();
+
+    /// <summary>
+    /// Raised with an area's node id when the DM clicks a way out, to read that room. When no delegate is
+    /// attached, the ways out are plain text.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnNavigate { get; set; }
+
+    /// <summary>Raised with an id when the DM clicks a link in a way out's note, to open its card.</summary>
+    [Parameter]
+    public EventCallback<string> OnOpenReference { get; set; }
+
+    /// <summary>Resolves the links in a way out's note, on the room's own floor. When null, notes are plain text.</summary>
+    [Parameter]
+    public Func<string, IReadOnlyList<CrossRef>> ResolveRefs { get; set; }
+}

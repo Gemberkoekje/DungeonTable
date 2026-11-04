@@ -180,8 +180,11 @@ whichever dock tab is up.
   being left in the wrong mode. The toolbar and its options are drawn over the map, not beside it, so
   the canvas keeps its size whatever tool is up.
 - **The Room tab reads in table order**: the read-aloud first, then the checks and the short list, the
-  encounter, the detail, the DM's note, and, folded at the foot, who is here (`RoomReading`). It
-  started with the encounter and the note and reached the read-aloud only after nine sub-tabs.
+  encounter, the rooms around it (Nearby), the detail, the DM's note, and, folded at the foot, who is
+  here (`RoomReading`). It started with the encounter and the note and reached the read-aloud only
+  after nine sub-tabs.
+- **The map says what is in each room**, with badges, a peek card and the Room tab's Nearby list (see
+  [What is in each room, on the map](#what-is-in-each-room-on-the-map)).
 - **Cards are a sheet over the dock** (`CardSheet`), with the history's back, forward and breadcrumb,
   so Esc puts the card away and the room is still there, scrolled where it was. The sheet covers the
   Room and Campaign tabs only: the fight has its own detail pane.
@@ -315,6 +318,51 @@ looks again from it; the Room tab shows the room it is in.
 The projector's circuit renders again on every change of the session, a move of the token included,
 though nothing it draws has changed: about 10 ms on a large level, and Blazor sends nothing. If it ever
 shows during a drag, key the projector's layers as `MapLayerKey` keys the DM's.
+
+## What is in each room, on the map
+
+To see which rooms held monsters, loot or a trap, the DM clicked each one, and to look ahead, each room
+next to the party's. Now the map says it, and the Room tab lists the rooms around the one on show.
+
+- **Badges beside each room's label**, on the DM's map only (the projector draws no overlay): the
+  creatures not yet ticked off, cleared (the room greyed too), loot, a trap or hazard, a secret way, the
+  DM's note. A count rolled at the table is kept as written, so Nib and 1d4+2 goblins are `☠ 1d4+3`:
+  plain counts add up, dice of one size add up, and the constants go into one number (`CreatureTally`).
+  `c` switches the badges off for a clean map; it is one DM window's choice.
+- **Nothing new is authored.** A room's `RoomGlance` is read from what the content already holds (its
+  creature list, through `EncounterSource` as the encounter strip reads it, its blocks tagged loot, its
+  checks and exits) and from what the Room Editor marked on the map (`RoomMarks`: trap and hazard markers
+  standing in its regions or linked to it, secret doors within a square of its edge). The workspace keeps
+  one per room until the content changes or another map is loaded (`DmWorkspace.GlanceOf`). What changes
+  during the evening, the checklist and the notes, is read at every render (`RoomBadges`), so a tick
+  shows on the map at once and can never go stale. On a 138×177-cell level a drag of the party token,
+  which renders the map pane on every report, answered in 5 to 6 ms with the badges and without.
+- **S means a secret way, not a secret block.** The redesign's plan read it from secret doors, blocks
+  marked secret and secret exits. On a real floor 72 rooms of 89 have a block marked secret, because
+  that flag means "DM only, never read aloud", so S was on nearly every room and said nothing. It is now
+  a secret door in the room's walls, a secret or hidden-door marker in it, or an exit the players do not
+  know of (18 rooms of 89 there). A creature listed as secret is in the creature badge, and marked on
+  the peek card.
+- **Labels keep one size on screen.** They were drawn in map units, so with a large level in view they
+  could not be read. Their CSS sizes them from `--dt-u`, world units per screen pixel, which
+  `dt-pan-zoom.js` writes on the map's wrapper when the zoom or the box's size changes, never while
+  panning. A new value restyles the whole map, but a zoom step on that level took about 300 ms with it
+  or without it: the cost is the map drawn again at the new scale. The overlay carries `--dt-u0`, the
+  size the labels used to have, for the first paint and for an SVG shown without the canvas.
+- **A name that does not fit its room is hidden** (`declutter` in `dt-pan-zoom.js`). At one size on
+  screen, the long names of a crowded floor lay across each other: with a whole level in view, 78 of 87
+  overlapped. A name wider than its room's box is hidden and its badges stay, which is what the DM reads
+  at that distance; zooming in brings the names back. It runs when the zoom changes, and, through a
+  `MutationObserver`, whenever Blazor puts a new overlay in, before the browser paints it. The name and
+  the badges are two text elements so that one can go without the other.
+- **The peek card** (`RoomPeek`). `dt-peek.js` notices the pointer resting on a region for a quarter of
+  a second and tells the canvas; the map pane draws the card over the map, and the script places it
+  beside the pointer. Being drawn by .NET, it is the same component the Nearby list shows, so the two
+  say the same thing in the same words. A press, a pan, a zoom or leaving the room puts it away; the fog
+  brush and measuring, which are about the map's shape, show none.
+- **Nearby** (`NearbyRooms`): one line per exit, with the badges and the creatures still up of the room
+  it leads to, and that room's card on hover, shown by CSS since it is in the page already. It took the
+  place of the Connections list at the foot of the Room tab, which listed the same exits with less.
 
 ## What a reveal sends
 

@@ -118,6 +118,9 @@ Each of these compiled, passed every test, and still broke something.
   Key authored lists with `RenderKeys`, which stays unique when the ids are not.
 - **An exception thrown while the host starts** (before or after `builder.Build()`) surfaces from
   `WebApplicationFactory.CreateClient()` as itself, not wrapped.
+- **The player page carries the canvas's inline CSS**, which names DM-only classes (`dt-party`,
+  `dt-badges`). A test that the projector shows none of them looks for the elements (`class="dt-badge`),
+  not the words.
 - **NTFS lists a folder case-insensitively.** A test of ordinal file ordering passes on Windows by
   accident unless its names sort differently by case (`monsters-alpha`, `monsters-Zeta`).
 - **Sonar rules that fail the build and surprise:** a comment line ending in `;` reads as commented-out

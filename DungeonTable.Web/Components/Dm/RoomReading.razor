@@ -1,13 +1,15 @@
 @* A room, in the order the DM reads it at the table: the text to read aloud first, then the checks and
-   the short list to glance at, then the encounter, then the detail that is opened only when the party
-   engages, then the DM's own note, and last, folded, who is here and how they are tied together.
+   the short list to glance at, then the encounter, then the rooms around it, then the detail that is
+   opened only when the party engages, then the DM's own note, and last, folded, who is here and how
+   they are tied together.
 
    It used to start with the encounter and the note and reach the read-aloud only after the title and
    nine sub-tabs, below the fold on the table's laptop: the DM looked for the one thing they say first.
 
-   The encounter strip and the note are slots rather than built in here: both work on the table's
-   shared state, and this component stays a plain rendering of the content, which the tests render
-   on its own. The room's title and its actions are the Room tab's header, above this. *@
+   The encounter strip, the rooms around it (Nearby) and the note are slots rather than built in here:
+   each works on the table's shared state, and this component stays a plain rendering of the content,
+   which the tests render on its own. The room's title and its actions are the Room tab's header,
+   above this. *@
 
 <article class="briefing room-reading">
     @if (HasDossier)
@@ -23,7 +25,7 @@
                 <div class="dc-pills">
                     @foreach (SkillCheck check in Dossier.SkillChecks)
                     {
-                        <span class="dc-pill" title="@check.Purpose">@SkillLabel(check.Ability) DC @check.Dc</span>
+                        <span class="dc-pill" title="@check.Purpose">@SkillCheckText.Pill(check)</span>
                     }
                 </div>
             }
@@ -51,6 +53,8 @@
     }
 
     @Encounter
+
+    @Nearby
 
     @if (Dossier.Detail.Count > 0)
     {
@@ -126,55 +130,10 @@
             </ul>
         </details>
     }
-
-    @* Where the room leads stays open: until the Room tab has its Nearby list (the redesign's phase 4),
-       this is the only list of the ways out. *@
-    <details class="room-more room-connections" open>
-        <summary>Connections (@Briefing.Connections.Count)</summary>
-        @if (Briefing.Connections.Count == 0)
-        {
-            <p class="muted">None.</p>
-        }
-        else
-        {
-            <ul>
-                @foreach (ConnectionEntry connection in Briefing.Connections)
-                {
-                    <li class="@(connection.Secret ? "secret" : null)">
-                        @if (connection.TargetRoomId.Length == 0 && connection.Pending)
-                        {
-                            <span class="xref-pending" title="Not authored yet: @connection.Label is on a floor with no dossier">@connection.Label</span>
-                        }
-                        else if (connection.TargetRoomId.Length == 0)
-                        {
-                            <span class="xref-unresolved" title="Broken: @connection.Label names no authored area">@connection.Label</span>
-                        }
-                        else if (OnNavigate.HasDelegate)
-                        {
-                            <button type="button" class="nav-link" title="Read this room"
-                                    @onclick="() => OnNavigate.InvokeAsync(connection.TargetRoomId)">@connection.Label</button>
-                        }
-                        else
-                        {
-                            <span class="label">@connection.Label</span>
-                        }
-                        @if (connection.Secret)
-                        {
-                            <span class="secret-badge" title="DM only — the players don't know this way exists">DM</span>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(connection.Note))
-                        {
-                            <span class="briefing-note"><CrossRefProse Text="@connection.Note" ResolveRefs="ResolveRefs" OnActivate="OnOpenReference" /></span>
-                        }
-                    </li>
-                }
-            </ul>
-        }
-    </details>
 </article>
 
 @code {
-    /// <summary>The briefing to render: the area's occupants, who they are involved with, and its connections.</summary>
+    /// <summary>The briefing to render: the area's occupants and who they are involved with. Its ways out are the Nearby slot's.</summary>
     [Parameter]
     public RoomBriefing Briefing { get; set; } = new RoomBriefing();
 
@@ -190,16 +149,13 @@
     [Parameter]
     public RenderFragment Encounter { get; set; }
 
+    /// <summary>The rooms around this one, drawn after the encounter and before the detail. Nothing when unset.</summary>
+    [Parameter]
+    public RenderFragment Nearby { get; set; }
+
     /// <summary>The DM's note on the room, drawn after the detail. Nothing when unset.</summary>
     [Parameter]
     public RenderFragment Note { get; set; }
-
-    /// <summary>
-    /// Raised with an area's node id when the DM clicks a connection, to read that room instead. When
-    /// no delegate is attached, connections render as plain text.
-    /// </summary>
-    [Parameter]
-    public EventCallback<string> OnNavigate { get; set; }
 
     /// <summary>
     /// Raised with an id when the DM clicks a cross-reference in the prose or an occupant, to open its
@@ -227,23 +183,4 @@
         !string.IsNullOrWhiteSpace(Dossier.ReadAloud)
         || Dossier.Glance.Count > 0
         || Dossier.SkillChecks.Count > 0;
-
-    // Show the most specific part of an ability string on the pill: the skill in parentheses when
-    // present ("Wisdom (Perception)" -> "Perception"), otherwise the ability as written.
-    private static string SkillLabel(string ability)
-    {
-        if (string.IsNullOrWhiteSpace(ability))
-        {
-            return "Check";
-        }
-
-        int open = ability.IndexOf('(');
-        int close = ability.IndexOf(')');
-        if (open >= 0 && close > open + 1)
-        {
-            return ability.Substring(open + 1, close - open - 1);
-        }
-
-        return ability;
-    }
 }

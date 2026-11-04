@@ -46,6 +46,7 @@ public sealed class RoomReadingTests
             [nameof(RoomReading.Briefing)] = briefing,
             [nameof(RoomReading.Dossier)] = dossier,
             [nameof(RoomReading.Encounter)] = (RenderFragment)(builder => builder.AddMarkupContent(0, "<p>ENCOUNTER-SLOT</p>")),
+            [nameof(RoomReading.Nearby)] = (RenderFragment)(builder => builder.AddMarkupContent(0, "<p>NEARBY-SLOT</p>")),
             [nameof(RoomReading.Note)] = (RenderFragment)(builder => builder.AddMarkupContent(0, "<p>NOTE-SLOT</p>")),
         });
 
@@ -55,10 +56,10 @@ public sealed class RoomReadingTests
             html.IndexOf("Perception DC 12", StringComparison.Ordinal),
             html.IndexOf("At a glance", StringComparison.Ordinal),
             html.IndexOf("ENCOUNTER-SLOT", StringComparison.Ordinal),
+            html.IndexOf("NEARBY-SLOT", StringComparison.Ordinal),
             html.IndexOf("The loot", StringComparison.Ordinal),
             html.IndexOf("NOTE-SLOT", StringComparison.Ordinal),
             html.IndexOf("Occupants (1)", StringComparison.Ordinal),
-            html.IndexOf("Connections (1)", StringComparison.Ordinal),
         };
 
         Assert.DoesNotContain(-1, order);
@@ -66,14 +67,21 @@ public sealed class RoomReadingTests
     }
 
     [Fact]
-    public async Task Who_is_here_is_folded_and_the_ways_out_stay_open()
+    public async Task Who_is_here_is_folded_and_the_ways_out_are_left_to_nearby()
     {
-        // Who is here repeats the encounter, so it folds. The connections stay open until the Room
-        // tab lists the neighbouring rooms itself.
-        string html = await Render(new RoomBriefing { RoomId = RoomId }, new AreaDossier());
+        // Who is here repeats the encounter, so it folds. The ways out are the Nearby slot's now, with
+        // what is in each room they lead to; a second list of them at the foot would only repeat it.
+        var briefing = new RoomBriefing
+        {
+            RoomId = RoomId,
+            Connections = new[] { new ConnectionEntry { TargetRoomId = "area-2", Label = "Nave" } },
+        };
+
+        string html = await Render(briefing, new AreaDossier());
 
         Assert.Contains("<details class=\"room-more room-occupants\"><summary>Occupants (0)</summary>", html, StringComparison.Ordinal);
-        Assert.Contains("<details class=\"room-more room-connections\" open><summary>Connections (0)</summary>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Connections", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Nave", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,14 +105,13 @@ public sealed class RoomReadingTests
     }
 
     [Fact]
-    public async Task The_room_lists_the_occupants_and_the_connections_and_nothing_else()
+    public async Task The_room_lists_the_occupants_and_nothing_else()
     {
         // The tab once listed a room's features, items and contents as well; the room's own prose
         // carries all of it.
         string html = await Render(new RoomBriefing { RoomId = RoomId }, new AreaDossier());
 
         Assert.Contains("Occupants (0)", html, StringComparison.Ordinal);
-        Assert.Contains("Connections (0)", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Features (", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Items (", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Contents (", html, StringComparison.Ordinal);
@@ -141,36 +148,6 @@ public sealed class RoomReadingTests
 
         // An individual opens its own card, which shows the block: no raw id in the chip.
         Assert.DoesNotContain("golem-node", html, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Exits_to_an_unwritten_floor_wait_and_a_broken_one_is_marked()
-    {
-        var briefing = new RoomBriefing
-        {
-            RoomId = RoomId,
-            Connections = new[]
-            {
-                new ConnectionEntry { TargetRoomId = "area-2", Label = "Nave", Note = "through the arch" },
-                new ConnectionEntry { Label = "L2 area 1", Pending = true, Note = "the stairs down" },
-                new ConnectionEntry { Label = "area 99", Secret = true },
-            },
-        };
-
-        string html = await Render(briefing, new AreaDossier());
-
-        Assert.Contains(
-            "<li><span class=\"label\">Nave</span><span class=\"briefing-note\">through the arch</span></li>",
-            html,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "<li><span class=\"xref-pending\" title=\"Not authored yet: L2 area 1 is on a floor with no dossier\">L2 area 1</span><span class=\"briefing-note\">the stairs down</span></li>",
-            html,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "<li class=\"secret\"><span class=\"xref-unresolved\" title=\"Broken: area 99 names no authored area\">area 99</span><span class=\"secret-badge\" title=\"DM only — the players don't know this way exists\">DM</span></li>",
-            html,
-            StringComparison.Ordinal);
     }
 
     private static Task<string> Render(RoomBriefing briefing, AreaDossier dossier) =>

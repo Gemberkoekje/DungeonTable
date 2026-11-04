@@ -1,0 +1,18 @@
+@* A room's badges beside its name in the dock (its peek card, its line in Nearby): the same badges the
+   DM's map draws under the room's label, in the same order, with their meaning on hover. *@
+
+@if (!Badges.IsEmpty)
+{
+    <span class="room-badges">
+        @foreach (BadgePart part in Badges.Parts)
+        {
+            <span class="room-badge badge-@part.Kind.ToString().ToLowerInvariant()" title="@part.Title">@part.Text</span>
+        }
+    </span>
+}
+
+@code {
+    /// <summary>The room's badges as they stand now.</summary>
+    [Parameter]
+    public RoomBadges Badges { get; set; } = RoomBadges.None;
+}

@@ -129,8 +129,8 @@
             <RoomReading Briefing="Workspace.Briefing"
                          Dossier="Workspace.AreaDossier"
                          Encounter="EncounterSlot"
+                         Nearby="NearbySlot"
                          Note="NoteSlot"
-                         OnNavigate="Workspace.NavigateTo"
                          OnOpenReference="Workspace.OpenReference"
                          ResolveRefs="Workspace.ResolveRefs"
                          ResolveRefsOn="Workspace.ResolveRefsOn" />
@@ -159,6 +159,22 @@
                                                             AreaTitle="@Workspace.PanelTitle"
                                                             OnOpenReference="Workspace.OpenReference" />;
 
+    private RenderFragment NearbySlot => @<NearbyRooms Rooms="NearbyLines()"
+                                                       OnNavigate="Workspace.NavigateTo"
+                                                       OnOpenReference="Workspace.OpenReference"
+                                                       ResolveRefs="Workspace.ResolveRefs" />;
+
+    // The room's ways out, each with what is in the room it leads to, as it stands now: the badges read
+    // the checklist and notes, which is why the tab listens to the campaign.
+    private NearbyRoom[] NearbyLines() =>
+        Workspace.Briefing.Connections
+            .Select(exit =>
+            {
+                RoomGlance glance = Workspace.GlanceOf(exit.TargetRoomId);
+                return new NearbyRoom(exit, glance, RoomBadges.For(glance, Campaign));
+            })
+            .ToArray();
+
     private RenderFragment NoteSlot => @<AreaNotes AreaNodeId="@Workspace.PanelNode" AreaTitle="@Workspace.PanelTitle" />;
 
     /// <inheritdoc />
@@ -166,8 +182,8 @@
     {
         base.OnInitialized();
 
-        // DmTabBase watches the workspace and the session; the ticks behind the cleared chip live on
-        // the campaign, which the encounter strip changes.
+        // DmTabBase watches the workspace and the session; the ticks behind the cleared chip and the
+        // Nearby badges, and the notes, live on the campaign, which the encounter strip changes.
         Campaign.Changed += OnCampaignChanged;
     }
 

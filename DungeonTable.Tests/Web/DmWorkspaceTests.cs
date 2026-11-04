@@ -50,6 +50,97 @@ public sealed class DmWorkspaceTests
     }
 
     [Fact]
+    public async Task A_room_s_glance_reads_its_dossier_its_encounter_and_what_the_map_marks_in_it()
+    {
+        Harness harness = Harness.Build();
+        harness.Dossiers.Areas[Pillars] = new AreaDossier
+        {
+            AreaNodeId = Pillars,
+            Title = "Pillars",
+            AreaNumber = 2,
+            Detail = new[] { new DossierBlock { Heading = "A purse under the dais", Kind = DossierBlockKind.Loot } },
+        };
+        harness.Content.Briefings[Pillars] = new RoomBriefing
+        {
+            RoomId = Pillars,
+            Occupants = new[] { new OccupantEntry { NodeId = "data_statblocks_monsters_bandit", MonsterRef = "data_statblocks_monsters_bandit", Label = "Bandit", Count = "4" } },
+        };
+        WithPillarsMarks(harness);
+
+        await harness.Workspace.InitialiseAsync(CancellationToken.None);
+        RoomGlance glance = harness.Workspace.GlanceOf(Pillars);
+
+        Assert.Equal("Pillars", glance.Title);
+        Assert.Equal("4", CreatureTally.Count(glance.Creatures));
+        Assert.Equal("A purse under the dais", Assert.Single(glance.Loot));
+        Assert.Equal("Hazard", Assert.Single(glance.Hazards));
+        Assert.Equal("Secret door", Assert.Single(glance.Secrets));
+
+        // An area with no dossier, or nothing at all, has no glance; a region linked to no area neither.
+        Assert.Same(RoomGlance.None, harness.Workspace.GlanceOf(Landing));
+        Assert.Same(RoomGlance.None, harness.Workspace.GlanceOf(string.Empty));
+    }
+
+    [Fact]
+    public async Task A_room_s_glance_is_kept_until_the_content_or_the_map_s_notes_change()
+    {
+        Harness harness = Harness.Build();
+        harness.Dossiers.Areas[Pillars] = new AreaDossier { AreaNodeId = Pillars, Title = "Pillars" };
+        await harness.Workspace.InitialiseAsync(CancellationToken.None);
+
+        RoomGlance first = harness.Workspace.GlanceOf(Pillars);
+        Assert.Same(first, harness.Workspace.GlanceOf(Pillars));
+
+        harness.Dossiers.Areas[Pillars] = new AreaDossier { AreaNodeId = Pillars, Title = "The Pillared Hall" };
+        await harness.Workspace.RefreshAsync(ContentChanges.Documents, CancellationToken.None);
+        Assert.Equal("The Pillared Hall", harness.Workspace.GlanceOf(Pillars).Title);
+
+        WithPillarsMarks(harness);
+        await harness.Workspace.RefreshAsync(ContentChanges.Maps, CancellationToken.None);
+        Assert.Equal("Hazard", Assert.Single(harness.Workspace.GlanceOf(Pillars).Hazards));
+    }
+
+    [Fact]
+    public async Task A_room_s_glance_is_read_again_on_another_map()
+    {
+        // The traps and secret doors are the map's: on a floor where the room has no region, it has none.
+        Harness harness = Harness.Build();
+        harness.Dossiers.Areas[Pillars] = new AreaDossier { AreaNodeId = Pillars, Title = "Pillars" };
+        WithPillarsMarks(harness);
+        harness.Maps.Maps["level-2"] = new VectorMap { MapId = "level-2", Bounds = new MapBounds(0, 0, 100, 100), Grid = new Grid { CellSizePx = 10 } };
+        harness.Annotations.Definitions["level-2"] = new MapDefinition { MapId = "level-2" };
+        await harness.Workspace.InitialiseAsync(CancellationToken.None);
+        Assert.Equal("Hazard", Assert.Single(harness.Workspace.GlanceOf(Pillars).Hazards));
+
+        await harness.Workspace.LoadMapAsync("level-2", CancellationToken.None);
+
+        Assert.Empty(harness.Workspace.GlanceOf(Pillars).Hazards);
+        Assert.Empty(harness.Workspace.GlanceOf(Pillars).Secrets);
+    }
+
+    // A hazard marked in the Pillars (100..200 square), and the secret door drawn on its east wall.
+    private static void WithPillarsMarks(Harness harness)
+    {
+        MapDefinition notes = harness.Annotations.Definitions["level-1"];
+        harness.Annotations.Definitions["level-1"] = new MapDefinition
+        {
+            MapId = notes.MapId,
+            Regions = notes.Regions,
+            Objects = notes.Objects,
+            Features = notes.Features.Append(new FeatureMarker { FeatureId = "m-rubble", Kind = FeatureKind.Hazard, Position = new MapPoint(150, 150) }).ToArray(),
+        };
+
+        VectorMap map = harness.Maps.Maps["level-1"];
+        harness.Maps.Maps["level-1"] = new VectorMap
+        {
+            MapId = map.MapId,
+            Bounds = map.Bounds,
+            Grid = map.Grid,
+            Doors = new[] { new DoorFeature { Id = "door-secret", Bounds = new MapBounds(198, 140, 204, 160) } },
+        };
+    }
+
+    [Fact]
     public async Task The_map_picker_lists_each_map_under_the_level_name_the_editor_gave_it()
     {
         Harness harness = Harness.Build();

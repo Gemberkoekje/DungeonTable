@@ -30,7 +30,7 @@ the DM screen, and the frame you draw takes that shape.
 
 ### The DM screen
 
-![The DM screen: the map with three rooms revealed, the party token in the Goblin Den with its vision ring, the player view framed on the Nave, and the Goblin Den on the Room tab, party here](images/dm-screen.png)
+![The DM screen: the map with three rooms revealed and badges under each room's name, the party token in the Goblin Den with its vision ring, the player view framed on the Nave, the Workshop's peek card under the pointer, and the Goblin Den on the Room tab, party here, with the rooms around it under Nearby](images/dm-screen.png)
 
 The DM screen is the map, which never leaves the screen, and beside it the **dock**, with four tabs:
 **Room**, **Battle**, **Campaign** and **Art**. **Ctrl+1** to **Ctrl+4** switch the dock from
@@ -63,6 +63,25 @@ Rooms the players can see are drawn light; the rest are shaded. The box labelled
 exactly what the projector shows. Drag it by its border to move the projector's view, or by a corner to
 zoom in or out, or press **Frame**. Drag anywhere else on the map to pan it, and use the mouse wheel
 (or **+**, **−** and **Reset** at the bottom right) to zoom.
+
+**The map says what is in each room.** Beside each room's name are badges that only you see:
+
+| badge | means |
+|---|---|
+| **☠ 3** | creatures there not yet ticked off on the Room tab. A count written as dice stays as written: Nib and 1d4+2 goblins read **☠ 1d4+3** |
+| **✔** | cleared: every creature there is ticked off. The room is greyed too |
+| **◆** | loot: the room has a block tagged loot |
+| **⚠** | a trap or hazard marked in the room in the Room Editor |
+| **S** | a secret way: a secret door in its walls, a secret or hidden-door marker, or an exit the players do not know of |
+| **✎** | you wrote a note on the room |
+
+Names and badges stay the same size however far you zoom. With a whole floor in view, a name wider than
+its room is left out and its badges stay; zoom in and the names come back. **c**, or **Badges** at the
+foot of the map, switches the badges off for a clean map.
+
+**Rest the pointer on a room** and after a moment a card says what is in it: who is there (crossed out
+once ticked off), the loot, the checks, traps, secret ways, where it leads and your note. Move off the
+room, click, pan or zoom, and it goes. The Fog brush and Measure show no card.
 
 **The party is a token, and moving it is how you reveal.** The blue token is where the party stands,
 and the faint ring round it is how far they see.
@@ -110,7 +129,8 @@ one of those tools up, for revealing a whole wing room by room, hold **Shift** a
 (**Shift+2**, or Shift and click). Pressing a tool's number again also puts Look back.
 
 **Clear reveals…** at the foot of the map hides everything on this map again, and offers to undo the
-clear. Other maps keep their reveals, and the token stays where it is. **Grid** draws the grid.
+clear. Other maps keep their reveals, and the token stays where it is. **Grid** draws the grid, and
+**Badges** switches the badges on and off (**c**).
 
 The single-key shortcuts (these, and the ones on the Battle and Art tabs) do nothing while you are
 typing in a box, so a note never changes your tool.
@@ -136,10 +156,13 @@ The room is laid out in the order you need it at the table:
   there are. A count written as dice (**1d4+2**) is yours to roll: set the number with **−** and
   **+**. **Add** puts them in the fight, and **Add all to battle** puts in everyone. Tick a creature
   off once it has been dealt with; when all are, the room reads **cleared**.
+- **Nearby**: the rooms this one leads to, one line each, with their badges, who is still up in them and
+  how you get there. A secret way is marked **DM**. Rest the pointer on a line for that room's card, and
+  click it to read the room. A way to a floor you have not written yet waits as plain text.
 - **Detail**, folded until you open it, with secrets marked **SECRET**.
 - **Notes**: your own note on the room, for what happened here, one line until you click into it. It
   is kept with the table.
-- At the foot: who is here and how they are tied to each other, folded, and where the room leads.
+- At the foot, folded: who is here and how they are tied to each other.
 
 ![A card over the Room tab: Nib, with the breadcrumb back to the Goblin Den](images/dm-card.png)
 

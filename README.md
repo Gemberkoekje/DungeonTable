@@ -9,7 +9,7 @@ drawn in [Dungeon Scrawl](https://www.dungeonscrawl.com) and JSON documents that
 people, quests and monsters. This repository ships one small original adventure,
 [The Silent Bell](samples/demo/README.md), which shows every kind of document by example.
 
-![The DM screen on the sample adventure: the map with three rooms revealed, the party token in the Goblin Den and the box that frames what the projector shows, and beside it the Goblin Den on the Room tab, its read-aloud first](docs/images/dm-screen.png)
+![The DM screen on the sample adventure: the map with three rooms revealed and badges saying what is in each room, the party token in the Goblin Den, the box that frames what the projector shows and the Workshop's peek card, and beside it the Goblin Den on the Room tab, its read-aloud first](docs/images/dm-screen.png)
 
 ## What it does
 
@@ -20,7 +20,10 @@ people, quests and monsters. This repository ships one small original adventure,
 - **The room, beside the map.** The map never leaves the screen. The dock beside it shows the room the
   party is in, or any room the DM clicks, with what the DM needs in the order it is read: the read-aloud
   text first, then the checks, the encounter, the DM-only detail and who is there, with links to every
-  person, monster, spell and place it mentions, each opening a card over the dock.
+  person, monster, spell and place it mentions, each opening a card over the dock. On the DM's map,
+  badges beside each room say what is in it (creatures still up, loot, traps, secret ways, a note of
+  yours), resting the pointer on a room shows a card with the rest, and the Room tab lists the rooms
+  around the one on show with the same badges.
 - **The campaign around it:** the level and its factions, the quest log with tickable story beats, the
   party, the NPCs, the backstory, the evening's session prep, the rules, card decks to draw from, and a
   search across all of it and the books the campaign indexes.
