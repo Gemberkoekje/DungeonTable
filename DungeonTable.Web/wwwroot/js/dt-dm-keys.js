@@ -1,8 +1,8 @@
 // Global keyboard shortcuts for the DM screen: Ctrl+1..4 switch the dock (Room / Battle / Campaign /
 // Art), a bare 1-8 picks a map tool (Shift+1-8 keeps a one-click tool up), Esc puts the map back in
-// Look and closes what is open in the dock, "\" widens the dock, Tab opens and closes the dock on a
-// screen too narrow to show it beside the map, and a bare letter (n / p / r / h) goes to whichever
-// dock tab is on show - the turn order on Battle, the art tray on Art.
+// Look and closes what is open in the dock, "\" swaps the dock between narrow and wide, Tab opens and
+// closes the dock on a screen too narrow to show it beside the map, and a bare letter (n / p / r / h)
+// goes to whichever dock tab is on show - the turn order on Battle, the art tray on Art.
 // A single handler is registered at a time (there is one DM view); attaching again re-registers
 // cleanly, and detaching removes the listener on teardown.
 //
@@ -77,8 +77,9 @@ window.dtDmKeys = (function () {
 
                 if (e.shiftKey) { return; }
                 if (e.key === '\\') {
+                    // The dock's width is the browser's own business (dt-dock.js), not the circuit's.
                     e.preventDefault();
-                    dotnet.invokeMethodAsync('DmKey', 'bare:wide');
+                    if (window.dtDock) { window.dtDock.flip(); }
                 } else if (e.key === 'n' || e.key === 'p' || e.key === 'r' || e.key === 'h') {
                     e.preventDefault();
                     dotnet.invokeMethodAsync('DmKey', 'bare:' + e.key);

@@ -233,6 +233,36 @@
     public Task CenterOnAsync(double worldX, double worldY, double zoomFactor) =>
         canvas is null ? Task.CompletedTask : canvas.CenterOnAsync(worldX, worldY, zoomFactor);
 
+    /// <summary>
+    /// Moves the map's view as the dock changes layout (see <see cref="MapViewMemory"/>): keeps the view
+    /// of the layout being left, then brings back the new layout's view or frames the fight's room. Must
+    /// be called after the render that changed the layout, so the map is measured at its new size.
+    /// </summary>
+    /// <param name="change">What to keep, what to bring back, and whether to frame the fight.</param>
+    /// <param name="fight">The fight's room and its surroundings, in world units, for framing.</param>
+    /// <returns>A task that completes once the view has moved.</returns>
+    public async Task ChangeViewAsync(MapViewChange change, MapBounds fight)
+    {
+        if (canvas is null)
+        {
+            return;
+        }
+
+        if (change.SaveAs != DockLayout.None)
+        {
+            await canvas.SaveViewAsync(change.SaveAs.ToString());
+        }
+
+        if (change.FrameFight)
+        {
+            await canvas.FitAsync(fight);
+        }
+        else if (change.RestoreFrom != DockLayout.None)
+        {
+            await canvas.RestoreViewAsync(change.RestoreFrom.ToString());
+        }
+    }
+
     private void Pick(MapTool tool, bool keep)
     {
         selection.Pick(tool, keep);

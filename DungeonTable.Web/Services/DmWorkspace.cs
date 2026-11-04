@@ -28,6 +28,9 @@ public sealed class DmWorkspace
     // The Campaign tab's Search shows at most this many matches per query.
     private const int SearchLimit = 20;
 
+    /// <summary>How many grid cells around a fight's room the battle layout's map shows.</summary>
+    public const int SurroundingCells = 3;
+
     private readonly IContentProjection content;
     private readonly ICrossRefResolver crossRefs;
     private readonly IVectorMapStore vectorMaps;
@@ -645,6 +648,28 @@ public sealed class DmWorkspace
         }
 
         return new MapPoint(bounds.MinX + (bounds.Width / 2), bounds.MinY + (bounds.Height / 2));
+    }
+
+    /// <summary>
+    /// A room and the cells around it, in world units: what the map frames when the dock goes to the
+    /// fight, so the doors, pillars and markers next to the fight are in view too. Empty when the room
+    /// has no region on the map on show, so there is nothing to frame.
+    /// </summary>
+    /// <param name="areaNode">The room's node id.</param>
+    /// <returns>The room's regions' bounds, padded by <see cref="SurroundingCells"/> grid cells, or an empty rectangle.</returns>
+    public MapBounds AreaSurroundings(string areaNode)
+    {
+        if (!MapLoaded || string.IsNullOrEmpty(areaNode))
+        {
+            return default;
+        }
+
+        MapBounds bounds = MapFraming.Bounds(regions
+            .Where(region => string.Equals(region.GraphNodeId, areaNode, StringComparison.Ordinal))
+            .ToArray());
+        return bounds.Width <= 0 && bounds.Height <= 0
+            ? default
+            : MapFraming.Pad(bounds, SurroundingCells * UnitSize);
     }
 
     /// <summary>

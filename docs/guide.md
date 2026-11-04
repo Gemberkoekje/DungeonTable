@@ -50,9 +50,10 @@ whichever tab is up. The bar across the top is in view all the time:
 
 **The dock's width is yours.** Drag the line between the map and the dock to make it wider or
 narrower; the screen remembers it in this browser. Double-click the line to go back to the usual width.
-**\\** (or the **⇤** button at the end of the dock's tabs) widens the dock for a long fight and back.
-On a screen narrower than about 1200 pixels, the dock slides over the map instead: **Tab**, or the
-**Dock** button in the bar, brings it out and puts it away.
+**\\** (or the **⇔** button at the end of the dock's tabs) swaps the dock between narrow and wide.
+The **Battle** tab keeps a width of its own, wide unless you change it (see [a fight](#a-fight)); Room,
+Campaign and Art share the other. On a screen narrower than about 1200 pixels, the dock slides over
+the map instead: **Tab**, or the **Dock** button in the bar, brings it out and puts it away.
 
 ### The map and its tools
 
@@ -138,7 +139,7 @@ The tab you leave it on stays put when you look at another room.
 
 ### A fight
 
-![The Battle tab in the wide dock: a fight in the Goblin Den, Nib frightened and his pane open](images/dm-battle.png)
+![The Battle tab: a fight in the Goblin Den, each enemy's saves and attacks on its row, Nib frightened and his pane open, and the map a bird's-eye view of the den](images/dm-battle.png)
 
 **Starting one.** Press **Add all to battle** on the room's encounter, on the Room tab: that starts
 a fight in the room, with the party, and puts in everyone the room lists. **Add** on one line puts in
@@ -162,14 +163,28 @@ or less is marked **bloodied**, and at 0 **down**.
 **Conditions.** **◇** opens the conditions. What you pick shows on the row; click it there to clear
 it. **…** opens the rest: renaming, a note, concentration, and correcting the numbers.
 
+**What an enemy can do, on its row.** Under a monster's name, its row shows its saving throws (the
+ones it is proficient in stand out) and its attacks: the bonus to hit and the damage, average first.
+Hover over an attack for its reach and the book's sentence. Its AC is on each creature's line. So you
+can keep Grask's pane open all fight and still run his two bugbears from the order. Everything
+else about a creature is in its detail pane.
+
 **Groups.** Monsters of one kind share a row and an initiative, as most tables run them, with each
-one's hit points listed under it. **Split** gives each its own row, and **Merge** puts a split group
+one's hit points listed under it. **▾** folds a group to one line, which still shows how many are up
+and their AC. **Split** gives each its own row, and **Merge** puts a split group
 back together. A named creature (Nib, who fights with the goblin's stat block) always has a row of
 his own.
 
 **The detail pane.** Click a creature's name for its full stat block: its attacks as short lines, its
-saves, its spells (click one to read it) and its spell slots. It opens under the order, or beside it
-when the dock is wide (**\\**), which is how a long fight is easiest to run. **Esc** closes it.
+saves, its spells (click one to read it) and its spell slots. It stays open until you close it or open
+another creature's, whatever the turn marker does. **Esc** closes it.
+
+**The fight's layout.** The Battle tab widens the dock by itself, so the order and the detail pane sit
+side by side, each about half of it, and the map becomes a narrow bird's-eye view, framed on the
+fight's room and a few squares around it the first time you open the fight. Move it as you like:
+going back to the room puts your map back the way it was before the fight, and coming back to the
+fight finds the bird's-eye view where you left it. A fight in another room is framed afresh. If you
+drag the dock narrower than about 1,090 pixels, the pane goes under the order instead.
 
 **Adding and ending.** Below the order you can add a party member, an ally, or a one-off creature
 with just a name. **Edit party** and **Edit allies** change the rosters. **End battle** clears the

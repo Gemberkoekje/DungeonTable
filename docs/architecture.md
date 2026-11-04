@@ -185,12 +185,23 @@ whichever dock tab is up.
 - **Every dock tab stays mounted**, stacked and hidden with CSS, so a tab keeps its scroll position,
   half-typed boxes and the fight's open pane. The map pane is mounted once and never hidden, because
   the canvas keeps its pan and zoom in JS.
-- **The dock's width is the DM's**: they drag the divider, and `dt-dock.js` keeps the width per
-  browser in local storage (guarded, since that can be refused); it is not table state. `\` widens the
-  dock for a long fight. The fight's detail pane sits beside the order only when the dock has about
-  68rem, since a row stays two lines only while the order has about 36rem; in the default dock it
-  goes under the order. Below 1200 px wide the dock is a drawer over the map, toggled with Tab: a
-  fallback, since the table runs on a 1920×1080 laptop.
+- **The fight has a layout of its own** (`DockLayout`). In a fight the DM keeps the map still and
+  reads stat blocks all the time, so the Battle tab gives the dock about 72 % of the width and the
+  reading tabs about 40 %. The fight's detail pane sits beside the order only when the dock has about
+  68rem: a row stays two lines only while the order has about 36rem, and whatever is left goes to
+  the pane, split evenly, because the pane is what the DM reads. (The redesign's plan assumed both
+  would fit in the reading dock; measured, each row wrapped to five lines.)
+- **Each layout keeps its own dock width and its own view of the map.** The DM drags the divider, and
+  `dt-dock.js` keeps a width per layout in local storage (guarded, since that can be refused), following
+  the shell's `layout-battle` class; it is not table state. `\` swaps the dock between the two default
+  widths. `MapViewMemory` decides what the map does on a change of layout: keep the view of the layout
+  being left, then bring back the other's, except that the first time the DM opens a fight the map
+  frames the fight's room and a few cells around it (`DmWorkspace.AreaSurroundings`), a bird's-eye
+  reminder of what is around the fight. The pan and zoom are a transform on the canvas's wrapper, which
+  does not depend on its size, so a view kept at one width comes back exactly at that width. The move
+  happens after the render that changed the layout, so the map is measured at its new size.
+- **Below 1200 px wide the dock is a drawer** over the map, toggled with Tab: a fallback, since the
+  table runs on a 1920×1080 laptop.
 
 ## Maps and what the players see
 
@@ -304,6 +315,10 @@ design:
 
 - **A row is read at a glance**: name, hit points, state, AC, passive Perception, a damage box.
   Everything that is typed rather than glanced at hides behind the row's "..." toggle.
+- **An enemy's row carries what its turn needs**: its six saves and its attacks (`EnemyGlance`), read
+  from the live stat block. The DM keeps one creature's pane open all fight (the one with the most to
+  read) and runs the rest from the order, so the pane never follows the turn marker: it changes only when
+  the DM opens another. The pane and the row word an attack the same way (`AttackText`).
 - **Nothing demands a roll.** A room's creature count ("4", or a dice expression such as "1d4+1") is
   a pre-fill the DM can change.
 - **The list never re-sorts under the cursor.** Enter and Tab walk the initiative column, and the order

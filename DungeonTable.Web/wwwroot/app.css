@@ -1810,21 +1810,28 @@ code {
     cursor: pointer;
 }
 
-/* The map on the left, the divider, the dock on the right. The dock's width is the DM's to drag
-   (dt-dock.js sets --dock-width); until they do, the map gets about 60 % of the window, which on the
-   table's 1920-pixel laptop leaves the dock about 770 px, wide enough for the fight's order and its
-   detail pane side by side. */
+/* The map on the left, the divider, the dock on the right. Each layout has its own default width:
+   the reading tabs leave the map about 60 % of the window (on the table's 1920-pixel laptop, a dock of
+   about 770 px); the Battle tab gives the dock about 72 %, so the order and a creature's detail pane
+   fit side by side, and the map is a bird's-eye strip of about 530 px. The DM drags either, and
+   dt-dock.js keeps each layout's width as --dock-width, in pixels or as one of these two names. The
+   percentages resolve against .dm-body, where the custom properties are used. */
+.dm-shell {
+    --dock-narrow: clamp(24rem, 40%, 56rem);
+    --dock-wide: min(72%, 110rem);
+    --dock-default: var(--dock-narrow);
+}
+
+.dm-shell.layout-battle {
+    --dock-default: var(--dock-wide);
+}
+
 .dm-body {
     position: relative;
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 0.6rem var(--dock-width, clamp(24rem, 40%, 56rem));
-}
-
-/* The wide dock, for a long fight: most of the width, with the map still in view beside it. */
-.dm-shell.dock-wide .dm-body {
-    grid-template-columns: minmax(0, 1fr) 0.6rem min(72%, 110rem);
+    grid-template-columns: minmax(0, 1fr) 0.6rem var(--dock-width, var(--dock-default));
 }
 
 .dm-map {
@@ -1860,10 +1867,6 @@ code {
 
 .dm-divider:focus-visible {
     outline: none;
-}
-
-.dm-shell.dock-wide .dm-divider {
-    pointer-events: none;
 }
 
 .dm-shell.resizing {
@@ -1924,7 +1927,7 @@ code {
     opacity: 0.7;
 }
 
-.dock-wide-btn {
+.dock-swap-btn {
     align-self: center;
     margin-left: auto;
     padding: 0.15rem 0.5rem;
@@ -1936,8 +1939,7 @@ code {
     cursor: pointer;
 }
 
-.dock-wide-btn:hover,
-.dock-wide-btn.on {
+.dock-swap-btn:hover {
     border-color: var(--accent);
     color: var(--accent);
 }
@@ -1980,12 +1982,18 @@ code {
     margin-bottom: 0.6rem;
 }
 
-/* The fight in the dock: the detail pane sits beside the order only while the dock is wide enough
-   for both, and under the order otherwise, so nothing moves under the cursor that opened it. A row
-   stays two lines, read at a glance, only while the order has about 36rem; the pane takes up to
-   28rem, so side by side needs a dock of about 68rem: the wide dock (\) on the table's laptop, not
-   the default one. Measured, not guessed: at the default 760 px each row wrapped to five lines.
-   The selectors carry .dock-panel so that they outrank the Battle tab's own rules further down. */
+/* The fight in the dock: the order and the detail pane side by side, sharing the width evenly. A row
+   stays two lines, read at a glance, while the order has about 36rem; whatever the dock has beyond
+   that goes to the pane, because the pane (what the creature can do, what it resists) is what the DM
+   reads all fight. That needs a dock of about 68rem, which the Battle tab's own wide layout gives on
+   the table's laptop. In a dock narrower than that the pane goes under the order, so nothing moves
+   under the cursor that opened it. Measured, not guessed: at 760 px side by side, each row wrapped to
+   five lines. The selectors carry .dock-panel so that they outrank the Battle tab's own rules further
+   down. */
+.dock-panel .battle-layout.with-detail {
+    grid-template-columns: minmax(36rem, 1fr) minmax(28rem, 1fr);
+}
+
 .dock-panel .battle-detail {
     top: 0;
     max-height: calc(100dvh - 9rem);
@@ -2005,13 +2013,12 @@ code {
 /* Below about 1200 px the dock does not fit beside the map, so it slides over it as a drawer: Tab or
    the bar's Dock button brings it out. A fallback for a small screen, not the way the table runs. */
 @media (max-width: 1199px) {
-    .dm-body,
-    .dm-shell.dock-wide .dm-body {
+    .dm-body {
         grid-template-columns: minmax(0, 1fr);
     }
 
     .dm-divider,
-    .dock-wide-btn {
+    .dock-swap-btn {
         display: none;
     }
 
@@ -2774,6 +2781,51 @@ input.battle-init,
     margin: 0.35rem 0 0 2.8rem;
     font-size: 0.8rem;
     color: var(--muted);
+}
+
+/* An enemy's saves and attacks on its own row: what the DM reads on its turn without opening its
+   pane, so another creature's pane can stay open. Small and muted, under the row's name, with the
+   proficient saves and each attack's name standing out. */
+.enemy-glance {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2rem 1rem;
+    margin: 0.3rem 0 0 2.8rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+.glance-saves {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.5rem;
+}
+
+.glance-label {
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.glance-save.proficient {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.glance-multiattack {
+    max-width: 24rem;
+    overflow: hidden;
+    font-style: italic;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.glance-attack {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    white-space: nowrap;
 }
 
 .battle-members {

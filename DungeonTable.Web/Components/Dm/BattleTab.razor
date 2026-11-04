@@ -4,6 +4,8 @@
 @inject IPartyRoster PartyRoster
 @inject IAllyRoster AllyRoster
 @inject IJSRuntime JS
+@inject IStatLibrary Stats
+@inject LiveContent Live
 @*
     The DM screen's Battle tab: the initiative order at a glance, and the hit points that change on
     every round.
@@ -141,6 +143,13 @@
                                     @onclick="() => Fight.RemoveEntry(row.Id)">&times;</button>
                         </div>
 
+                        @* An enemy's saves and attacks on its own row, so the DM can keep another
+                           creature's pane open and still run this one from the order. *@
+                        @if (row.Kind == CombatantKind.Monster)
+                        {
+                            <EnemyGlance Block="BlockOf(row)" />
+                        }
+
                         @if (!IsCollapsed(row))
                         {
                             <ul class="battle-members">
@@ -272,6 +281,7 @@
     {
         base.OnInitialized();
         Fight.Changed += OnBattleChanged;
+        Live.Changed += OnContentChanged;
         Snapshot = Fight.Snapshot();
         LoadRosters();
     }
@@ -283,6 +293,7 @@
         if (disposing)
         {
             Fight.Changed -= OnBattleChanged;
+            Live.Changed -= OnContentChanged;
         }
 
         base.Dispose(disposing);
@@ -519,11 +530,31 @@
     }
 
     // What a folded group still has to say: how many of it are still standing.
+    // The row's stat block, read from the live content on every render, so an edited block shows at
+    // once; the fight's own numbers (hit points, AC) were copied when the creatures were added.
+    private StatBlock BlockOf(InitiativeEntry row)
+    {
+        var found = Stats.GetMonster(row.StatBlockNodeId);
+        return found.IsValid ? found.Value : new StatBlock();
+    }
+
+    // A stat block changed on disk: the enemies' rows read their saves and attacks again.
+    private void OnContentChanged(ContentChanges changes) => InvokeAsync(StateHasChanged);
+
     private string FoldedSummary(InitiativeEntry row)
     {
         List<Combatant> members = Members(row).ToList();
         int up = members.Count(member => !member.Down);
-        return $"{up} of {members.Count} still up";
+
+        // The creatures' own lines carry their AC; folded, the row has to.
+        int[] armour = members.Select(member => member.ArmourClass).Where(ac => ac > 0).Distinct().Order().ToArray();
+        string ac = armour.Length switch
+        {
+            0 => string.Empty,
+            1 => $" · AC {armour[0]}",
+            _ => $" · AC {armour[0]}–{armour[^1]}",
+        };
+        return $"{up} of {members.Count} still up{ac}";
     }
 
     // ---- Starting, ending, adding -----------------------------------------------------------

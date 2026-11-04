@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject DmWorkspace Workspace
 @inject SessionState Session
+@inject BattleState Fight
 @inject TablePersistence Persistence
 @inject LiveContent Live
 @inject IJSRuntime JS
@@ -20,13 +21,17 @@
     keeps its scroll position, its half-typed boxes and the fight's open pane when the DM looks
     elsewhere and comes back. It looks like an accident otherwise; it is not.
 
-    The dock's width is the DM's to drag (dt-dock.js keeps it per browser); "\" widens it for a long
-    fight. Below 1200 px wide the dock slides over the map as a drawer, toggled with Tab.
+    The Battle tab has a layout of its own (DockLayout): a wide dock, so the order and a creature's
+    detail pane fit side by side, and the map a narrow bird's-eye strip framed on the fight's room
+    (MapViewMemory). The reading tabs share the other. Each layout keeps its own dock width, which the DM
+    drags (dt-dock.js keeps it per browser, following the shell's layout class), and its own pan and zoom;
+    "\" swaps the dock between narrow and wide. Below 1200 px wide the dock slides over the map as a
+    drawer, toggled with Tab.
 *@
 
 <PageTitle>DM view &mdash; DungeonTable</PageTitle>
 
-<div class="dm-shell @(wideDock ? "dock-wide" : string.Empty) @(drawerOpen ? "drawer-open" : string.Empty)" @ref="shellRef">
+<div class="dm-shell @LayoutClass @(drawerOpen ? "drawer-open" : string.Empty)" @ref="shellRef">
     @* The bar belongs to the shell: the DM must be able to see and reframe what the projector shows
        whatever the dock is showing. *@
     <div class="dm-player-bar">
@@ -105,10 +110,9 @@
                     </button>
                 }
 
-                <button type="button" class="dock-wide-btn @(wideDock ? "on" : string.Empty)"
-                        aria-pressed="@(wideDock ? "true" : "false")"
-                        title="@(wideDock ? "Back to the dock's own width (\\)" : "Widen the dock, for a long fight (\\)")"
-                        @onclick="ToggleWide">@(wideDock ? "\u21E5" : "\u21E4")</button>
+                @* No @onclick: the dock's width is the browser's own (dt-dock.js listens for this button). *@
+                <button type="button" class="dock-swap-btn"
+                        title="Swap the dock between narrow and wide (\\)">&#x21D4;</button>
             </nav>
 
             <div class="dock-panels">
@@ -160,8 +164,13 @@
     private ArtTab artTab;
     private ElementReference shellRef;
     private string selectedMapId = string.Empty;
-    private bool wideDock;
     private bool drawerOpen;
+
+    // The map's pan and zoom per layout, and when the fight's room is framed. A change of layout is
+    // carried out after the render that made it, so the map is measured at its new width.
+    private readonly MapViewMemory views = new MapViewMemory();
+    private MapViewChange pendingView = MapViewChange.None;
+    private MapBounds pendingFight;
 
     private DotNetObjectReference<DmView> selfRef;
 
@@ -190,17 +199,29 @@
         await Workspace.LoadMapAsync(selectedMapId, CancellationToken.None);
     }
 
-    private void SetTab(DockTab tab) => activeTab = tab;
+    private void SetTab(DockTab tab)
+    {
+        string fightArea = Fight.IsActive ? Fight.AreaNodeId : string.Empty;
+        MapBounds fight = Workspace.AreaSurroundings(fightArea);
+        MapViewChange change = views.Change(activeTab, tab, fightArea, fight.Width > 0 && fight.Height > 0);
+        if (change != MapViewChange.None)
+        {
+            pendingView = change;
+            pendingFight = fight;
+        }
+
+        activeTab = tab;
+    }
+
+    private string LayoutClass => MapViewMemory.LayoutOf(activeTab) == DockLayout.Battle ? "layout-battle" : "layout-reading";
 
     // The map looked at a room, or a link led to one: the room is read on the Room tab. On a narrow
     // screen the dock is a drawer, so it opens to show it.
     private void ShowRoom()
     {
-        activeTab = DockTab.Room;
+        SetTab(DockTab.Room);
         drawerOpen = true;
     }
-
-    private void ToggleWide() => wideDock = !wideDock;
 
     private void ToggleDrawer() => drawerOpen = !drawerOpen;
 
@@ -304,6 +325,7 @@
     {
         if (!firstRender)
         {
+            await ChangeMapViewAsync();
             return;
         }
 
@@ -323,6 +345,30 @@
         catch (JSDisconnectedException)
         {
             // The circuit dropped before interop could run; nothing to register.
+        }
+        catch (OperationCanceledException)
+        {
+            // The render was cancelled during teardown.
+        }
+    }
+
+    // Carry out a change of layout on the map's pan and zoom, now that the render has resized the map.
+    private async Task ChangeMapViewAsync()
+    {
+        if (pendingView == MapViewChange.None || mapPane is null)
+        {
+            return;
+        }
+
+        MapViewChange change = pendingView;
+        pendingView = MapViewChange.None;
+        try
+        {
+            await mapPane.ChangeViewAsync(change, pendingFight);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit dropped; there is no map left to move.
         }
         catch (OperationCanceledException)
         {
@@ -352,8 +398,7 @@
     /// Invoked from JS for the DM screen's shortcuts: <c>"tab:N"</c> (Ctrl+1..4) switches the dock,
     /// <c>"tool:N"</c> (a bare 1..8) picks a map tool and <c>"tool:N:keep"</c> (Shift+1..8) keeps a
     /// one-click tool up, <c>"bare:esc"</c> puts the map back in Look and closes what is open in the
-    /// dock, <c>"bare:wide"</c> (\) and <c>"bare:drawer"</c> (Tab, on a narrow screen) change the
-    /// dock, and <c>"bare:n|p|r|h"</c> go to whichever dock tab is on show — the turn order on Battle,
+    /// dock, <c>"bare:drawer"</c> (Tab, on a narrow screen) opens and closes the dock, and <c>"bare:n|p|r|h"</c> go to whichever dock tab is on show — the turn order on Battle,
     /// the art tray on Art. The bare-letter shortcuts only reach a tab that is actually up, which is
     /// why the routing lives here and not in the key handler.
     /// </summary>
@@ -380,10 +425,6 @@
         else if (string.Equals(key, "bare:esc", StringComparison.Ordinal))
         {
             Escape();
-        }
-        else if (string.Equals(key, "bare:wide", StringComparison.Ordinal))
-        {
-            ToggleWide();
         }
         else if (string.Equals(key, "bare:drawer", StringComparison.Ordinal))
         {

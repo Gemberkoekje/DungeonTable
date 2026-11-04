@@ -610,6 +610,30 @@ public sealed class DmWorkspaceTests
     }
 
     [Fact]
+    public async Task A_fights_surroundings_are_its_room_and_a_few_cells_around_it()
+    {
+        Harness harness = await Harness.Started();
+
+        // The landing is two regions, (0,0)-(40,40) and (40,0)-(60,20); a cell is 10 units.
+        MapBounds around = harness.Workspace.AreaSurroundings(Landing);
+
+        double pad = DmWorkspace.SurroundingCells * 10;
+        Assert.Equal(new MapBounds(-pad, -pad, 60 + pad, 40 + pad), around);
+    }
+
+    [Theory]
+    [InlineData("data_dossiers_level_1_area_9")]
+    [InlineData("")]
+    public async Task A_room_with_no_region_here_has_no_surroundings_to_frame(string area)
+    {
+        Harness harness = await Harness.Started();
+
+        MapBounds around = harness.Workspace.AreaSurroundings(area);
+
+        Assert.True(around.Width <= 0 && around.Height <= 0);
+    }
+
+    [Fact]
     public async Task Clicking_a_linked_region_navigates_to_its_briefing()
     {
         Harness harness = await Harness.Started();
