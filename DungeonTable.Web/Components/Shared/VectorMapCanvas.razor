@@ -75,16 +75,20 @@
     .dt-edge-e { right: -4px; top: 10px; bottom: 10px; width: 9px; }
 
     /* The party token (dt-party.js): a fixed size on screen at every zoom, above the player-view box;
-       its vision ring scales with the map and never takes a click. */
+       its vision ring scales with the map and never takes a click. Each sits on a compositing layer of
+       its own and is moved by a transform from the box's corner, never by left and top: moving the token
+       must not repaint the layer the map is drawn in, which on a large level is a huge SVG, and a drag
+       moves it many times a second. */
     .dt-party {
-        position: absolute; z-index: 2; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+        position: absolute; left: 0; top: 0; z-index: 2; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+        will-change: transform;
         box-sizing: border-box; border-radius: 50%; cursor: grab; touch-action: none;
         background: radial-gradient(circle, #1f6feb 0 38%, #ffffff 39% 52%, #1f6feb 53% 100%);
         border: 2px solid #ffffff; box-shadow: 0 0 0 1px #0b3d91, 0 1px 4px rgba(0, 0, 0, 0.45);
     }
     .dt-party.dragging { cursor: grabbing; }
     .dt-party-ring {
-        position: absolute; z-index: 1; box-sizing: border-box; border-radius: 50%; pointer-events: none;
+        position: absolute; left: 0; top: 0; z-index: 1; will-change: transform; box-sizing: border-box; border-radius: 50%; pointer-events: none;
         border: 2px dashed rgba(31, 111, 235, 0.55); background: rgba(31, 111, 235, 0.06);
     }
 </style>

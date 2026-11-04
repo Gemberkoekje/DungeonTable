@@ -6,6 +6,11 @@
 // the SVG's screen matrix, so it keeps a fixed size on screen at every zoom while the ring scales with
 // the map. The projector never has one: only the DM's canvas attaches it.
 //
+// The token and the ring are moved with a transform, on layers of their own (the canvas's CSS), never
+// with left and top. Placed by left and top they were painted in the same layer as the map, so every
+// move repainted the map under them, and at 120 ft the ring covers much of it: on a large level a drag
+// kept the DM screen busy most of the time and the token lagged the pointer.
+//
 // A drag reports itself once per square entered (and once at the end), not once per pointer move: the
 // party sees from squares, and a report per frame would make the server lift from the same square
 // over and over. Reports go one at a time; while one is on its way, the latest position waits, and the
@@ -149,14 +154,12 @@ window.dtParty = (function () {
                 return;
             }
             token.style.display = '';
-            token.style.left = screen.x + 'px';
-            token.style.top = screen.y + 'px';
+            token.style.transform = 'translate(' + screen.x + 'px,' + screen.y + 'px)';
             token.style.pointerEvents = g.draggable ? 'auto' : 'none';
             const r = g.radius * screen.scale;
             if (r > 0) {
                 ring.style.display = '';
-                ring.style.left = (screen.x - r) + 'px';
-                ring.style.top = (screen.y - r) + 'px';
+                ring.style.transform = 'translate(' + (screen.x - r) + 'px,' + (screen.y - r) + 'px)';
                 ring.style.width = (2 * r) + 'px';
                 ring.style.height = (2 * r) + 'px';
             } else {
