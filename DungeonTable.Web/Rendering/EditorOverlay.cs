@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using DungeonTable.Core.Maps;
 using DungeonTable.Core.Session;
+using DungeonTable.Web.Services;
 
 namespace DungeonTable.Web.Rendering;
 
@@ -66,6 +67,12 @@ public sealed class EditorOverlay
     /// to the pointer ends where the click would put that corner.
     /// </summary>
     public bool DraftSnaps { get; init; }
+
+    /// <summary>
+    /// The badges beside the rooms' labels, and the rooms greyed because they are cleared. The DM's map
+    /// only, and only while the DM has them switched on; the Room Editor and the projector draw none.
+    /// </summary>
+    public MapBadges Badges { get; init; } = MapBadges.None;
 
     /// <summary>Glyph and stroke scale in world units (typically the grid cell size).</summary>
     public double UnitSize { get; init; } = 1;

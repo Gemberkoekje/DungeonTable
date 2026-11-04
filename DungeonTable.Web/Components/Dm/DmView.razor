@@ -416,7 +416,8 @@
     /// <c>"undo"</c> (Ctrl+Z) takes back the party's last move,
     /// <c>"tool:N"</c> (a bare 1..8) picks a map tool and <c>"tool:N:keep"</c> (Shift+1..8) keeps a
     /// one-click tool up, <c>"bare:esc"</c> puts the map back in Look and closes what is open in the
-    /// dock, <c>"bare:drawer"</c> (Tab, on a narrow screen) opens and closes the dock, and <c>"bare:n|p|r|h"</c> go to whichever dock tab is on show — the turn order on Battle,
+    /// dock, <c>"bare:drawer"</c> (Tab, on a narrow screen) opens and closes the dock, <c>"bare:c"</c>
+    /// switches the badges on the map off and on, and <c>"bare:n|p|r|h"</c> go to whichever dock tab is on show — the turn order on Battle,
     /// the art tray on Art. The bare-letter shortcuts only reach a tab that is actually up, which is
     /// why the routing lives here and not in the key handler.
     /// </summary>
@@ -451,6 +452,11 @@
         else if (string.Equals(key, "bare:drawer", StringComparison.Ordinal))
         {
             ToggleDrawer();
+        }
+        else if (string.Equals(key, "bare:c", StringComparison.Ordinal))
+        {
+            // The badges belong to the map, whichever dock tab is on show.
+            mapPane?.ToggleBadges();
         }
         else if (key.StartsWith("bare:", StringComparison.Ordinal))
         {

@@ -55,6 +55,10 @@ public sealed class DmWorkspace
     // room may be split into several regions across corridors, so this is a list).
     private readonly List<string> roomRegionIds = new List<string>();
 
+    // What is in each room, by its node id, worked out the first time a room is asked about and kept
+    // until the content or the map's notes change (see GlanceOf).
+    private readonly Dictionary<string, RoomGlance> glances = new Dictionary<string, RoomGlance>(StringComparer.Ordinal);
+
     // The area the party token stood in when this workspace last followed it, so it can tell when the
     // party has walked into another one.
     private string followedPartyArea = string.Empty;
@@ -352,6 +356,7 @@ public sealed class DmWorkspace
             return;
         }
 
+        glances.Clear();
         if (changes.HasFlag(ContentChanges.Documents))
         {
             LoadCampaignDocuments();
@@ -846,6 +851,30 @@ public sealed class DmWorkspace
         content.SearchNodes(query, SearchLimit);
 
     /// <summary>
+    /// What is in a room at a glance: its creatures, loot, checks, traps, secrets and ways out, for the
+    /// badges on the map, the peek card and the Room tab's Nearby list. Worked out the first time it is
+    /// asked for and kept until the content changes or another map is loaded, since the traps and
+    /// secret doors are read from the map on show; a room on another floor gets the content's part only.
+    /// </summary>
+    /// <param name="areaNode">The area's node id.</param>
+    /// <returns>The room's glance; <see cref="RoomGlance.None"/> when no dossier is authored for it.</returns>
+    public RoomGlance GlanceOf(string areaNode)
+    {
+        if (string.IsNullOrEmpty(areaNode))
+        {
+            return RoomGlance.None;
+        }
+
+        if (!glances.TryGetValue(areaNode, out RoomGlance glance))
+        {
+            glance = BuildGlance(areaNode);
+            glances[areaNode] = glance;
+        }
+
+        return glance;
+    }
+
+    /// <summary>
     /// True when an area node id has an authored dossier. The quest log asks this of each beat's
     /// destination: every front-matter destination sits on a level nobody has authored yet, so the
     /// chip is a muted label today and becomes a live jump on its own once that level lands.
@@ -1012,6 +1041,7 @@ public sealed class DmWorkspace
         doubleDoorIds.Clear();
         defaultOpenDoorIds.Clear();
         concealedObjectIds.Clear();
+        glances.Clear();
         SelectedRegionId = string.Empty;
         RegionNotice = string.Empty;
         AnnotationsWarning = string.Empty;
@@ -1192,6 +1222,28 @@ public sealed class DmWorkspace
         LevelDossier = level.IsValid ? level.Value : new LevelDossier();
 
         Encounter = encounters.For(Briefing);
+    }
+
+    private RoomGlance BuildGlance(string areaNode)
+    {
+        Result<AreaDossier> dossier = dossiers.GetArea(areaNode);
+        if (!dossier.IsValid)
+        {
+            return RoomGlance.None;
+        }
+
+        Result<RoomBriefing> found = content.GetBriefing(areaNode);
+        RoomBriefing briefing = found.IsValid ? found.Value : new RoomBriefing();
+        RoomMarks marks = MapLoaded
+            ? RoomMarks.Within(
+                areaNode,
+                regions.Where(region => string.Equals(region.GraphNodeId, areaNode, StringComparison.Ordinal)).ToArray(),
+                markers,
+                Map.Doors.Where(door => secretDoorIds.Contains(door.Id)).Select(door => door.Bounds).ToArray(),
+                UnitSize)
+            : RoomMarks.None;
+
+        return RoomGlance.From(dossier.Value, briefing, encounters.For(briefing), marks);
     }
 
     private void RecomputeRoomRegions()

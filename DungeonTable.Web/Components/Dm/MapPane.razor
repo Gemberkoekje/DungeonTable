@@ -1,5 +1,6 @@
 @inherits DmTabBase
 @inject PartyMoves Party
+@inject CampaignState Campaign
 @*
     The DM's map, which never leaves the screen: the pannable canvas, a small toolbar over it, the
     active tool's options under the toolbar, and the grid toggle and Clear reveals at its foot.
@@ -13,6 +14,12 @@
     square on the way is revealed (PartyMoves). Opening a door looks again from the token, so the room
     beyond shows without a second action. The Party tool puts the token down somewhere new without a
     walk (the stairs, a teleport), and clicking the token opens its menu: the vision range.
+
+    The map says what is in each room. Beside each label, badges (DM-only): the creatures not yet
+    ticked off, cleared, loot, a trap or hazard, a secret, the DM's note; a cleared room is greyed; c
+    switches them off for a clean map. Resting the pointer on a room shows its peek card (RoomPeek),
+    the same card the Room tab's Nearby list shows. Labels and badges keep one size on screen at every
+    zoom.
 
     The pane is never unmounted, because the canvas keeps its pan and zoom in JS (dt-editor,
     dt-pan-zoom) and re-mounting the SVG would reset the view. The toolbar and the strips are drawn
@@ -42,7 +49,8 @@
                          FogPainted="OnFogPainted" Measured="OnMeasured"
                          ShowPartyToken="true" Party="Session.Party" PartyVisionRadius="Party.VisionRadius"
                          PartyDraggable="PartyDraggable" PartyMoved="OnPartyMoved" PartyClicked="TogglePartyMenu"
-                         MapOverlay="PartyMenu" />
+                         PeekRooms="true" RegionHovered="OnRegionHovered"
+                         MapOverlay="MapOverlay" />
     }
     else
     {
@@ -130,6 +138,11 @@
             Grid
         </label>
 
+        <label class="grid-toggle badges-toggle" title="Badges beside the rooms: creatures still up, cleared, loot, traps, secrets, your notes (c)">
+            <input type="checkbox" @bind="showBadges" />
+            Badges
+        </label>
+
         @if (Session.Ping.IsSet && selection.Active != MapTool.Ping)
         {
             @* Where the DM last pointed stays on their map whatever tool is up, so taking it down
@@ -201,6 +214,12 @@
 
     private VectorMapCanvas canvas;
     private bool showGrid;
+
+    // One DM window's choice, not the table's: the badges are the DM's own reading aid.
+    private bool showBadges = true;
+
+    // The region the pointer rests on, whose peek card is shown; empty for none.
+    private string peekRegionId = string.Empty;
     private int brushCells = 1;
     private bool confirmingClear;
     private bool partyMenuOpen;
@@ -225,6 +244,36 @@
         Pick(Tools[index - 1].Tool, keep);
         StateHasChanged();
     }
+
+    /// <summary>Switches the badges beside the rooms' labels off for a clean map, or back on (the c key).</summary>
+    public void ToggleBadges()
+    {
+        showBadges = !showBadges;
+        StateHasChanged();
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        // The badges read the table's checklist and notes, which live on the campaign: ticking a creature
+        // off in the dock, here or in another DM window, changes the map.
+        Campaign.Changed += OnCampaignChanged;
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Campaign.Changed -= OnCampaignChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void OnCampaignChanged() => InvokeAsync(StateHasChanged);
 
     /// <summary>Puts the map back in Look and closes the party token's menu, as Esc does.</summary>
     public void ResetTool()
@@ -349,6 +398,7 @@
         // while doing something else.
         Measure = selection.Active == MapTool.Measure ? measured : MapMeasurement.None,
         Ping = Session.Ping,
+        Badges = showBadges ? MapBadges.For(Workspace.Regions, Workspace.GlanceOf, Campaign) : MapBadges.None,
         UnitSize = Workspace.UnitSize,
     };
 
@@ -542,6 +592,44 @@
         partyMenuOpen = false;
         Party.Remove();
     }
+
+    // ---- The peek card ------------------------------------------------------------------------
+
+    // The pointer has rested on a region, or left it. The fog brush and measuring are about the map's
+    // shape, not its rooms, so no card shows under them.
+    private void OnRegionHovered(string regionId) =>
+        peekRegionId = selection.Active == MapTool.Fog || selection.Active == MapTool.Measure
+            ? string.Empty
+            : regionId ?? string.Empty;
+
+    // The room whose card is shown: the area of the region the pointer rests on. None for a region that
+    // opens no authored area.
+    private RoomGlance PeekGlance
+    {
+        get
+        {
+            if (peekRegionId.Length == 0)
+            {
+                return RoomGlance.None;
+            }
+
+            Region region = Workspace.Regions.FirstOrDefault(r => string.Equals(r.RegionId, peekRegionId, StringComparison.Ordinal));
+            return region is null ? RoomGlance.None : Workspace.GlanceOf(region.GraphNodeId);
+        }
+    }
+
+    // What is drawn over the map, unmoved by its pan and zoom: the token's menu, and the peek card in the
+    // host dt-peek.js watches and places beside the pointer.
+    private RenderFragment MapOverlay => @<text>
+        @PartyMenu
+        <div class="dt-peek-host">
+            @{ RoomGlance peek = PeekGlance; }
+            @if (!peek.IsEmpty)
+            {
+                <RoomPeek Glance="peek" Badges="RoomBadges.For(peek, Campaign)" />
+            }
+        </div>
+    </text>;
 
     // The token's menu, beside the token (dt-party.js places it): how far the party sees. A range
     // changed here shows straight away what the party sees with it.

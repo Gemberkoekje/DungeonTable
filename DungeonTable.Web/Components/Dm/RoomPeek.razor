@@ -1,0 +1,126 @@
+@* A room at a glance, without opening it: the peek card. Enough to plan with ("the Workshop: Grask,
+   two bugbears and Tam Brask; loot; a secret way to the Vestry"), and a click away from the whole room.
+
+   The DM's map shows it when the pointer rests on a room, and the Room tab's Nearby list when it rests
+   on a neighbouring room's line, so both say the same thing in the same words. A creature ticked off is
+   struck through; one the players must not know of yet is marked. *@
+
+<div class="room-peek@(Badges.Cleared ? " cleared" : string.Empty)" role="note" aria-label="@Glance.Title">
+    <div class="peek-head">
+        @if (Glance.AreaNumber > 0)
+        {
+            <span class="peek-number">Area @Glance.AreaNumber</span>
+        }
+        <strong class="peek-title">@Glance.Title</strong>
+        <RoomBadgeList Badges="Badges" />
+    </div>
+
+    @if (Glance.Creatures.Count > 0)
+    {
+        <div class="peek-line peek-creatures">
+            <span class="peek-key">Here</span>
+            <span class="peek-text">
+                @for (int i = 0; i < Glance.Creatures.Count; i++)
+                {
+                    EncounterMonster creature = Glance.Creatures[i];
+                    if (i > 0)
+                    {
+                        <text>, </text>
+                    }
+                    <span class="@CreatureClass(creature)" title="@CreatureTitle(creature)">@CreatureTally.Name(creature)</span>
+                }
+            </span>
+        </div>
+    }
+    else
+    {
+        <div class="peek-line peek-creatures"><span class="peek-key">Here</span><span class="peek-text muted">nobody listed</span></div>
+    }
+
+    @if (Glance.Loot.Count > 0)
+    {
+        <div class="peek-line peek-loot"><span class="peek-key">Loot</span><span class="peek-text">@string.Join(" · ", Glance.Loot)</span></div>
+    }
+
+    @if (Glance.Checks.Count > 0)
+    {
+        <div class="peek-line peek-checks"><span class="peek-key">Checks</span><span class="peek-text">@string.Join(" · ", Glance.Checks.Select(SkillCheckText.Pill))</span></div>
+    }
+
+    @if (Glance.Hazards.Count > 0)
+    {
+        <div class="peek-line peek-hazards"><span class="peek-key">Danger</span><span class="peek-text">@string.Join(" · ", Glance.Hazards)</span></div>
+    }
+
+    @if (Glance.Secrets.Count > 0)
+    {
+        <div class="peek-line peek-secrets secret"><span class="peek-key">Secret</span><span class="peek-text">@string.Join(" · ", Glance.Secrets)</span></div>
+    }
+
+    @if (Glance.Exits.Count > 0)
+    {
+        <div class="peek-line peek-exits">
+            <span class="peek-key">Leads to</span>
+            <span class="peek-text">
+                @for (int i = 0; i < Glance.Exits.Count; i++)
+                {
+                    ConnectionEntry exit = Glance.Exits[i];
+                    if (i > 0)
+                    {
+                        <text> · </text>
+                    }
+                    <span class="@(exit.Secret ? "secret" : null)">@exit.Label@(exit.Secret ? " (secret)" : string.Empty)</span>
+                }
+            </span>
+        </div>
+    }
+
+    @if (Badges.Note.Length > 0)
+    {
+        <div class="peek-line peek-note"><span class="peek-key">Your note</span><span class="peek-text">@NoteLine</span></div>
+    }
+</div>
+
+@code {
+    // A note is shown up to this many characters on the card; the Room tab has the rest.
+    private const int NoteLength = 140;
+
+    /// <summary>What is in the room.</summary>
+    [Parameter]
+    public RoomGlance Glance { get; set; } = RoomGlance.None;
+
+    /// <summary>The room's badges as they stand now, for which creatures are still up and the DM's note.</summary>
+    [Parameter]
+    public RoomBadges Badges { get; set; } = RoomBadges.None;
+
+    private bool StillUp(EncounterMonster creature) =>
+        Badges.StillUp.Any(up => string.Equals(up.NodeId, creature.NodeId, StringComparison.Ordinal));
+
+    private string CreatureClass(EncounterMonster creature)
+    {
+        string done = StillUp(creature) ? string.Empty : "peek-done";
+        string secret = creature.Secret ? "secret" : string.Empty;
+        string classes = (done + " " + secret).Trim();
+        return classes.Length > 0 ? classes : null;
+    }
+
+    private string CreatureTitle(EncounterMonster creature)
+    {
+        if (!StillUp(creature))
+        {
+            return "Ticked off";
+        }
+
+        return creature.Secret ? "DM only: the players don't know this is here" : null;
+    }
+
+    // The note's first line, cut short on the card.
+    private string NoteLine
+    {
+        get
+        {
+            string first = Badges.Note.Split('\n')[0].Trim();
+            return first.Length <= NoteLength ? first : first[..NoteLength].TrimEnd() + "…";
+        }
+    }
+}

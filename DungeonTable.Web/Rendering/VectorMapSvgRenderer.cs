@@ -7,6 +7,7 @@ using DungeonTable.Core.Briefing;
 using DungeonTable.Core.Maps;
 using DungeonTable.Core.Maps.Vector;
 using DungeonTable.Core.Session;
+using DungeonTable.Web.Services;
 
 namespace DungeonTable.Web.Rendering;
 
@@ -38,6 +39,14 @@ public static class VectorMapSvgRenderer
     // the blue fog tint at once, so each is a saturated hue none of those three uses.
     private const string PingColour = "#e0483c";
     private const string MeasureColour = "#f5c542";
+
+    // A cleared room on the DM's map: greyed, so what is still to do stands out.
+    private const string ClearedStroke = "#8a8a8a";
+    private const string ClearedFill = "rgba(110,110,110,0.30)";
+
+    // How big a room's label is on screen, in pixels, at every zoom (see AppendRegionLabel). The canvas's
+    // CSS (VectorMapCanvas) holds the same number.
+    private const double LabelPx = 14;
 
     // The Room Editor's outline in progress, in the orange its rectangle preview (dt-editor.js) uses.
     private const string DraftColour = "#e67e22";
@@ -1545,7 +1554,12 @@ public static class VectorMapSvgRenderer
     private static void AppendEditorOverlay(StringBuilder svg, EditorOverlay overlay)
     {
         double unit = overlay.UnitSize > 0 ? overlay.UnitSize : 1;
-        svg.Append("<g class=\"editor-overlay\">");
+
+        // --dt-u0 is world units per screen pixel until the browser says what it really is: the canvas's
+        // pan and zoom script keeps --dt-u on the map's wrapper, and the labels' CSS sizes them from it
+        // (see LabelPx). This fallback draws a label at the size it always had, in map units, for the
+        // first paint and wherever the SVG goes without the canvas.
+        svg.Append("<g class=\"editor-overlay\" style=\"--dt-u0:").Append(N(0.85 * unit / LabelPx)).Append("\">");
         AppendOverlayRegions(svg, overlay, unit);
         AppendOverlayObjects(svg, overlay, unit);
         AppendOverlayMarkers(svg, overlay, unit);
@@ -1661,11 +1675,18 @@ public static class VectorMapSvgRenderer
 
             bool selected = string.Equals(region.RegionId, overlay.SelectedRegionId, StringComparison.Ordinal);
             bool linked = region.GraphNodeId.Length > 0;
-            string stroke = RegionStroke(selected, linked);
-            string fill = RegionFill(selected, linked);
+            bool cleared = !selected && overlay.Badges.ClearedRegionIds.Contains(region.RegionId);
+            string stroke = cleared ? ClearedStroke : RegionStroke(selected, linked);
+            string fill = cleared ? ClearedFill : RegionFill(selected, linked);
             double strokeWidth = (selected ? 0.24 : 0.13) * unit;
 
-            svg.Append("<g data-region-id=\"").Append(AttributeEscape(region.RegionId)).Append("\">");
+            svg.Append("<g data-region-id=\"").Append(AttributeEscape(region.RegionId)).Append('"');
+            if (cleared)
+            {
+                svg.Append(" class=\"dt-cleared\"");
+            }
+
+            svg.Append('>');
             svg.Append("<polygon points=\"").Append(PointsAttribute(region.Polygon))
                 .Append("\" fill=\"").Append(fill).Append("\" stroke=\"").Append(stroke)
                 .Append("\" stroke-width=\"").Append(N(strokeWidth)).Append("\" stroke-linejoin=\"round\"/>");
@@ -1678,16 +1699,26 @@ public static class VectorMapSvgRenderer
                 }
             }
 
-            if (region.Label.Length > 0)
+            overlay.Badges.ByRegion.TryGetValue(region.RegionId, out RoomBadges badges);
+            if (region.Label.Length > 0 || badges is not null)
             {
-                AppendRegionLabel(svg, region.Polygon, region.Label, unit);
+                AppendRegionLabel(svg, region.Polygon, region.Label, badges ?? RoomBadges.None, unit);
             }
 
             svg.Append("</g>");
         }
     }
 
-    private static void AppendRegionLabel(StringBuilder svg, IReadOnlyList<MapPoint> polygon, string label, double unit)
+    // A region's label at its middle, and under it the room's badges (DM-only, so the projector, which
+    // draws no overlay, never has them). Both keep one size on screen at every zoom: the dt-label CSS on
+    // the canvas sizes them from --dt-u, world units per screen pixel, which the pan and zoom script
+    // keeps up to date. Drawn in map units they could not be read with the whole of a large level in
+    // view. The font-size attribute is the size in map units, for an SVG shown without that CSS.
+    //
+    // The name and the badges are two text elements, so that the script can hide a name wider than its
+    // room on screen (dt-pan-zoom.js, declutter) and leave the badges: with a whole level in view the
+    // names would lie across each other, and the badges are what the DM reads at that distance.
+    private static void AppendRegionLabel(StringBuilder svg, IReadOnlyList<MapPoint> polygon, string label, RoomBadges badges, double unit)
     {
         double cx = 0;
         double cy = 0;
@@ -1700,13 +1731,63 @@ public static class VectorMapSvgRenderer
         cx /= polygon.Count;
         cy /= polygon.Count;
 
-        // Painted with a white halo (paint-order: stroke) so the label stays legible over the map.
-        svg.Append("<text x=\"").Append(N(cx)).Append("\" y=\"").Append(N(cy)).Append("\" font-size=\"")
-            .Append(N(0.85 * unit)).Append("\" text-anchor=\"middle\" dominant-baseline=\"central\" ")
-            .Append("font-family=\"sans-serif\" font-weight=\"600\" paint-order=\"stroke\" stroke=\"#ffffff\" stroke-width=\"")
-            .Append(N(0.18 * unit)).Append("\" fill=\"#1b1b1b\" pointer-events=\"none\">")
-            .Append(AttributeEscape(label)).Append("</text>");
+        // Two lines about the middle when there are badges: the name half a line up, the badges half a
+        // line down.
+        IReadOnlyList<BadgePart> parts = badges.Parts;
+        bool twoLines = parts.Count > 0 && label.Length > 0;
+        if (label.Length > 0)
+        {
+            AppendLabelText(svg, "dt-label", cx, cy, twoLines ? "-0.6em" : string.Empty, unit);
+            svg.Append(AttributeEscape(label)).Append("</text>");
+        }
+
+        if (parts.Count == 0)
+        {
+            return;
+        }
+
+        AppendLabelText(svg, "dt-label dt-badges", cx, cy, twoLines ? "0.6em" : string.Empty, unit);
+        for (int i = 0; i < parts.Count; i++)
+        {
+            svg.Append("<tspan class=\"dt-badge\" fill=\"").Append(BadgeColour(parts[i].Kind)).Append('"');
+            if (i > 0)
+            {
+                svg.Append(" dx=\"0.35em\"");
+            }
+
+            svg.Append('>').Append(AttributeEscape(parts[i].Text)).Append("</tspan>");
+        }
+
+        svg.Append("</text>");
     }
+
+    // The opening of a label's text element, painted with a white halo (paint-order: stroke) so it stays
+    // legible over the map.
+    private static void AppendLabelText(StringBuilder svg, string classes, double x, double y, string dy, double unit)
+    {
+        svg.Append("<text class=\"").Append(classes).Append("\" x=\"").Append(N(x)).Append("\" y=\"").Append(N(y)).Append('"');
+        if (dy.Length > 0)
+        {
+            svg.Append(" dy=\"").Append(dy).Append('"');
+        }
+
+        svg.Append(" font-size=\"").Append(N(0.85 * unit)).Append("\" text-anchor=\"middle\" dominant-baseline=\"central\" ")
+            .Append("font-family=\"sans-serif\" font-weight=\"600\" paint-order=\"stroke\" stroke=\"#ffffff\" stroke-width=\"")
+            .Append(N(0.18 * unit)).Append("\" fill=\"#1b1b1b\" pointer-events=\"none\">");
+    }
+
+    // The colour of each badge on the DM's map: each must read over parchment, the region tints and the
+    // fog's blue at once, on a white halo.
+    private static string BadgeColour(BadgeKind kind) => kind switch
+    {
+        BadgeKind.Creatures => "#b3261e",
+        BadgeKind.Cleared => "#2e7d32",
+        BadgeKind.Loot => "#9a6b00",
+        BadgeKind.Hazard => "#c25e00",
+        BadgeKind.Secret => "#7b3fa0",
+        BadgeKind.Note => "#1f5fbf",
+        _ => "#1b1b1b",
+    };
 
     private static void AppendOverlayObjects(StringBuilder svg, EditorOverlay overlay, double unit)
     {

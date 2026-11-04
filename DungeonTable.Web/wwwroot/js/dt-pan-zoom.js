@@ -3,6 +3,8 @@
 // .vector-map-pan wrapper (NOT the <svg>), so it survives Blazor replacing the SVG markup on every
 // reveal/fog-paint without flashing back to the default view for a frame. getScreenCTM() on the SVG
 // still reflects the wrapper's CSS transform, so hit-testing (dt-editor / dt-player-box) is unchanged.
+// It also keeps --dt-u on the wrapper, world units per screen pixel, which sizes the rooms' labels, and
+// hides a room's name where it is wider than the room on screen (declutter).
 window.dtPanZoom = (function () {
     const MIN = 1, MAX = 60;
 
@@ -17,9 +19,61 @@ window.dtPanZoom = (function () {
         if (s && target) {
             target.style.transformOrigin = '0 0';
             target.style.transform = 'translate(' + s.tx + 'px,' + s.ty + 'px) scale(' + s.scale + ')';
+            measure(box);
         }
         // Let an overlaid player-view box reposition itself against the new transform.
         if (box) { box.dispatchEvent(new Event('dtviewchange')); }
+    }
+
+    // Keeps --dt-u on the wrapper: how many world units one screen pixel is, at the current zoom and
+    // the box's current size. The rooms' labels and badges are sized from it (VectorMapCanvas's CSS),
+    // so they keep one size on screen at every zoom. Written only when it changes, which a pan never
+    // does: a new value restyles the whole map, so it is done once per zoom step or resize, not per
+    // pointer move.
+    function measure(box) {
+        const s = box && box.__dtpz;
+        const svg = svgOf(box);
+        const target = targetOf(box);
+        const m = svg && svg.clientWidth > 0 ? svg.getScreenCTM() : null;
+        if (!s || !target || !m || !(m.a > 0)) { return; }
+        const u = 1 / m.a;
+        if (s.u > 0 && Math.abs(u - s.u) <= s.u * 0.001) { return; }
+        s.u = u;
+        target.style.setProperty('--dt-u', String(u));
+        declutter(box);
+    }
+
+    // A room's name shows only where it fits: one wider than its room on screen is hidden (dt-tight) and
+    // its badges stay. A label keeps one size on screen, so with a whole level in view the names of a
+    // crowded floor would lie across each other, and the badges are what the DM reads at that distance;
+    // zoom in and the names come back. Both lengths are in world units, measured after --dt-u has sized
+    // the name, so the test is the same at any box size. Run when the zoom changes, and when Blazor puts
+    // a new overlay in (watched below), before the browser paints it.
+    function declutter(box) {
+        const svg = svgOf(box);
+        const overlay = svg ? svg.querySelector('g.editor-overlay') : null;
+        if (!overlay) { return; }
+        box.__dtpz.overlay = overlay;
+        overlay.querySelectorAll('g[data-region-id]').forEach(function (region) {
+            const name = region.querySelector('text.dt-label:not(.dt-badges)');
+            const shape = region.querySelector('polygon');
+            if (!name || !shape) { return; }
+            const fits = name.getComputedTextLength() <= shape.getBBox().width;
+            name.classList.toggle('dt-tight', !fits);
+        });
+    }
+
+    // Blazor replaces a layer of the map whenever its text changes; a new overlay has every name showing
+    // again, so it is decluttered at once. Mutation callbacks run before the next paint, so no frame
+    // shows the names that do not fit.
+    function watchOverlay(box) {
+        const svg = svgOf(box);
+        if (!svg || !window.MutationObserver) { return; }
+        box.__dtpz.mutations = new MutationObserver(function () {
+            const overlay = svg.querySelector('g.editor-overlay');
+            if (overlay && overlay !== box.__dtpz.overlay && box.__dtpz.u > 0) { declutter(box); }
+        });
+        box.__dtpz.mutations.observe(svg, { childList: true });
     }
 
     function zoomAt(box, px, py, factor) {
@@ -63,6 +117,13 @@ window.dtPanZoom = (function () {
         }
         box.addEventListener('pointerup', end);
         box.addEventListener('pointercancel', end);
+
+        // The box changes size with the dock beside it, and a pixel is then another number of world units.
+        if (window.ResizeObserver) {
+            s.observer = new ResizeObserver(function () { measure(box); });
+            s.observer.observe(box);
+        }
+        watchOverlay(box);
 
         apply(box);
     }

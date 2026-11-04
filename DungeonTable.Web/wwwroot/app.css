@@ -2508,6 +2508,203 @@ code {
     margin: 0.45rem 0 0;
 }
 
+/* ---- What is in a room at a glance: badges, the peek card, Nearby ---- */
+
+/* A room's badges in the dock: the ones the DM's map draws under its label, in the dock's colours. */
+.room-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.45rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+    vertical-align: baseline;
+}
+
+.room-badge {
+    cursor: help;
+}
+
+.room-badge.badge-creatures {
+    color: var(--xref-monster);
+}
+
+.room-badge.badge-cleared {
+    color: #64c08a;
+}
+
+.room-badge.badge-loot {
+    color: var(--accent);
+}
+
+.room-badge.badge-hazard {
+    color: #e39a4f;
+}
+
+.room-badge.badge-secret {
+    color: var(--xref-faction);
+}
+
+.room-badge.badge-note {
+    color: #79b8ff;
+}
+
+/* The peek card: what is in a room, without opening it. */
+.room-peek {
+    width: max-content;
+    max-width: 24rem;
+    padding: 0.5rem 0.7rem 0.55rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    color: var(--ink);
+    font: 0.82rem/1.35 system-ui, sans-serif;
+    text-align: left;
+}
+
+.room-peek.cleared {
+    border-color: rgba(46, 139, 87, 0.6);
+}
+
+.peek-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.45rem;
+    margin-bottom: 0.3rem;
+}
+
+.peek-head .room-badges {
+    margin-left: 0;
+}
+
+.peek-number {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.peek-title {
+    font-size: 0.92rem;
+}
+
+.peek-line {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.15rem;
+}
+
+.peek-key {
+    flex: 0 0 4.4rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.35rem;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.peek-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.room-peek .secret {
+    color: var(--xref-faction);
+}
+
+.room-peek .peek-done {
+    color: var(--muted);
+    text-decoration: line-through;
+}
+
+/* On the map the card sits beside the pointer (dt-peek.js places it), above the token and the
+   player-view box, and never takes the pointer, so the room under it still reads as hovered. */
+.dt-peek-host .room-peek {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 4;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* Nearby: the rooms around this one, one line per way out. */
+.nearby {
+    margin: 0 0 1.25rem;
+}
+
+.briefing .nearby-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.nearby-row {
+    position: relative;
+    padding: 0.3rem 0.45rem;
+    border-radius: 0.35rem;
+}
+
+.nearby-row:hover,
+.nearby-row:focus-within {
+    background: rgba(201, 162, 39, 0.08);
+}
+
+.nearby-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.1rem;
+}
+
+.nearby-arrow {
+    margin-right: 0.4rem;
+    color: var(--muted);
+}
+
+.nearby-row .secret-badge {
+    margin-left: 0.45rem;
+}
+
+.nearby-sub {
+    margin-left: 1.35rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.nearby-sub .briefing-note:first-child {
+    margin-left: 0;
+}
+
+.nearby-who {
+    color: var(--ink);
+}
+
+/* Resting on a line shows that room's peek card under it, after the same quarter second the map waits. */
+.nearby-peek {
+    position: absolute;
+    left: 1.35rem;
+    top: 100%;
+    z-index: 5;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease 0s, visibility 0s linear 0.1s;
+}
+
+.nearby-row:hover > .nearby-peek,
+.nearby-row:focus-within > .nearby-peek {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 0.1s ease 0.25s, visibility 0s linear 0.25s;
+}
+
 /* ---- Room tab: the encounter strip ---- */
 
 .encounter {
