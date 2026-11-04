@@ -51,6 +51,9 @@ public sealed class CampaignState
     // What the DM pinned along the foot of the dock, in the order they pinned it (see PinKeys).
     private readonly List<string> pins = new List<string>();
 
+    // The creatures the DM moved from one area to another, oldest first (see CreatureMove).
+    private readonly List<CreatureMove> moves = new List<CreatureMove>();
+
     private readonly IPartyRoster party;
 
     /// <summary>Creates the campaign state over the roster its level prerequisites read.</summary>
@@ -60,7 +63,7 @@ public sealed class CampaignState
         this.party = party;
     }
 
-    /// <summary>Raised whenever quest progress, a deck's drawn cards, an area's progress or the pins change.</summary>
+    /// <summary>Raised whenever quest progress, a deck's drawn cards, an area's progress, the moves or the pins change.</summary>
     public event Action Changed;
 
     // ---- Reading ----------------------------------------------------------------------------
@@ -442,6 +445,133 @@ public sealed class CampaignState
         }
     }
 
+    // ---- Moves: creatures the DM put somewhere the book does not ---------------------------------
+
+    /// <summary>Every move of one creature, oldest first.</summary>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    /// <returns>Copies of its moves; none when it was never moved.</returns>
+    public IReadOnlyList<CreatureMove> MovesOf(string creatureNodeId)
+    {
+        lock (gate)
+        {
+            return moves.Where(move => Is(move, creatureNodeId)).Select(Copy).ToArray();
+        }
+    }
+
+    /// <summary>Every move into one area, of any creature, oldest first.</summary>
+    /// <param name="areaNodeId">The area's node id.</param>
+    /// <returns>Copies of the moves into it; none when nothing was moved there.</returns>
+    public IReadOnlyList<CreatureMove> MovesInto(string areaNodeId)
+    {
+        lock (gate)
+        {
+            return moves.Where(move => Into(move, areaNodeId)).Select(Copy).ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Moves some of a creature from one area to another. Where the area they go to had its listing of
+    /// that creature ticked off whole, the tick becomes a count of the ones that were there, so the
+    /// newcomers are up and those already dealt with stay dealt with. One somebody moved into a room he
+    /// fled from is back in it.
+    /// </summary>
+    /// <param name="move">What moved where; a move with a blank id, to the area it came from, or of none is ignored.</param>
+    /// <param name="listedThere">How many of the creature the area they go to lists itself; zero when it lists none.</param>
+    /// <param name="oneSomebody">True for one somebody, who is in one place, rather than a kind of creature or a band.</param>
+    public void Move(CreatureMove move, int listedThere, bool oneSomebody)
+    {
+        if (!Usable(move))
+        {
+            return;
+        }
+
+        CreatureMove made = Copy(move);
+        made.Count = oneSomebody ? 1 : Math.Min(made.Count, EncounterCount.MaxCount);
+        if (made.ListedInAreaNodeId.Length == 0)
+        {
+            made.ListedInAreaNodeId = made.FromAreaNodeId;
+        }
+
+        lock (gate)
+        {
+            string id = made.CreatureId;
+            AreaProgress there = AreaEntry(made.ToAreaNodeId);
+            if (oneSomebody)
+            {
+                CreatureCount count = CountOf(there, id);
+                if (count is not null)
+                {
+                    SetCount(there, id, count.Dealt, 0);
+                }
+            }
+            else if (there.ClearedCreatureIds.Contains(id, StringComparer.Ordinal))
+            {
+                // Every one that was there is dealt with: as many as it lists, and what moved in and out.
+                int wasThere = listedThere
+                    + moves.Where(earlier => Is(earlier, id) && Into(earlier, made.ToAreaNodeId)).Sum(earlier => earlier.Count)
+                    - moves.Where(earlier => Is(earlier, id) && OutOf(earlier, made.ToAreaNodeId)).Sum(earlier => earlier.Count);
+                there.ClearedCreatureIds = there.ClearedCreatureIds
+                    .Where(cleared => !string.Equals(cleared, id, StringComparison.Ordinal))
+                    .ToArray();
+                SetCount(there, id, Math.Max(0, wasThere), 0);
+            }
+
+            Prune(made.ToAreaNodeId, there);
+            moves.Add(made);
+        }
+
+        Notify();
+    }
+
+    /// <summary>
+    /// Takes back the last move of a creature into an area, or out of one: they are where they were
+    /// before it.
+    /// </summary>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    /// <param name="areaNodeId">The area the move went into, or came out of.</param>
+    /// <param name="into">True for the last move into the area, false for the last move out of it.</param>
+    public void UndoMove(string creatureNodeId, string areaNodeId, bool into)
+    {
+        bool changed;
+        lock (gate)
+        {
+            int last = moves.FindLastIndex(move =>
+                Is(move, creatureNodeId) && (into ? Into(move, areaNodeId) : OutOf(move, areaNodeId)));
+            changed = last >= 0;
+            if (changed)
+            {
+                moves.RemoveAt(last);
+            }
+        }
+
+        if (changed)
+        {
+            Notify();
+        }
+    }
+
+    /// <summary>
+    /// Forgets the moves of a creature: every one of them for one somebody, who is then where the book
+    /// lists him, or, for a kind of creature or a band, the ones out of an area, which brings them back
+    /// to it.
+    /// </summary>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    /// <param name="areaNodeId">The area they are brought back to; ignored for one somebody.</param>
+    /// <param name="oneSomebody">True for one somebody.</param>
+    public void ForgetMoves(string creatureNodeId, string areaNodeId, bool oneSomebody)
+    {
+        int removed;
+        lock (gate)
+        {
+            removed = moves.RemoveAll(move => Is(move, creatureNodeId) && (oneSomebody || OutOf(move, areaNodeId)));
+        }
+
+        if (removed > 0)
+        {
+            Notify();
+        }
+    }
+
     /// <summary>The DM's note for an area, or an empty string when none is written.</summary>
     /// <param name="areaNodeId">The area's node id.</param>
     /// <returns>The note.</returns>
@@ -745,6 +875,7 @@ public sealed class CampaignState
                     .ToArray(),
                 Areas = areas.Values.Select(Copy).ToArray(),
                 Pins = pins.ToArray(),
+                Moves = moves.Select(Copy).ToArray(),
             };
         }
     }
@@ -767,6 +898,21 @@ public sealed class CampaignState
             drawnCards.Clear();
             areas.Clear();
             pins.Clear();
+            moves.Clear();
+
+            // Only moves that say what moved where, and of how many: a hand-edited document may hold
+            // one that does not, and it would put creatures in no room at all.
+            foreach (CreatureMove move in (snapshot.Moves ?? Array.Empty<CreatureMove>()).Where(Usable))
+            {
+                CreatureMove restored = Copy(move);
+                restored.Count = Math.Min(restored.Count, EncounterCount.MaxCount);
+                if (restored.ListedInAreaNodeId.Length == 0)
+                {
+                    restored.ListedInAreaNodeId = restored.FromAreaNodeId;
+                }
+
+                moves.Add(restored);
+            }
 
             // Each pin once, in the order it was pinned, as a hand-edited document might repeat one.
             pins.AddRange((snapshot.Pins ?? Array.Empty<string>())
@@ -886,6 +1032,33 @@ public sealed class CampaignState
             .ToArray(),
         Note = entry.Note ?? string.Empty,
     };
+
+    private static CreatureMove Copy(CreatureMove move) => new CreatureMove
+    {
+        CreatureId = move.CreatureId ?? string.Empty,
+        FromAreaNodeId = move.FromAreaNodeId ?? string.Empty,
+        ToAreaNodeId = move.ToAreaNodeId ?? string.Empty,
+        Count = move.Count,
+        ListedInAreaNodeId = move.ListedInAreaNodeId ?? string.Empty,
+    };
+
+    // A move that says what moved, from where to somewhere else, and of how many.
+    private static bool Usable(CreatureMove move) =>
+        move is not null
+        && !string.IsNullOrWhiteSpace(move.CreatureId)
+        && !string.IsNullOrWhiteSpace(move.FromAreaNodeId)
+        && !string.IsNullOrWhiteSpace(move.ToAreaNodeId)
+        && !string.Equals(move.FromAreaNodeId, move.ToAreaNodeId, StringComparison.Ordinal)
+        && move.Count > 0;
+
+    private static bool Is(CreatureMove move, string creatureNodeId) =>
+        string.Equals(move.CreatureId, creatureNodeId, StringComparison.Ordinal);
+
+    private static bool Into(CreatureMove move, string areaNodeId) =>
+        string.Equals(move.ToAreaNodeId, areaNodeId, StringComparison.Ordinal);
+
+    private static bool OutOf(CreatureMove move, string areaNodeId) =>
+        string.Equals(move.FromAreaNodeId, areaNodeId, StringComparison.Ordinal);
 
     // One creature's counts in an area, or null when it has none. Caller holds gate.
     private static CreatureCount CountOf(AreaProgress entry, string creatureNodeId) =>

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using DungeonTable.Core.Session;
 using DungeonTable.Core.Stats;
 using DungeonTable.Tests.Battles;
 using DungeonTable.Web.Components.Dm;
@@ -75,6 +76,57 @@ public sealed class EncounterStripRenderingTests
         Assert.DoesNotContain("dealt with in", html, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task A_creature_moved_here_says_where_from_and_one_moved_away_says_where_it_went()
+    {
+        var campaign = new CampaignState(new FakePartyRoster());
+        campaign.Move(new CreatureMove { CreatureId = "golem", FromAreaNodeId = "area-workshop", ToAreaNodeId = Vestry, Count = 1 }, 0, oneSomebody: true);
+        campaign.Move(new CreatureMove { CreatureId = "bugbear", FromAreaNodeId = Vestry, ToAreaNodeId = "area-workshop", Count = 2 }, 0, oneSomebody: false);
+        EncounterMonster[] rows =
+        {
+            new EncounterMonster { NodeId = "golem", Name = "Clay golem", Individual = true, Shared = true }.Moved(1),
+            new EncounterMonster { NodeId = "bugbear", Name = "Bugbear", SuggestedCount = 3 },
+        };
+
+        string html = await Render(rows, campaign, onMove: (_, _, _) => { });
+
+        Assert.Contains("moved here from The Workshop", html, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Send Clay golem back to The Workshop (Level 1, Area 4)\"", html, StringComparison.Ordinal);
+        Assert.Contains("2 moved to The Workshop", html, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Bring Bugbear back here\"", html, StringComparison.Ordinal);
+
+        // The one bugbear left still counts down and can still move; the golem is here and up.
+        Assert.Equal(2, Occurrences(html, "class=\"encounter-move\""));
+        Assert.DoesNotContain("class=\"encounter-row cleared\"", html, StringComparison.Ordinal);
+        Assert.Contains("0 of 2 dealt with", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task One_somebody_moved_elsewhere_is_gone_from_here_offers_no_move_and_says_where()
+    {
+        var campaign = new CampaignState(new FakePartyRoster());
+        campaign.Move(new CreatureMove { CreatureId = "grask", FromAreaNodeId = Vestry, ToAreaNodeId = "area-workshop", Count = 1 }, 0, oneSomebody: true);
+        EncounterMonster[] rows = { new EncounterMonster { NodeId = "grask", Name = "Grask", Individual = true, Shared = true } };
+
+        string html = await Render(rows, campaign, onMove: (_, _, _) => { });
+
+        Assert.Contains("class=\"encounter-row cleared\"", html, StringComparison.Ordinal);
+        Assert.Contains("moved to The Workshop", html, StringComparison.Ordinal);
+        Assert.Contains("Moved to another room. Untick to bring them back here", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"encounter-move\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"encounter-status\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_strip_that_cannot_move_offers_no_move()
+    {
+        EncounterMonster[] rows = { new EncounterMonster { NodeId = "bugbear", Name = "Bugbear", SuggestedCount = 3 } };
+
+        string html = await Render(rows, new CampaignState(new FakePartyRoster()));
+
+        Assert.DoesNotContain("class=\"encounter-move\"", html, StringComparison.Ordinal);
+    }
+
     private const string Vestry = "area-vestry";
 
     private static int Occurrences(string text, string part)
@@ -91,7 +143,7 @@ public sealed class EncounterStripRenderingTests
     private static Task<string> Render() =>
         Render(Array.Empty<EncounterMonster>(), new CampaignState(new FakePartyRoster()), "data_dossiers_level_1_area_24");
 
-    private static async Task<string> Render(EncounterMonster[] rows, CampaignState campaign, string area = Vestry)
+    private static async Task<string> Render(EncounterMonster[] rows, CampaignState campaign, string area = Vestry, Action<EncounterMonster, string, int> onMove = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton(new BattleState(new FakePartyRoster(), new FakeStatLibrary()));
@@ -106,6 +158,10 @@ public sealed class EncounterStripRenderingTests
             [nameof(EncounterStrip.AreaNodeId)] = area,
             [nameof(EncounterStrip.AreaLabel)] = label,
         };
+        if (onMove is not null)
+        {
+            parameters[nameof(EncounterStrip.OnMove)] = onMove;
+        }
 
         return await renderer.Dispatcher.InvokeAsync(async () =>
         {

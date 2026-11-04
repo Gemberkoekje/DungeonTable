@@ -34,4 +34,10 @@ public sealed class CampaignSnapshot
     /// reads the document and loses only the pins.
     /// </summary>
     public IReadOnlyList<string> Pins { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The creatures the DM moved from one area to another, in the order they were moved. Added after the
+    /// rest, with an empty default, so an older build reads the document and loses only the moves.
+    /// </summary>
+    public IReadOnlyList<CreatureMove> Moves { get; set; } = Array.Empty<CreatureMove>();
 }

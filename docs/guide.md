@@ -182,6 +182,14 @@ The room is laid out in the order you need it at the table:
   den, and one dealt with in the den leaves one in the workshop. A room never shows more of a band than
   it has left, so a hall that lists the whole gang again where they gather counts down with everyone
   else. Unticking someone dealt with in another room puts them back on the board everywhere.
+- **Move puts a creature in another room**, whether that room lists it or not: Grask flees the
+  workshop, and you decide one of his crew's bugbears stays behind to hold the Ringers' Stair. Press **↦ Move** on
+  the row, type part of a room's name (or its number), and pick it; with nothing typed, the list starts
+  with the rooms this one leads to. For several, set how many go. They are gone from this room, with a
+  chip saying where they went, and the room they went to lists them with **moved here from**, ready to
+  add to a fight, tick off or move on, and its badge on the map counts them. One somebody moved is in
+  that room and nowhere else, until he flees from it. The **↩** in either chip takes the move back, and
+  unticking a row whose creatures were all moved away brings them back too.
 - **Nearby**: the rooms this one leads to, one line each, with their badges, who is still up in them and
   how you get there. A secret way is marked **DM**. Rest the pointer on a line for that room's card, and
   click it to read the room. A way to a floor you have not written yet waits as plain text.

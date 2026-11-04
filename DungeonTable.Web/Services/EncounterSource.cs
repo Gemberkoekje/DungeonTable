@@ -4,6 +4,7 @@ using System.Linq;
 using DungeonTable.Application.Abstractions;
 using DungeonTable.Core.Briefing;
 using DungeonTable.Core.Dossier;
+using DungeonTable.Core.Session;
 using Qowaiv.Validation.Abstractions;
 
 namespace DungeonTable.Web.Services;
@@ -59,6 +60,75 @@ public sealed class EncounterSource
             .GroupBy(occupant => occupant.NodeId, StringComparer.Ordinal)
             .Select(listed => Row(listed.ToArray()))
             .ToArray();
+    }
+
+    /// <summary>
+    /// An area's creatures as the table has them: the ones it lists, and after them, in the order they
+    /// came, the ones the DM moved here that it does not list. A creature moved here stays on the list
+    /// while some of it is here, or once the table recorded something of it here; one somebody is here
+    /// while the last move of him brought him here.
+    /// </summary>
+    /// <param name="areaNodeId">The area's node id.</param>
+    /// <param name="listed">The creatures the area lists (<see cref="For"/>).</param>
+    /// <param name="campaign">The table's record, with the moves.</param>
+    /// <returns>The area's rows: the listed ones unchanged, then the ones moved here.</returns>
+    public IReadOnlyList<EncounterMonster> WithMoves(string areaNodeId, IReadOnlyList<EncounterMonster> listed, CampaignState campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        IReadOnlyList<EncounterMonster> rows = listed ?? Array.Empty<EncounterMonster>();
+        IReadOnlyList<CreatureMove> into = campaign.MovesInto(areaNodeId);
+        if (into.Count == 0)
+        {
+            return rows;
+        }
+
+        var listedIds = new HashSet<string>(rows.Select(row => row.NodeId), StringComparer.Ordinal);
+        var all = new List<EncounterMonster>(rows);
+        foreach (IGrouping<string, CreatureMove> moved in into.GroupBy(move => move.CreatureId, StringComparer.Ordinal))
+        {
+            if (listedIds.Contains(moved.Key))
+            {
+                continue;
+            }
+
+            IReadOnlyList<CreatureMove> everyMove = campaign.MovesOf(moved.Key);
+            EncounterMonster row = RowFrom(moved.Last().ListedInAreaNodeId, moved.Key);
+            int net = moved.Sum(move => move.Count)
+                - everyMove.Where(move => string.Equals(move.FromAreaNodeId, areaNodeId, StringComparison.Ordinal)).Sum(move => move.Count);
+            bool here = row.Individual
+                ? string.Equals(everyMove[^1].ToAreaNodeId, areaNodeId, StringComparison.Ordinal)
+                : net > 0;
+
+            if (here || campaign.RecordOf(areaNodeId, moved.Key).Any)
+            {
+                all.Add(row.Moved(row.Individual ? 1 : moved.Sum(move => move.Count)));
+            }
+        }
+
+        return all;
+    }
+
+    // A creature as the room that lists it lists it. When that room no longer does (its listing was
+    // edited since), the creature still shows, under its id, so the DM can see what they moved.
+    private EncounterMonster RowFrom(string areaNodeId, string creatureNodeId)
+    {
+        Result<RoomBriefing> briefing = content.GetBriefing(areaNodeId);
+        EncounterMonster found = briefing.IsValid
+            ? For(briefing.Value).FirstOrDefault(row => string.Equals(row.NodeId, creatureNodeId, StringComparison.Ordinal))
+            : null;
+        if (found is not null)
+        {
+            return found;
+        }
+
+        Result<Core.Stats.StatBlock> block = stats.GetMonster(creatureNodeId);
+        return new EncounterMonster
+        {
+            NodeId = creatureNodeId,
+            StatBlockNodeId = block.IsValid ? creatureNodeId : string.Empty,
+            Name = block.IsValid && block.Value.Name.Length > 0 ? block.Value.Name : creatureNodeId,
+            HasStatBlock = block.IsValid,
+        };
     }
 
     // One row for everything listed under one id. Two groups of the same creature in one room ("four

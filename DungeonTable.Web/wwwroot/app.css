@@ -3863,6 +3863,101 @@ input.battle-init,
     color: var(--muted);
 }
 
+/* A move the DM made: "moved here from", or "moved to". Blue like fled, the other way of leaving a room,
+   with the arrow that takes the move back inside the chip. */
+.encounter-moved {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    max-width: 22rem;
+    padding: 0.05rem 0.2rem 0.05rem 0.45rem;
+    border-radius: 0.6rem;
+    background: rgba(106, 160, 214, 0.16);
+    color: #9cc3ea;
+    font-size: 0.72rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Two classes: beats the shared ".encounter button" rule (a class and an element) whatever the order. */
+.encounter .moved-undo {
+    padding: 0 0.3rem;
+    border: none;
+    border-radius: 0.5rem;
+    color: inherit;
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+.encounter .moved-undo:hover {
+    background: rgba(106, 160, 214, 0.3);
+}
+
+.encounter .encounter-move {
+    padding: 0.1rem 0.45rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.encounter .encounter-move[aria-expanded="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Where to move a creature: under its row, the room list right there rather than in a dialog, so the
+   row it is about stays in view. */
+.encounter-move-panel {
+    padding: 0.45rem 0.6rem 0.55rem;
+    margin: 0 0 0.35rem 1.6rem;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    border-radius: 0.45rem;
+}
+
+.encounter-move-panel .move-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+}
+
+.encounter-move-panel .move-filter {
+    flex: 1 1 10rem;
+    min-width: 8rem;
+    padding: 0.2rem 0.45rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--ink);
+    font: inherit;
+}
+
+.encounter-move-panel .move-filter:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.encounter-move-panel .move-targets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0.45rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.encounter .move-target {
+    padding: 0.15rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+.encounter-move-panel .move-none {
+    margin: 0.45rem 0 0;
+    font-size: 0.8rem;
+}
+
 /* The Battle tab's small controls. Each must MATCH the shared rule's specificity (three classes and
    an element — its two :not()s each count as a class) and come after it, or the shared padding and
    colour win. That is why they live down here and why the .battle-order in the middle is

@@ -407,6 +407,20 @@ rooms, and the map counted the gang two or three times over.
   most of them fell elsewhere, takes away only the ones still up. A kind of creature keeps the
   whole-listing tick, which stays right if an edit changes its count. A tick from an older build on one
   somebody counts as him dealt with, everywhere.
+- **The DM can move a creature where the book does not put it** (`CreatureMove`, a list on
+  `CampaignSnapshot` in the order the moves were made, saved as an additive field). A kind of creature
+  or a band moves by count: a room has what it lists, plus what was moved in, less what was moved out,
+  and the rest of the arithmetic is unchanged. One somebody is in one place, so only his last move
+  counts: he is in that room and gone from every room that lists him, until he flees from it, which
+  sets him loose again wherever the book lists him. The room a creature is moved to need not list it:
+  `EncounterSource.WithMoves` adds a row for it, read from the room that does
+  (`CreatureMove.ListedInAreaNodeId`, carried along as it moves on) rather than copied into the save,
+  so a content edit to its name or stat block shows there too. The moves are table state, so the
+  workspace adds them each time the encounter or a room's glance is read and never keeps them in the
+  glance cache. A whole-listing tick in the room they arrive in becomes a count of the ones that were
+  there, or the newcomers would arrive already dealt with; for the same reason a row that moves touched
+  is counted, never ticked whole. A room is "moved elsewhere" only when nothing else happened to its
+  creatures there: some fell and the rest left reads as dealt with, with its move in a chip of its own.
 - **Putting back** clears the room's record, and, for one somebody or a band still gone after that,
   what was dealt with of them everywhere: unticking the boss in a room he was not killed in means he
   is alive again. Who fled from where is kept.

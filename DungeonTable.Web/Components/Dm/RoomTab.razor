@@ -185,7 +185,18 @@
                                                             AreaNodeId="@Workspace.PanelNode"
                                                             AreaTitle="@Workspace.PanelTitle"
                                                             OnOpenReference="Workspace.OpenReference"
-                                                            AreaLabel="Workspace.LabelFor" />;
+                                                            AreaLabel="Workspace.LabelFor"
+                                                            MoveTargets="FindMoveTargets"
+                                                            OnMove="MoveFromHere" />;
+
+    // How many rooms the Move list offers at once: enough for the rooms around this one, short enough
+    // to read without scrolling.
+    private const int MoveTargetLimit = 8;
+
+    private IReadOnlyList<AreaDossier> FindMoveTargets(string filter) => Workspace.MoveTargets(filter, MoveTargetLimit);
+
+    private void MoveFromHere(EncounterMonster row, string toAreaNodeId, int count) =>
+        Workspace.MoveCreature(Workspace.PanelNode, row, toAreaNodeId, count);
 
     private RenderFragment NearbySlot => @<NearbyRooms Rooms="NearbyLines()"
                                                        OnNavigate="Workspace.NavigateTo"
