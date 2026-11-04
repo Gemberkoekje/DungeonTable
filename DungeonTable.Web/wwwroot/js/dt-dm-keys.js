@@ -102,7 +102,7 @@ window.dtDmKeys = (function () {
                     // The dock's width is the browser's own business (dt-dock.js), not the circuit's.
                     e.preventDefault();
                     if (window.dtDock) { window.dtDock.flip(); }
-                } else if (e.key === 'n' || e.key === 'p' || e.key === 'r' || e.key === 'h' || e.key === 'c') {
+                } else if (e.key === 'n' || e.key === 'p' || e.key === 'r' || e.key === 'h' || e.key === 'c' || e.key === 'm') {
                     e.preventDefault();
                     dotnet.invokeMethodAsync('DmKey', 'bare:' + e.key);
                 }

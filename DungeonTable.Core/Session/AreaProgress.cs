@@ -18,14 +18,26 @@ namespace DungeonTable.Core.Session;
 /// There is no "the whole area is cleared" flag: that is read off the ticks, so the two can never
 /// disagree.
 /// </para>
+/// <para>
+/// One somebody or one band listed in several rooms is recorded in the room where it happened, and
+/// what is left of them in any room is worked out from every room's record: Grask dealt with in the
+/// workshop is dealt with on the stair too, unless he fled the workshop.
+/// </para>
 /// </remarks>
 public sealed class AreaProgress
 {
     /// <summary>The area's node id.</summary>
     public string AreaNodeId { get; set; } = string.Empty;
 
-    /// <summary>The node ids of the creatures dealt with here, in no particular order.</summary>
+    /// <summary>The node ids of the creatures dealt with here, every one listed, in no particular order.</summary>
     public IReadOnlyList<string> ClearedCreatureIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The creatures counted down one at a time here: how many were dealt with, and how many fled.
+    /// Added after <see cref="ClearedCreatureIds"/>, with an empty default, so an older build reads the
+    /// document and loses only these counts.
+    /// </summary>
+    public IReadOnlyList<CreatureCount> CreatureCounts { get; set; } = Array.Empty<CreatureCount>();
 
     /// <summary>The DM's own note about the room; an empty string when none is written.</summary>
     public string Note { get; set; } = string.Empty;

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using DungeonTable.Core.Briefing;
 using DungeonTable.Core.Dossier;
 using DungeonTable.Core.Stats;
 using DungeonTable.Infrastructure.Books;
@@ -86,5 +87,22 @@ public sealed class SamplePackLinksTests
         StatBlock bugbear = Stats.AllMonsters().First(block => block.Name == "Bugbear");
 
         Assert.Equal("SRD 5.1 " + bugbear.SourceLocation, Projection.GetReferenceCard(bugbear.NodeId).Value.Citation);
+    }
+
+    [Fact]
+    public void An_entity_with_a_count_is_a_band_in_every_room_that_lists_it()
+    {
+        // The crew's two bugbears are listed in the workshop and, one of them, in the den.
+        OccupantEntry workshop = Projection.GetBriefing("data_dossiers_level_1_area_4").Value.Occupants
+            .Single(occupant => occupant.NodeId == "crew-bugbear");
+        OccupantEntry den = Projection.GetBriefing("data_dossiers_level_1_area_2").Value.Occupants
+            .Single(occupant => occupant.NodeId == "crew-bugbear");
+        OccupantEntry grask = Projection.GetBriefing("data_dossiers_level_1_area_4").Value.Occupants
+            .Single(occupant => occupant.NodeId == "grask");
+
+        Assert.Equal(2, workshop.BandSize);
+        Assert.Equal(2, den.BandSize);
+        Assert.Equal("Crew bugbear", den.Label);
+        Assert.Equal(0, grask.BandSize);
     }
 }

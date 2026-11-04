@@ -367,6 +367,45 @@ next to the party's. Now the map says it, and the Room tab lists the rooms aroun
   it leads to, and that room's card on hover, shown by CSS since it is in the page already. It took the
   place of the Connections list at the foot of the Room tab, which listed the same exits with less.
 
+## One somebody in several rooms
+
+A published adventure lists who is where, and it lists the same people in more than one room: the boss
+at his card table, in the hall where the garrison gathers once alerted, and in the room he retreats to;
+the gang's bandits at the gate, in the barracks, and all of them again in that hall. The table used to
+tick each room's list off on its own, so the boss dealt with at his table was still up in three other
+rooms, and the map counted the gang two or three times over.
+
+- **Who counts across rooms follows what the reference names**, nothing guessed (`EncounterMonster.Shared`).
+  An entity, a person or a character is one particular somebody, the same in every room that lists
+  them. A stat block listed as itself is a kind of creature, and each room's are its own. An entity
+  with a `count` is a **band**: one gang, listed in parts.
+- **Dealt with is for good; fled is about one room.** The table keeps per area, beside the old whole
+  listing tick, how many of a creature were counted down there as dealt with and how many fled
+  (`CreatureCount`, on `AreaProgress`, saved as an additive field). What is left in a room
+  (`CreatureStanding`) is its own listing less what was dealt with or fled there, and, for one somebody
+  or a band, never more than the band has left: its size less everything dealt with of it in every
+  room. Fled takes the boss out of the room he ran from and leaves him up where he went.
+- **Nothing is stored that can be worked out.** What is left is worked out at each render from the
+  records, as "cleared" always was, so the badges, the peek card, Nearby and the encounter strip read
+  the same numbers and can never disagree. A record in a room whose listing has since been edited
+  away still counts: the fight happened.
+- **A band's room counts are written as counts, never as the whole-listing tick.** Ticking a room's
+  bandits off records how many were left there, so a hall that lists the whole gang, ticked off after
+  most of them fell elsewhere, takes away only the ones still up. A kind of creature keeps the
+  whole-listing tick, which stays right if an edit changes its count. A tick from an older build on one
+  somebody counts as him dealt with, everywhere.
+- **Putting back** clears the room's record, and, for one somebody or a band still gone after that,
+  what was dealt with of them everywhere: unticking the boss in a room he was not killed in means he
+  is alive again. Who fled from where is kept.
+- **The content checks keep a band's numbers honest**: an entity's count reads as a whole number, only
+  a creature has one, and no room lists more of one somebody or a band than there are
+  (`LinkAudit.OverfullListings`). And no numbered area and its lettered rooms list the same kind of
+  creature twice (`LinkAudit.RepeatedKinds`): that is the shape the double counting took on every
+  floor of the first campaign run with this, a room's creatures listed under its numbered area too,
+  and nothing at the table could tell it from two groups. A band whose count is all of them is right
+  either way, so the rule needs no judgement. At the table the rule is fail-soft: a listing larger than the band
+  widens it rather than hiding creatures the room says are there.
+
 ## Answers that come to you
 
 General lookups were three clicks deep and found by name only: how big the rooms are here was Campaign,
@@ -504,6 +543,32 @@ encoding runs outside the catalogue's lock, so an upload never stalls the projec
 
 The `/art` route serves raster images only. An SVG served from the app's own origin would be markup
 that can run script.
+
+**A picture turns and flips per picture** (`ArtOrientation`, on `SessionState`, saved with the shown
+art): a scan on its side, or a portrait facing the wrong way, is fixed once and stays fixed as the tray
+flips through. The player view turns the whole frame and flips the picture inside it. Turned on its
+side, the frame is laid out upright and turned after, so each size limit is taken on the other axis
+(`on-side` in `PlayerArtOverlay`); that is what lets a tall picture on its side fill a wide screen. At
+**Full** the picture is as large as the screen allows, worked out from its shape, because the
+catalogue's pictures are a few hundred to fourteen hundred pixels high and drawn at their own size they
+filled nothing.
+
+## The projector on a table
+
+When the projector shines down onto the table, the miniatures stand on the map, and two settings of the
+table follow from that, both on `SessionState` and saved as additive fields of `RevealSnapshot`:
+
+- **The picture turns a quarter at a time** (`PlayerTurns`), for players sitting around the table. The
+  player view turns the map and the DM's pointer inside a box the stage's height wide and its width
+  high, turned about the middle, so it covers the stage exactly. Every framing is cut to
+  `FramingAspect`, the screen's shape or the other way up, so the DM's box is the shape the players see,
+  with a heavier edge for the top of their screen. A turn turns the view about its own middle, on this
+  map and on every map set aside, so the scale does not change: a square on the table stays the size
+  it was. The picture over the map turns on its own (above).
+- **A size in squares, remembered** (`RememberedView`): the size of the view in grid squares across and
+  down the projector's own screen, so a turn does not change it. Used on another map, the squares
+  across hold the scale and the squares down follow the screen's shape (`MapFraming.AtSize`); the view
+  is moved onto the map but never shrunk to fit it, since shrinking would change the size of a square.
 
 ## Security
 

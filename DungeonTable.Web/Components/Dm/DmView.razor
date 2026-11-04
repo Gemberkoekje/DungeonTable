@@ -61,6 +61,27 @@
             <span aria-hidden="true">&#x25C9;</span> Follow party
         </button>
 
+        @* The projector's turn and its size in squares are settings of the table too: a turn for a table
+           the players sit around, and a size remembered on one map and used on the next, so a square on
+           the table stays the size of a miniature's base. *@
+        <button type="button" class="frame-btn turn-btn @(Session.PlayerTurns != 0 ? "on" : string.Empty)"
+                title="@($"Turn the player view a quarter turn clockwise. Now {Session.PlayerTurns * 90}°")"
+                disabled="@(!Workspace.MapLoaded)"
+                @onclick="Session.TurnPlayerView">
+            <span aria-hidden="true">&#x21BB;</span> @(Session.PlayerTurns == 0 ? "Turn" : $"{Session.PlayerTurns * 90}°")
+        </button>
+
+        <span class="view-size" role="group" aria-label="Player view size">
+            <button type="button" class="frame-btn"
+                    title="@($"Remember the player view's size, {Squares(Workspace.PlayerViewSize())}, to use on another map")"
+                    disabled="@(!Workspace.MapLoaded)"
+                    @onclick="Workspace.RememberPlayerViewSize">Remember size</button>
+            <button type="button" class="frame-btn"
+                    title="@(Session.RememberedView.IsSet ? $"Size the player view to the remembered {Squares(Session.RememberedView)}, so a square is the size it was" : "Remember a size first")"
+                    disabled="@(!Workspace.MapLoaded || !Session.RememberedView.IsSet)"
+                    @onclick="Workspace.UseRememberedViewSize">@UseSizeLabel</button>
+        </span>
+
         @* The picture on the projector belongs in the bar for the same reason the reveal counts do:
            a DM in the middle of a fight must be able to see that a vampire is still on the beamer,
            and take it down, without going to find the tab that put it there. *@
@@ -315,6 +336,19 @@
 
     private string ViewportName => Workspace.ViewportRegionName();
 
+    private string UseSizeLabel => Session.RememberedView.IsSet
+        ? "Use " + Whole(Session.RememberedView.Across) + "×" + Whole(Session.RememberedView.Down)
+        : "Use size";
+
+    // A size in squares as the DM reads it: "24 × 13.5 squares".
+    private static string Squares(ViewSize size) => size.IsSet
+        ? $"{Tenth(size.Across)} × {Tenth(size.Down)} squares"
+        : "no size yet";
+
+    private static string Whole(double squares) => Math.Round(squares).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Tenth(double squares) => Math.Round(squares, 1).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+
     // ---- The "is this being saved?" indicator ------------------------------------------------
 
     private TableSaveStatus Save => Persistence.Status();
@@ -476,7 +510,7 @@
     /// <c>"tool:N"</c> (a bare 1..8) picks a map tool and <c>"tool:N:keep"</c> (Shift+1..8) keeps a
     /// one-click tool up, <c>"bare:esc"</c> puts the map back in Look and closes what is open in the
     /// dock, <c>"bare:drawer"</c> (Tab, on a narrow screen) opens and closes the dock, <c>"bare:c"</c>
-    /// switches the badges on the map off and on, and <c>"bare:n|p|r|h"</c> go to whichever dock tab is on show — the turn order on Battle,
+    /// switches the badges on the map off and on, and <c>"bare:n|p|r|h|m"</c> go to whichever dock tab is on show — the turn order on Battle,
     /// the art tray on Art. The bare-letter shortcuts only reach a tab that is actually up, which is
     /// why the routing lives here and not in the key handler.
     /// </summary>

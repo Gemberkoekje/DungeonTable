@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using DungeonTable.Application.Abstractions;
@@ -246,10 +247,147 @@ internal static class LinkAudit
                 {
                     bad.Add($"{where}: its stat block '{entity.StatBlock}' is not an extracted stat block. An individual uses a block; it never is one, and it never uses another individual.");
                 }
+
+                string count = (entity.Count ?? string.Empty).Trim();
+                if (count.Length > 0 && BandSize(entity) == 0)
+                {
+                    bad.Add($"{where}: its count '{count}' is not a whole number from 1 to {EncounterCount.MaxCount}. A count says how many make up a band.");
+                }
+                else if (count.Length > 0 && entity.Kind != EntityKind.Creature)
+                {
+                    bad.Add($"{where}: it has a count, but only a creature can be a band: an npc is one person, and a faction or an item is not in a room.");
+                }
             }
         }
 
         return bad;
+    }
+
+    /// <summary>
+    /// Every area that lists more of one somebody, or of one band, than there are: two of a person, or
+    /// nine of a band of seven. The table counts one somebody or one band across every room that lists
+    /// them, so a listing larger than the band would be read as more than the content says there are.
+    /// </summary>
+    /// <param name="dossiers">The loaded content.</param>
+    /// <param name="targets">What a reference can name in it.</param>
+    /// <returns>The faults (empty when there are none).</returns>
+    internal static IReadOnlyList<string> OverfullListings(IDossierStore dossiers, LinkTargets targets)
+    {
+        var sizes = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (Entity entity in dossiers.AllLevels().SelectMany(level => level.AllEntities()))
+        {
+            sizes[entity.Id] = Math.Max(BandSize(entity), 1);
+        }
+
+        var bad = new List<string>();
+        foreach ((AreaDossier area, string floor) in AreasWithFloors(dossiers))
+        {
+            var listed = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (AreaCreature creature in area.Creatures.Where(creature => creature is not null))
+            {
+                Result<LinkTarget> resolved = targets.Resolve(creature.Ref, floor);
+                if (resolved.IsValid && resolved.Value.CanBeInARoom
+                    && EncounterCount.TryReadAuthored(creature.Count, out CountEstimate count) && count.Expression.Length == 0)
+                {
+                    listed[resolved.Value.TargetId] = listed.GetValueOrDefault(resolved.Value.TargetId) + count.Count;
+                }
+            }
+
+            foreach (KeyValuePair<string, int> entry in listed)
+            {
+                int size = OneOrBand(entry.Key, sizes, targets, floor);
+                if (size > 0 && entry.Value > size)
+                {
+                    bad.Add(size == 1
+                        ? $"area {area.AreaNodeId}: it lists {entry.Value} of '{entry.Key}', who is one somebody. To list a band, give the entity a count."
+                        : $"area {area.AreaNodeId}: it lists {entry.Value} of '{entry.Key}', a band of {size}. Raise the entity's count, or list fewer.");
+                }
+            }
+        }
+
+        return bad;
+    }
+
+    /// <summary>
+    /// Every kind of creature (a stat block listed as itself) that one area and its lettered rooms list
+    /// more than once: bugbears in area 2 and again in 2b. A published adventure lists the same creatures
+    /// under a numbered area and again in the room they stand in, or again where they gather or retreat
+    /// to, and the table counts each listing of a kind on its own, so they would be counted twice. One
+    /// band (an entity with a count of how many there are in all), or one somebody, listed in each of
+    /// those rooms is counted once; a band whose count is all of them is right even when the listings
+    /// are different creatures, so the rule asks for it whenever a kind is repeated.
+    /// </summary>
+    /// <param name="dossiers">The loaded content.</param>
+    /// <param name="targets">What a reference can name in it.</param>
+    /// <returns>The faults (empty when there are none).</returns>
+    internal static IReadOnlyList<string> RepeatedKinds(IDossierStore dossiers, LinkTargets targets)
+    {
+        var entityIds = new HashSet<string>(
+            dossiers.AllLevels().SelectMany(level => level.AllEntities()).Select(entity => entity.Id),
+            StringComparer.Ordinal);
+
+        // (floor, numbered area, kind) -> the keys of the rooms that list it, in the order they load.
+        var listed = new Dictionary<(string Floor, string Family, string Kind), List<string>>();
+        foreach ((AreaDossier area, string floor) in AreasWithFloors(dossiers))
+        {
+            string key = LinkTargets.PrintedKeyOf(area.Title);
+            if (key.Length == 0 && area.AreaNumber > 0)
+            {
+                key = area.AreaNumber.ToString(CultureInfo.InvariantCulture);
+            }
+
+            string family = new string(key.TakeWhile(char.IsAsciiDigit).ToArray());
+            if (family.Length == 0)
+            {
+                continue;
+            }
+
+            IEnumerable<string> kinds = area.Creatures
+                .Where(creature => creature is not null)
+                .Select(creature => targets.Resolve(creature.Ref, floor))
+                .Where(resolved => resolved.IsValid && resolved.Value.Kind == CrossRefKind.Monster && !entityIds.Contains(resolved.Value.TargetId))
+                .Select(resolved => resolved.Value.TargetId)
+                .Distinct(StringComparer.Ordinal);
+            foreach (string kind in kinds)
+            {
+                if (!listed.TryGetValue((floor, family, kind), out List<string> rooms))
+                {
+                    rooms = new List<string>();
+                    listed[(floor, family, kind)] = rooms;
+                }
+
+                rooms.Add(key);
+            }
+        }
+
+        return listed
+            .Where(entry => entry.Value.Count > 1)
+            .Select(entry => $"level {entry.Key.Floor}, area {entry.Key.Family} and its lettered rooms: '{entry.Key.Kind}' is listed as a kind of creature in areas {string.Join(", ", entry.Value)}, so the table counts each listing on its own. Give them an entity (a band with a count of how many there are in all, or one somebody) and list that in each of those areas.")
+            .ToList();
+    }
+
+    // How many make up an entity that is a band: its count when that is a whole number from 2 up, one
+    // when it is 1, and zero when it says nothing or does not read.
+    private static int BandSize(Entity entity)
+    {
+        string count = (entity.Count ?? string.Empty).Trim();
+        return int.TryParse(count, NumberStyles.None, CultureInfo.InvariantCulture, out int size) && size >= 1 && size <= EncounterCount.MaxCount
+            ? size
+            : 0;
+    }
+
+    // How many there can be of something a room lists: an entity's band size (one for one somebody),
+    // one for a person or a player character, and zero for a stat block listed as itself, which is a
+    // kind of creature and has no limit.
+    private static int OneOrBand(string id, Dictionary<string, int> sizes, LinkTargets targets, string floor)
+    {
+        if (sizes.TryGetValue(id, out int size))
+        {
+            return size;
+        }
+
+        Result<LinkTarget> resolved = targets.Resolve(id, floor);
+        return resolved.IsValid && resolved.Value.Kind is CrossRefKind.Npc or CrossRefKind.Character ? 1 : 0;
     }
 
     /// <summary>

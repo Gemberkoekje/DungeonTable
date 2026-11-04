@@ -43,10 +43,42 @@ public sealed class EncounterMonster
 
     /// <summary>
     /// True for one named individual, such as Grask: added under its own name, on a row of its
-    /// own, rather than as a numbered group named after its stat block.
+    /// own, rather than as a numbered group named after its stat block. A band is not one.
     /// </summary>
     public bool Individual { get; init; }
 
     /// <summary>True when the area lists it as something the players must not know is there yet.</summary>
     public bool Secret { get; init; }
+
+    /// <summary>
+    /// True when it is one particular somebody or one band, which every area that lists it lists the
+    /// same of: an entity, an NPC or a character, rather than a stat block listed as itself. What is
+    /// dealt with of it in one room is dealt with in all of them (see <see cref="CreatureStanding"/>).
+    /// </summary>
+    public bool Shared { get; init; }
+
+    /// <summary>
+    /// How many there are in all when it is a band (an entity with a count above one), and zero
+    /// otherwise. A band is added to a fight as a numbered group, as a kind of creature is.
+    /// </summary>
+    public int BandSize { get; init; }
+
+    /// <summary>The same row with another count, as the badges show what is left of it.</summary>
+    /// <param name="count">The count to carry instead of the authored one.</param>
+    /// <returns>A copy of this row with that count and no dice.</returns>
+    public EncounterMonster WithCount(int count) => new EncounterMonster
+    {
+        NodeId = NodeId,
+        StatBlockNodeId = StatBlockNodeId,
+        Name = Name,
+        SuggestedCount = count,
+        CountExpression = string.Empty,
+        Context = Context,
+        Citation = Citation,
+        HasStatBlock = HasStatBlock,
+        Individual = Individual,
+        Secret = Secret,
+        Shared = Shared,
+        BandSize = BandSize,
+    };
 }

@@ -26,4 +26,10 @@ public sealed class OccupantEntry
 
     /// <summary>True when the players must not know they are here yet.</summary>
     public bool Secret { get; init; }
+
+    /// <summary>
+    /// How many there are in all when it names a band (an entity whose <c>count</c> is above one):
+    /// every area that lists it lists some of the same band. Zero for anything else.
+    /// </summary>
+    public int BandSize { get; init; }
 }

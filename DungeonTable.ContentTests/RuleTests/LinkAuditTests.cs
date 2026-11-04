@@ -118,6 +118,96 @@ public sealed class LinkAuditTests
     }
 
     [Fact]
+    public void One_somebody_listed_as_one_and_a_band_listed_within_its_count_are_not_reported()
+    {
+        FakeDossierStore dossiers = Content(
+            entities: new[]
+            {
+                new Entity { Id = "bell-warden", Kind = EntityKind.Creature, Name = "the Bell-Warden", StatBlock = "bandit" },
+                new Entity { Id = "gang", Kind = EntityKind.Creature, Name = "Gang bandit", StatBlock = "bandit", Count = "7" },
+            },
+            creatures: new[]
+            {
+                new AreaCreature { Ref = "bell-warden" },
+                new AreaCreature { Ref = "wenna-brask", Count = "1" },
+                new AreaCreature { Ref = "gang", Count = "4" },
+                new AreaCreature { Ref = "gang", Count = "3" },
+                new AreaCreature { Ref = "gang", Count = "1d4" },
+                new AreaCreature { Ref = "bandit", Count = "12" },
+            });
+
+        Assert.Empty(LinkAudit.OverfullListings(dossiers, Targets(dossiers)));
+        Assert.Empty(LinkAudit.BadEntities(dossiers, Targets(dossiers), Stats()));
+    }
+
+    [Fact]
+    public void A_listing_larger_than_one_somebody_or_a_band_is_reported()
+    {
+        FakeDossierStore dossiers = Content(
+            entities: new[]
+            {
+                new Entity { Id = "bell-warden", Kind = EntityKind.Creature, Name = "the Bell-Warden", StatBlock = "bandit" },
+                new Entity { Id = "gang", Kind = EntityKind.Creature, Name = "Gang bandit", StatBlock = "bandit", Count = "7" },
+            },
+            creatures: new[]
+            {
+                new AreaCreature { Ref = "bell-warden", Count = "2" },
+                new AreaCreature { Ref = "wenna-brask", Count = "3" },
+                new AreaCreature { Ref = "gang", Count = "5" },
+                new AreaCreature { Ref = "gang", Count = "3" },
+            });
+
+        IReadOnlyList<string> bad = LinkAudit.OverfullListings(dossiers, Targets(dossiers));
+
+        Assert.Equal(3, bad.Count);
+        Assert.Contains("2 of 'bell-warden', who is one somebody", bad[0], StringComparison.Ordinal);
+        Assert.Contains("3 of 'wenna-brask', who is one somebody", bad[1], StringComparison.Ordinal);
+        Assert.Contains("8 of 'gang', a band of 7", bad[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_kind_of_creature_listed_in_an_area_and_its_rooms_is_reported_and_a_band_is_not()
+    {
+        // Area 2 lists the bandits of 2a and 2b again; area 3 lists bandits of its own; the band and the
+        // person are each one, wherever they are listed.
+        FakeDossierStore dossiers = Family(
+            ("2", "bandit gang wenna-brask"),
+            ("2a", "bandit gang wenna-brask"),
+            ("2b", "bandit"),
+            ("3", "bandit"));
+
+        string bad = Assert.Single(LinkAudit.RepeatedKinds(dossiers, Targets(dossiers)));
+
+        Assert.Contains("area 2 and its lettered rooms", bad, StringComparison.Ordinal);
+        Assert.Contains("in areas 2, 2a, 2b", bad, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_kind_of_creature_listed_once_in_each_numbered_area_is_not_reported()
+    {
+        FakeDossierStore dossiers = Family(("2", "bandit"), ("3", "bandit"), ("3a", "gang"));
+
+        Assert.Empty(LinkAudit.RepeatedKinds(dossiers, Targets(dossiers)));
+    }
+
+    [Theory]
+    [InlineData("seven", EntityKind.Creature, "not a whole number")]
+    [InlineData("0", EntityKind.Creature, "not a whole number")]
+    [InlineData("100", EntityKind.Creature, "not a whole number")]
+    [InlineData("2", EntityKind.Npc, "only a creature can be a band")]
+    public void An_entity_count_that_does_not_read_or_does_not_fit_is_reported(string count, EntityKind kind, string said)
+    {
+        FakeDossierStore dossiers = Content(entities: new[]
+        {
+            new Entity { Id = "gang", Kind = kind, Name = "Gang", StatBlock = "bandit", Count = count },
+        });
+
+        string bad = Assert.Single(LinkAudit.BadEntities(dossiers, Targets(dossiers), Stats()));
+
+        Assert.Contains(said, bad, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void An_exit_to_an_area_or_to_a_floor_not_written_yet_is_not_reported()
     {
         FakeDossierStore dossiers = Content(exits: new[] { new AreaExit { To = "area 2a" }, new AreaExit { To = "L2 area 1" } });
@@ -378,6 +468,34 @@ public sealed class LinkAuditTests
     }
 
     private static LinkTargets Targets(FakeDossierStore dossiers) => LinkTargets.Build(dossiers, Stats());
+
+    // One floor whose areas, by printed key, list the refs given (separated by spaces); with a band of
+    // seven, "gang".
+    private static FakeDossierStore Family(params (string Key, string Refs)[] areas)
+    {
+        var dossiers = new FakeDossierStore();
+        var level = new LevelDossier
+        {
+            LevelNodeId = Level1,
+            Title = "Level 1: The Undercroft",
+            Entities = new[] { new Entity { Id = "gang", Kind = EntityKind.Creature, Name = "Gang bandit", StatBlock = "bandit", Count = "7" } },
+        };
+        foreach ((string key, string refs) in areas)
+        {
+            string id = $"data_dossiers_level_1_area_{key}";
+            dossiers.Areas[id] = new AreaDossier
+            {
+                AreaNodeId = id,
+                Title = $"Room (Level 1, Area {key})",
+                Creatures = refs.Split(' ').Select(reference => new AreaCreature { Ref = reference }).ToArray(),
+            };
+            dossiers.LevelsByArea[id] = level;
+        }
+
+        dossiers.LevelNumbers[Level1] = 1;
+        dossiers.Npcs = new NpcRoster { Npcs = new[] { new NpcDossier { Id = "wenna-brask", Name = "Wenna Brask", Summary = "A smith." } } };
+        return dossiers;
+    }
 
     private static FakeStatLibrary Stats()
     {

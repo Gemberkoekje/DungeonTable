@@ -167,8 +167,7 @@
     // derives it, so the chip and the strip can never disagree about whether a room is done.
     private bool AreaCleared =>
         Workspace.Encounter.Count > 0
-        && Campaign.ClearedCount(Workspace.PanelNode, Workspace.Encounter.Select(monster => monster.NodeId))
-            == Workspace.Encounter.Count;
+        && Workspace.Encounter.All(monster => CreatureStanding.Of(Workspace.PanelNode, monster, Campaign).Gone);
 
     // The floor's ⓘ stays as the DM left it from room to room: it is about the floor, not the room.
     private bool levelOpen;
@@ -185,7 +184,8 @@
     private RenderFragment EncounterSlot => @<EncounterStrip Monsters="Workspace.Encounter"
                                                             AreaNodeId="@Workspace.PanelNode"
                                                             AreaTitle="@Workspace.PanelTitle"
-                                                            OnOpenReference="Workspace.OpenReference" />;
+                                                            OnOpenReference="Workspace.OpenReference"
+                                                            AreaLabel="Workspace.LabelFor" />;
 
     private RenderFragment NearbySlot => @<NearbyRooms Rooms="NearbyLines()"
                                                        OnNavigate="Workspace.NavigateTo"

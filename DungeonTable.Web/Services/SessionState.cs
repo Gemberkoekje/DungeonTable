@@ -65,6 +65,13 @@ public sealed class SessionState
     private string shownArtImageId = string.Empty;
     private bool shownArtVisible;
     private ArtSize shownArtSize = ArtSize.Medium;
+    // How each picture the DM turned or flipped is shown, by catalogue id; absent means upright.
+    private readonly Dictionary<string, ArtOrientation> artOrientations = new Dictionary<string, ArtOrientation>(StringComparer.Ordinal);
+    // How far the projector's picture of the map is turned, in quarter turns clockwise, and the size of
+    // its view the DM remembered, in grid squares across and down the projector's screen. Both are
+    // settings of the table, not of a map.
+    private int playerTurns;
+    private ViewSize rememberedView = ViewSize.None;
     // Where the DM last pointed at the projector. Live-only state beside the open doors: a ping is
     // "look here, now", so it is neither captured nor restored (see PingMarker), and it is dropped
     // on a map switch because its coordinates belong to the map it was placed on.
@@ -180,6 +187,80 @@ public sealed class SessionState
         {
             Changed?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// How far the projector's picture of the map is turned, in quarter turns clockwise from 0 to 3. The
+    /// player view turns the map on the screen; the DM's box for it is the turned shape.
+    /// </summary>
+    public int PlayerTurns
+    {
+        get { lock (gate) { return playerTurns; } }
+    }
+
+    /// <summary>
+    /// The width / height ratio of the projector's view in world units: the screen's own, or the other
+    /// way up while the picture lies on its side. Every framing is cut to it.
+    /// </summary>
+    public double FramingAspect
+    {
+        get { lock (gate) { return playerTurns % 2 == 1 ? 1 / playerAspect : playerAspect; } }
+    }
+
+    /// <summary>
+    /// Turns the projector's picture of the map a quarter turn clockwise. The view turns about its own
+    /// middle, on this map and on every map set aside, so what the projector shows keeps its size: a
+    /// square on the table stays the size it was.
+    /// </summary>
+    public void TurnPlayerView()
+    {
+        lock (gate)
+        {
+            playerTurns = ArtOrientation.Normalised(playerTurns + 1);
+            playerViewport = OnItsSide(playerViewport);
+            foreach (MapRevealSnapshot map in otherMaps.Values)
+            {
+                map.PlayerViewport = ToViewport(OnItsSide(ToBounds(map.PlayerViewport)));
+            }
+        }
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>The size of the projector's view the DM remembered; <see cref="ViewSize.None"/> when none is.</summary>
+    public ViewSize RememberedView
+    {
+        get { lock (gate) { return rememberedView; } }
+    }
+
+    /// <summary>Remembers a size of the projector's view, to frame another map at the same scale.</summary>
+    /// <param name="size">The size in grid squares; one that is not usable is ignored.</param>
+    public void RememberView(ViewSize size)
+    {
+        if (!size.IsSet)
+        {
+            return;
+        }
+
+        lock (gate)
+        {
+            rememberedView = size;
+        }
+
+        Changed?.Invoke();
+    }
+
+    // The same view turned a quarter turn about its middle: as wide as it was high.
+    private static MapBounds OnItsSide(MapBounds view)
+    {
+        if (view.Width <= 0 || view.Height <= 0)
+        {
+            return view;
+        }
+
+        double cx = view.MinX + (view.Width / 2), cy = view.MinY + (view.Height / 2);
+        double halfWidth = view.Height / 2, halfHeight = view.Width / 2;
+        return new MapBounds(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight);
     }
 
     /// <summary>
@@ -743,6 +824,48 @@ public sealed class SessionState
         }
     }
 
+    /// <summary>How a picture is turned and flipped on the projector; upright when the DM never changed it.</summary>
+    /// <param name="imageId">The picture's catalogue id.</param>
+    /// <returns>Its orientation.</returns>
+    public ArtOrientation ArtOrientationOf(string imageId)
+    {
+        lock (gate)
+        {
+            return artOrientations.TryGetValue(imageId ?? string.Empty, out ArtOrientation found) ? found : ArtOrientation.Upright;
+        }
+    }
+
+    /// <summary>Turns a picture a quarter turn clockwise on the projector. Kept for that picture.</summary>
+    /// <param name="imageId">The picture's catalogue id; a blank id does nothing.</param>
+    public void TurnArt(string imageId) => Reorient(imageId, orientation => orientation.Turned());
+
+    /// <summary>Flips a picture left to right on the projector, or back. Kept for that picture.</summary>
+    /// <param name="imageId">The picture's catalogue id; a blank id does nothing.</param>
+    public void MirrorArt(string imageId) => Reorient(imageId, orientation => orientation.Flipped());
+
+    private void Reorient(string imageId, Func<ArtOrientation, ArtOrientation> change)
+    {
+        if (string.IsNullOrWhiteSpace(imageId))
+        {
+            return;
+        }
+
+        lock (gate)
+        {
+            ArtOrientation now = change(artOrientations.TryGetValue(imageId, out ArtOrientation found) ? found : ArtOrientation.Upright);
+            if (now.IsUpright)
+            {
+                artOrientations.Remove(imageId);
+            }
+            else
+            {
+                artOrientations[imageId] = now;
+            }
+        }
+
+        Changed?.Invoke();
+    }
+
     /// <summary>Sets how large the picture is drawn on the projector.</summary>
     /// <param name="size">The new size; <see cref="ArtSize.None"/> is read as <see cref="ArtSize.Medium"/>.</param>
     public void SetArtSize(ArtSize size)
@@ -886,6 +1009,10 @@ public sealed class SessionState
                     Visible = shownArtVisible,
                     Size = shownArtSize,
                     TrayImageIds = trayImageIds.ToArray(),
+                    Orientations = artOrientations
+                        .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                        .Select(pair => new ArtOrientationSnapshot { ImageId = pair.Key, QuarterTurns = pair.Value.QuarterTurns, Mirrored = pair.Value.Mirrored })
+                        .ToArray(),
                 },
                 OtherMaps = otherMaps.Values
                     .OrderBy(map => map.MapId, StringComparer.Ordinal)
@@ -893,6 +1020,8 @@ public sealed class SessionState
                     .ToArray(),
                 PartyToken = ToSnapshot(party),
                 ProjectorFollowsParty = projectorFollowsParty,
+                PlayerTurns = playerTurns,
+                RememberedView = new ViewSizeSnapshot { SquaresAcross = rememberedView.Across, SquaresDown = rememberedView.Down },
             };
         }
     }
@@ -945,6 +1074,20 @@ public sealed class SessionState
                 .Where(id => !string.IsNullOrEmpty(id))
                 .Distinct(StringComparer.Ordinal));
 
+            // One orientation per picture (the first), turned 0 to 3 whatever a hand-edited document
+            // says, and none kept for a picture that is upright anyway.
+            artOrientations.Clear();
+            IEnumerable<ArtOrientationSnapshot> orientations = (art.Orientations ?? Array.Empty<ArtOrientationSnapshot>())
+                .Where(entry => entry is not null && !string.IsNullOrEmpty(entry.ImageId));
+            foreach (ArtOrientationSnapshot entry in orientations)
+            {
+                var orientation = new ArtOrientation(ArtOrientation.Normalised(entry.QuarterTurns), entry.Mirrored);
+                if (!orientation.IsUpright)
+                {
+                    artOrientations.TryAdd(entry.ImageId, orientation);
+                }
+            }
+
             playerViewport = ToBounds(snapshot.PlayerViewport);
             playerAspect = IsUsableAspect(snapshot.PlayerAspect)
                 ? ClampAspect(snapshot.PlayerAspect)
@@ -952,6 +1095,10 @@ public sealed class SessionState
 
             party = ToToken(snapshot.PartyToken);
             projectorFollowsParty = snapshot.ProjectorFollowsParty;
+            playerTurns = ArtOrientation.Normalised(snapshot.PlayerTurns);
+            ViewSizeSnapshot remembered = snapshot.RememberedView ?? new ViewSizeSnapshot();
+            ViewSize size = new ViewSize(remembered.SquaresAcross, remembered.SquaresDown);
+            rememberedView = size.IsSet ? size : ViewSize.None;
 
             DropClearSnapshot();
             partyReveals.Clear();

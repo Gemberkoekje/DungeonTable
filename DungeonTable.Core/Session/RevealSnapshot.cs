@@ -69,4 +69,19 @@ public sealed class RevealSnapshot
     /// projector's view. A setting of the table rather than of a map. Additive and off by default.
     /// </summary>
     public bool ProjectorFollowsParty { get; set; }
+
+    /// <summary>
+    /// How far the projector's picture of the map is turned, in quarter turns clockwise from 0 to 3: for
+    /// a table the players sit around. A setting of the table, like
+    /// <see cref="ProjectorFollowsParty"/>; each map's framing is kept in the same turn. Additive, and
+    /// upright by default.
+    /// </summary>
+    public int PlayerTurns { get; set; }
+
+    /// <summary>
+    /// The size of the projector's view the DM remembered, in grid squares, to frame another map at the
+    /// same scale, so a square on the table stays the size of a miniature's base. Additive, and none by
+    /// default.
+    /// </summary>
+    public ViewSizeSnapshot RememberedView { get; set; } = new ViewSizeSnapshot();
 }
