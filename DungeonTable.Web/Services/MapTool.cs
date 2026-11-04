@@ -24,8 +24,11 @@ public enum MapTool
     /// <summary>Drag to paint (or erase) fog-reveal cells with a sized brush.</summary>
     Fog,
 
-    /// <summary>Click a spot to reveal everything a viewer standing there could see.</summary>
-    Lift,
+    /// <summary>
+    /// Click to put the party token down there, revealing what the party sees from there and nothing on
+    /// the way. Walking is dragging the token, in any tool but the two that own the drag.
+    /// </summary>
+    Party,
 
     /// <summary>Click a door to open, close, discover or re-hide it.</summary>
     Doors,

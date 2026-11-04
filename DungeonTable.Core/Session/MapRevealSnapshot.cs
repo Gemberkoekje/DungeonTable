@@ -2,8 +2,8 @@ namespace DungeonTable.Core.Session;
 
 /// <summary>
 /// What the table left behind on a map it is not on now: what was revealed there, which doors stood
-/// open and where the projector was framed. Going back to that map brings all of it back, so a party
-/// that climbs back up a floor finds it as they left it.
+/// open, where the projector was framed and where the party token stood. Going back to that map
+/// brings all of it back, so a party that climbs back up a floor finds it as they left it.
 /// </summary>
 /// <remarks>
 /// The same fields as the map in play on <see cref="RevealSnapshot"/>, keyed by the map they belong to.
@@ -29,4 +29,7 @@ public sealed class MapRevealSnapshot
 
     /// <summary>Where the player projector was framed on that map, in its world units.</summary>
     public ViewportSnapshot PlayerViewport { get; set; } = new ViewportSnapshot();
+
+    /// <summary>Where the party token stood on that map, and how far the party saw there.</summary>
+    public PartyTokenSnapshot PartyToken { get; set; } = new PartyTokenSnapshot();
 }

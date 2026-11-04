@@ -148,10 +148,11 @@ Blazor Server keeps one circuit per browser tab. The state of the table is share
 
 | service | lifetime | holds |
 |---|---|---|
-| `SessionState` | singleton | what the projector shows: the map, revealed regions and features, fog cells, open doors, concealed objects, the framing, the picture over the map; and the same per map the table has left |
+| `SessionState` | singleton | what the projector shows: the map, revealed regions and features, fog cells, open doors, concealed objects, the framing, the picture over the map; the party token and the undo of what it revealed; and the same per map the table has left |
 | `BattleState` | singleton | the one running fight |
 | `CampaignState` | singleton | quest progress, each deck's drawn cards, per-area checklists and notes |
-| `DmWorkspace` | scoped | one DM tab's own view: the loaded map, the room shown, the reference history |
+| `DmWorkspace` | scoped | one DM tab's own view: the loaded map, the room shown, the reference history, whether the dock is pinned |
+| `PartyMoves` | scoped | works out what the party sees as one DM tab moves the token, from that tab's map |
 
 The app assumes **one live table**. The shared state is a singleton so that a refreshed DM tab, a
 second DM window and the player view all agree, and each service raises `Changed` so the others
@@ -171,9 +172,11 @@ whichever dock tab is up.
   shows it on the Room tab and changes nothing for the players; a click on a door opens or closes it.
   A secret door the players have not found gets no click target in Look, so the click reads the room
   behind it: discovering one takes the Doors tool, so it never happens by accident (`MapHitTargets`).
+- **Revealing is moving the party.** The DM drags the party token and what the party sees on the way
+  is revealed (see [The party token](#the-party-token)); the Room tab follows the token.
 - **The tools are for the occasional job.** The ones that do one thing to one object (reveal, doors,
-  conceal, point) go back to Look after one click that did something; the fog brush, the lifter and
-  measuring stay until Esc; Shift keeps a one-click tool up (`ToolSelection`). The trap this removes is
+  conceal, point, put the party down) go back to Look after one click that did something; the fog brush
+  and measuring stay until Esc; Shift keeps a one-click tool up (`ToolSelection`). The trap this removes is
   being left in the wrong mode. The toolbar and its options are drawn over the map, not beside it, so
   the canvas keeps its size whatever tool is up.
 - **The Room tab reads in table order**: the read-aloud first, then the checks and the short list, the
@@ -211,9 +214,9 @@ it as SVG for both views. The Room Editor adds what Dungeon Scrawl cannot say, i
 beside it: which area each room is, which doors are secret or open, and where the traps, hazards and
 features are. That file describes hidden things, so it is never served to a browser.
 
-The DM reveals the map as the party explores: a room at a time, a fog brush, a "lifter" that uncovers
-what someone standing at a point could see (`VisionReveal`), and corridor stubs that fade out a step or
-two past an open door (`CorridorReveal`). The player view draws the same map under an opaque fog built
+The DM reveals the map as the party explores: by moving the party token, which uncovers what the party
+could see from every square it passes (`VisionReveal`), a room at a time, with a fog brush, and corridor
+stubs that fade out a step or two past an open door (`CorridorReveal`). The player view draws the same map under an opaque fog built
 from the revealed geometry only, and leaves out what the DM has concealed.
 
 Reveals belong to a map: each has its own world coordinates, regions and doors. When the table moves to
@@ -230,7 +233,9 @@ projector actually shows must be right, and the tests check that.
 
 ## The fog lifter
 
-The lifter reveals what someone standing at a point could see within a range: every floor tile with a
+The lifter was a tool: click where the party stands and see what they see. The party token replaced it
+(next section), and its rule is what the token runs from each square it passes. The lifter reveals what
+someone standing at a point could see within a range: every floor tile with a
 straight line to one of its floor sample points (the centre, then a 7×7 lattice at eighths of the tile,
 so a sliver of floor beside a slanted wall still counts) that crosses no wall and no still-hidden secret
 door. Wall segments are extended half a cell past every corner, so a line cannot slip through the point
@@ -260,6 +265,48 @@ tile. That changes the rule slightly, which is why it was not the first step.
 (`dotnet test DungeonTable.Tests -c Release --filter "FullyQualifiedName~LiftBenchmark" -- xUnit.Explicit=only`),
 on the sample pack's map or any map named in `DUNGEONTABLE_BENCH_MAP`. On a 138×177-cell level a
 120 ft lift takes 10 to 25 ms in a Release build, which is what the container runs.
+
+## The party token
+
+The lifter was the reveal tool the table actually used, and it was a mode: pick it, click, pick
+something else to read the room, pick it again. So revealing became moving the party. A token on the DM's
+map stands where the party is, and dragging it reveals what the party sees as it goes; opening a door
+looks again from it; the Room tab shows the room it is in.
+
+- **The token is the table's.** It is on `SessionState` with the reveals, per map, with its vision range,
+  so a second DM window and a restart agree on where the party is, and the range no longer goes back to
+  30 ft on every reload. It is saved as `PartyTokenSnapshot`, an additive field with an empty default,
+  so `TableSnapshot.CurrentVersion` did not change. It is DM-only: an HTML overlay on the DM's canvas
+  (`dt-party.js`), placed from world units like the player-view box, never part of the projector's SVG.
+- **A drag reports itself a square at a time.** The browser reports once per square the pointer enters,
+  plus where the drag ends, one report at a time: while one is on its way, the latest position waits.
+  A quick drag therefore jumps several squares between two reports, so the server fills the walk in
+  square by square (`PartyVision.Path`, a quarter square at a time) and lifts from each, and a side
+  passage walked past is seen. A square with no floor in it is not stood in: the DM drags across rock
+  as often as along a corridor, and a viewer in a wall would see into both rooms it divides. The squares
+  one drag has looked from are not looked from again (`PartyMoves`). The token is snapped to the middle
+  of its square, which is where the lifter has always stood the viewer.
+- **The Party tool puts the token down without a walk**, for the stairs or a teleport, where dragging
+  across the map would reveal everything between. It took the lifter's key, so the numbers did not move.
+- **Ctrl+Z takes back a move.** Each move, opened door or longer range that showed something keeps what
+  it showed that was not showing already, where the token stood before, and the door as it stood
+  (`PartyReveal`). Undo hides those cells, puts the token back and the door too, so a door opened by
+  mistake is one key away from shut and dark. A drag is one move: its first report starts the move and
+  the rest join it. The list is fifty deep and live only, like the clear's undo, and goes on a map
+  switch, a clear or a restore, since its cells and positions belong to one map and one evening.
+- **The dock follows the party** (`DmWorkspace.FollowParty`). The shell calls it on every change of the
+  shared state, on the DM circuit's own dispatcher, because the token is moved by this window, another
+  one, or an undo. When the token has walked into another area, the Room tab shows it. Looking at
+  another room lasts until the party moves on, which is when the DM needs the new room; the pin is how a
+  room stays, and it belongs to one DM window, not the table.
+- **The projector can follow the party.** A setting of the table, off by default. While it is on, a move
+  that leaves the token outside the middle half of the projector's view centres the view on it again,
+  at the same size, kept on the map (`MapFraming.KeepInMiddle`). Re-framing in steps keeps the picture
+  still while the party walks about a room, which is what the players are looking at.
+
+The projector's circuit renders again on every change of the session, a move of the token included,
+though nothing it draws has changed: about 10 ms on a large level, and Blazor sends nothing. If it ever
+shows during a drag, key the projector's layers as `MapLayerKey` keys the DM's.
 
 ## What a reveal sends
 

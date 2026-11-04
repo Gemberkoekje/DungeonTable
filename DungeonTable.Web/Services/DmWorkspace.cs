@@ -8,6 +8,7 @@ using DungeonTable.Core.Briefing;
 using DungeonTable.Core.Dossier;
 using DungeonTable.Core.Maps;
 using DungeonTable.Core.Maps.Vector;
+using DungeonTable.Core.Session;
 using DungeonTable.Core.Stats;
 using DungeonTable.Infrastructure.Content;
 using Qowaiv.Validation.Abstractions;
@@ -53,6 +54,10 @@ public sealed class DmWorkspace
     // Region ids on the current map linked to the shown room, used by the "reveal room" control (a
     // room may be split into several regions across corridors, so this is a list).
     private readonly List<string> roomRegionIds = new List<string>();
+
+    // The area the party token stood in when this workspace last followed it, so it can tell when the
+    // party has walked into another one.
+    private string followedPartyArea = string.Empty;
 
     // The level name the Room Editor gave each map, which the map picker lists it under.
     private IReadOnlyDictionary<string, string> levelNames = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -324,7 +329,10 @@ public sealed class DmWorkspace
         string tableMap = session.CurrentMapId;
         string first = MapIds.Count > 0 ? MapIds[0] : string.Empty;
         await LoadMapAsync(MapIds.Contains(tableMap) ? tableMap : first, cancellationToken);
-        NavigateTo(StartArea());
+
+        // A table the party is already walking opens on the party's room; a new one on the start area.
+        followedPartyArea = PartyArea;
+        NavigateTo(followedPartyArea.Length > 0 ? followedPartyArea : StartArea());
     }
 
     /// <summary>
@@ -573,6 +581,94 @@ public sealed class DmWorkspace
 
         SelectedRegionId = region.RegionId;
         RegionNotice = $"Region '{(region.Label.Length > 0 ? region.Label : region.RegionId)}' has no linked briefing yet.";
+        Notify();
+    }
+
+    // ---- Following the party --------------------------------------------------------------
+
+    /// <summary>
+    /// True when the DM pinned the dock: it stays on what they show it when the party walks into another
+    /// room. One DM window's choice, not the table's.
+    /// </summary>
+    public bool Pinned { get; private set; }
+
+    /// <summary>
+    /// The area the party token stands in on the loaded map: the area of the region under it. An empty
+    /// string when the token is off the map, or stands where no region opens an area (a corridor nobody
+    /// linked, say).
+    /// </summary>
+    public string PartyArea
+    {
+        get
+        {
+            PartyToken token = session.Party;
+            if (!MapLoaded || !token.IsPlaced)
+            {
+                return string.Empty;
+            }
+
+            string regionId = MapFraming.RegionAt(regions, token.X, token.Y);
+            Region region = regions.Find(r => string.Equals(r.RegionId, regionId, StringComparison.Ordinal));
+            if (region is null || region.GraphNodeId.Length == 0 || IsSomethingOtherThanAnArea(region.GraphNodeId))
+            {
+                return string.Empty;
+            }
+
+            return region.GraphNodeId;
+        }
+    }
+
+    /// <summary>True when the Room tab shows a room other than the one the party token is in.</summary>
+    public bool LookingAway
+    {
+        get
+        {
+            string party = PartyArea;
+            return party.Length > 0 && !string.Equals(party, PanelNode, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Follows the party: when the token has walked into another area since the last call, the Room tab
+    /// shows that area, unless the dock is pinned. Looking at another room lasts until the party moves
+    /// on; pinning is how a room stays. Call it whenever the shared state changes, on the DM circuit's
+    /// own dispatcher: the token is moved by this DM window, another one, or an undo.
+    /// </summary>
+    public void FollowParty()
+    {
+        string area = PartyArea;
+        if (string.Equals(area, followedPartyArea, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        followedPartyArea = area;
+        if (area.Length == 0 || Pinned || string.Equals(area, PanelNode, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        NavigateTo(area);
+    }
+
+    /// <summary>Pins the dock to what it shows, or lets it follow the party again.</summary>
+    public void TogglePin()
+    {
+        Pinned = !Pinned;
+        Notify();
+    }
+
+    /// <summary>Shows the party's room in the dock again, and lets the dock follow the party.</summary>
+    public void BackToParty()
+    {
+        Pinned = false;
+        string area = PartyArea;
+        if (area.Length > 0 && !string.Equals(area, PanelNode, StringComparison.Ordinal))
+        {
+            NavigateTo(area);
+            return;
+        }
+
         Notify();
     }
 

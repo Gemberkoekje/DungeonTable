@@ -5,6 +5,8 @@
     The DM and player views share this component:
       - Pannable wraps the map in a bounded box with drag-pan / wheel-zoom.
       - ShowPlayerBox overlays the aspect-locked "player view" rectangle the DM moves/resizes.
+      - ShowPartyToken overlays the party token the DM drags to move the party (dt-party.js), with
+        MapOverlay for what is drawn beside it (its menu). The DM's map only.
       - ViewBox restricts the SVG to a world-unit region (the player view shows only that box).
 
     The map is drawn in three layers inside one svg element. On the DM's map they are the map itself,
@@ -71,6 +73,20 @@
     .dt-edge-s { bottom: -4px; left: 10px; right: 10px; height: 9px; }
     .dt-edge-w { left: -4px; top: 10px; bottom: 10px; width: 9px; }
     .dt-edge-e { right: -4px; top: 10px; bottom: 10px; width: 9px; }
+
+    /* The party token (dt-party.js): a fixed size on screen at every zoom, above the player-view box;
+       its vision ring scales with the map and never takes a click. */
+    .dt-party {
+        position: absolute; z-index: 2; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+        box-sizing: border-box; border-radius: 50%; cursor: grab; touch-action: none;
+        background: radial-gradient(circle, #1f6feb 0 38%, #ffffff 39% 52%, #1f6feb 53% 100%);
+        border: 2px solid #ffffff; box-shadow: 0 0 0 1px #0b3d91, 0 1px 4px rgba(0, 0, 0, 0.45);
+    }
+    .dt-party.dragging { cursor: grabbing; }
+    .dt-party-ring {
+        position: absolute; z-index: 1; box-sizing: border-box; border-radius: 50%; pointer-events: none;
+        border: 2px dashed rgba(31, 111, 235, 0.55); background: rgba(31, 111, 235, 0.06);
+    }
 </style>
 
 @if (Pannable)
@@ -79,6 +95,7 @@
         <div class="vector-map-pan">
             @MapSvg
         </div>
+        @MapOverlay
         <div class="vector-map-tools">
             <button type="button" title="Zoom in" @onclick="ZoomIn">+</button>
             <button type="button" title="Zoom out" @onclick="ZoomOut">&minus;</button>
@@ -130,6 +147,40 @@ else
     /// <summary>Raised when the DM moves or resizes the player-view box.</summary>
     [Parameter]
     public EventCallback<MapBounds> PlayerViewportChanged { get; set; }
+
+    /// <summary>When true (with <see cref="Pannable"/>), overlays the party token the DM drags.</summary>
+    [Parameter]
+    public bool ShowPartyToken { get; set; }
+
+    /// <summary>The party token: where it stands, if it is on the map.</summary>
+    [Parameter]
+    public PartyToken Party { get; set; } = PartyToken.None;
+
+    /// <summary>The radius of the faint ring round the token, in world units; 0 for none.</summary>
+    [Parameter]
+    public double PartyVisionRadius { get; set; }
+
+    /// <summary>
+    /// Whether the token takes the pointer. False while a tool that owns the drag is up (the fog brush,
+    /// measuring), so the drag paints or measures under the token instead of moving it.
+    /// </summary>
+    [Parameter]
+    public bool PartyDraggable { get; set; } = true;
+
+    /// <summary>Raised as the DM drags the party token: once per square entered, and where the drag ends.</summary>
+    [Parameter]
+    public EventCallback<PartyStep> PartyMoved { get; set; }
+
+    /// <summary>Raised when the DM clicks the party token without dragging it.</summary>
+    [Parameter]
+    public EventCallback PartyClicked { get; set; }
+
+    /// <summary>
+    /// Drawn inside the pannable box, over the map and not moved by its pan and zoom: the party token's
+    /// menu, which dt-party.js places beside the token.
+    /// </summary>
+    [Parameter]
+    public RenderFragment MapOverlay { get; set; }
 
     /// <summary>Extra CSS class applied to the host element so callers can control layout.</summary>
     [Parameter]
@@ -306,6 +357,12 @@ else
                     selfRef ??= DotNetObjectReference.Create(this);
                     await JS.InvokeVoidAsync("dtEditor.attach", boxRef, selfRef);
                 }
+
+                if (ShowPartyToken)
+                {
+                    selfRef ??= DotNetObjectReference.Create(this);
+                    await JS.InvokeVoidAsync("dtParty.attach", boxRef, selfRef);
+                }
             }
 
             await JS.InvokeVoidAsync("dtPanZoom.apply", boxRef);
@@ -314,6 +371,13 @@ else
                 await JS.InvokeVoidAsync(
                     "dtPlayerBox.update", boxRef,
                     PlayerViewport.MinX, PlayerViewport.MinY, PlayerViewport.Width, PlayerViewport.Height, PlayerAspect);
+            }
+
+            if (ShowPartyToken)
+            {
+                await JS.InvokeVoidAsync(
+                    "dtParty.update", boxRef, Party.IsPlaced, Party.X, Party.Y, PartyVisionRadius,
+                    Map.Grid.CellSizePx, Map.Grid.OriginX, Map.Grid.OriginY, PartyDraggable);
             }
 
             if (EnableEditor)
@@ -368,6 +432,21 @@ else
     [JSInvokable]
     public Task OnFogPaint(double worldX, double worldY, bool erase) =>
         FogPainted.InvokeAsync(new FogPaint(worldX, worldY, erase));
+
+    /// <summary>Invoked from JS as the DM drags the party token.</summary>
+    /// <param name="worldX">Where the token is, X in world units.</param>
+    /// <param name="worldY">Where the token is, Y in world units.</param>
+    /// <param name="kind">"walk" for the first report of a drag, "walk-on" for the rest.</param>
+    /// <returns>A task that completes once the move has been handled, which lets the next report go.</returns>
+    [JSInvokable]
+    public Task OnPartyMoved(double worldX, double worldY, string kind) =>
+        PartyMoved.InvokeAsync(new PartyStep(
+            worldX, worldY, string.Equals(kind, "walk", StringComparison.Ordinal) ? PartyMoveKind.Walk : PartyMoveKind.WalkOn));
+
+    /// <summary>Invoked from JS when the DM clicks the party token without dragging it.</summary>
+    /// <returns>A task that completes once the click has been handled.</returns>
+    [JSInvokable]
+    public Task OnPartyClicked() => PartyClicked.InvokeAsync();
 
     /// <summary>Invoked from JS when the DM moves or resizes the box.</summary>
     /// <param name="x">Left edge in world units.</param>
@@ -461,6 +540,22 @@ else
     /// <summary>Releases the .NET object reference handed to the JS interop modules.</summary>
     public async ValueTask DisposeAsync()
     {
+        if (ShowPartyToken)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("dtParty.detach", boxRef);
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is already gone; the token went with the DOM.
+            }
+            catch (InvalidOperationException)
+            {
+                // Disposed during (pre)static rendering, before the token was ever attached.
+            }
+        }
+
         if (EnableEditor)
         {
             try

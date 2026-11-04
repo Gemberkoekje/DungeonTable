@@ -22,6 +22,7 @@ public sealed class ToolSelectionTests
     [InlineData(MapTool.Doors)]
     [InlineData(MapTool.Conceal)]
     [InlineData(MapTool.Ping)]
+    [InlineData(MapTool.Party)]
     public void A_one_click_tool_gives_way_to_look_once_it_has_been_used(MapTool tool)
     {
         var tools = new ToolSelection();
@@ -34,7 +35,6 @@ public sealed class ToolSelectionTests
 
     [Theory]
     [InlineData(MapTool.Fog)]
-    [InlineData(MapTool.Lift)]
     [InlineData(MapTool.Measure)]
     public void A_tool_used_in_a_run_stays_after_use(MapTool tool)
     {

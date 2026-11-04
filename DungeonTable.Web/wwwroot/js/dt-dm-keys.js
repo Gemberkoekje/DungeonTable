@@ -1,5 +1,5 @@
 // Global keyboard shortcuts for the DM screen: Ctrl+1..4 switch the dock (Room / Battle / Campaign /
-// Art), a bare 1-8 picks a map tool (Shift+1-8 keeps a one-click tool up), Esc puts the map back in
+// Art), Ctrl+Z takes back the party's last move, a bare 1-8 picks a map tool (Shift+1-8 keeps a one-click tool up), Esc puts the map back in
 // Look and closes what is open in the dock, "\" swaps the dock between narrow and wide, Tab opens and
 // closes the dock on a screen too narrow to show it beside the map, and a bare letter (n / p / r / h)
 // goes to whichever dock tab is on show - the turn order on Battle, the art tray on Art.
@@ -45,6 +45,11 @@ window.dtDmKeys = (function () {
                     if (e.key >= '1' && e.key <= '4' && !e.shiftKey) {
                         e.preventDefault();
                         dotnet.invokeMethodAsync('DmKey', 'tab:' + e.key);
+                    } else if ((e.key === 'z' || e.key === 'Z') && !e.shiftKey && !isTyping(e)) {
+                        // Ctrl+Z in a box undoes the typing; anywhere else it takes back the party's
+                        // last move.
+                        e.preventDefault();
+                        dotnet.invokeMethodAsync('DmKey', 'undo');
                     }
                     return;
                 }

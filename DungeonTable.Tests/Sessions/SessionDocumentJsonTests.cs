@@ -54,6 +54,15 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal("door-12", Assert.Single(left.OpenDoorIds));
         Assert.Equal(3, Assert.Single(left.FogCells).Row);
         Assert.Equal(275, left.PlayerViewport.MaxY);
+        Assert.True(left.PartyToken.Placed);
+        Assert.Equal(95, left.PartyToken.X);
+        Assert.Equal(120, left.PartyToken.VisionFeet);
+
+        Assert.True(restored.Reveals.PartyToken.Placed);
+        Assert.Equal(315, restored.Reveals.PartyToken.X);
+        Assert.Equal(245, restored.Reveals.PartyToken.Y);
+        Assert.Equal(60, restored.Reveals.PartyToken.VisionFeet);
+        Assert.True(restored.Reveals.ProjectorFollowsParty);
 
         Assert.Equal("b1", restored.Battle.Id);
         Assert.Equal(3, restored.Battle.Round);
@@ -99,6 +108,30 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal("region-entrywell", Assert.Single(restored.Reveals.RevealedRegionIds));
         Assert.NotNull(restored.Reveals.OtherMaps);
         Assert.Empty(restored.Reveals.OtherMaps);
+    }
+
+    [Fact]
+    public void A_document_written_before_the_party_token_existed_restores_with_no_token()
+    {
+        // The token went into the reveals additively, without bumping CurrentVersion: a document from
+        // an earlier build restores the table with no token, the default range and no following.
+        JsonNode document = JsonNode.Parse(SessionDocuments.Serializer().ToJson(Sample()));
+        JsonObject reveals = document["reveals"].AsObject();
+        Assert.True(reveals.Remove("partyToken"));
+        Assert.True(reveals.Remove("projectorFollowsParty"));
+        Assert.True(reveals["otherMaps"][0].AsObject().Remove("partyToken"));
+
+        var state = new DungeonTable.Web.Services.SessionState();
+        state.Restore(Read(document.ToJsonString()).Reveals);
+
+        Assert.Equal("region-entrywell", Assert.Single(state.RevealedRegionIds()));
+        Assert.False(state.Party.IsPlaced);
+        Assert.Equal(PartyToken.DefaultVisionFeet, state.Party.VisionFeet);
+        Assert.False(state.ProjectorFollowsParty);
+
+        state.SetCurrentMap("level-2-crypt");
+        Assert.False(state.Party.IsPlaced);
+        Assert.Equal(PartyToken.DefaultVisionFeet, state.Party.VisionFeet);
     }
 
     [Fact]
@@ -313,6 +346,8 @@ public sealed class SessionDocumentJsonTests
                 Size = ArtSize.Large,
                 TrayImageIds = new[] { "mm-vampire-spawn", "mm-bandit-captain" },
             },
+            PartyToken = new PartyTokenSnapshot { Placed = true, X = 315, Y = 245, VisionFeet = 60 },
+            ProjectorFollowsParty = true,
             OtherMaps = new[]
             {
                 new MapRevealSnapshot
@@ -323,6 +358,7 @@ public sealed class SessionDocumentJsonTests
                     OpenDoorIds = new[] { "door-12" },
                     FogCells = new[] { new FogCell { Col = 7, Row = 3 } },
                     PlayerViewport = new ViewportSnapshot { MinX = 40, MinY = 50, MaxX = 440, MaxY = 275 },
+                    PartyToken = new PartyTokenSnapshot { Placed = true, X = 95, Y = 105, VisionFeet = 120 },
                 },
             },
         },

@@ -61,9 +61,9 @@ window.dtEditor = (function () {
         return { kind: '', id: '' };
     }
 
-    // True for events that start on the pan/zoom tool buttons; those must not be treated as map
-    // gestures (otherwise a "+"/"-"/Reset click adds a stray vertex, marker, or deselect).
-    function onTools(e) { return !!(e.target && e.target.closest && e.target.closest('.vector-map-tools')); }
+    // True for events that start on the pan/zoom tool buttons or the party token's menu; those must not
+    // be treated as map gestures (otherwise a "+"/"-"/Reset click adds a stray vertex, marker, or deselect).
+    function onTools(e) { return !!(e.target && e.target.closest && e.target.closest('.vector-map-tools, .dt-party-pop')); }
 
     function previewRect(box) {
         const svg = svgOf(box);

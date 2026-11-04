@@ -5,6 +5,7 @@
 @inject BattleState Fight
 @inject TablePersistence Persistence
 @inject LiveContent Live
+@inject PartyMoves Party
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @*
@@ -48,6 +49,16 @@
 
         <button type="button" class="frame-btn" title="Move the player viewport onto the room in the Room tab"
                 disabled="@(!Workspace.MapLoaded)" @onclick="Workspace.FrameShownArea">Frame</button>
+
+        @* Following is a setting of the table, off by default: on, the projector frames the party again
+           whenever the token leaves the middle of its view (PartyMoves). *@
+        <button type="button" class="frame-btn follow-btn @(Session.ProjectorFollowsParty ? "on" : string.Empty)"
+                aria-pressed="@(Session.ProjectorFollowsParty ? "true" : "false")"
+                title="Follow the party: frame the projector on the party token again whenever it leaves the middle of the view"
+                disabled="@(!Workspace.MapLoaded)"
+                @onclick="() => Party.SetProjectorFollows(!Session.ProjectorFollowsParty)">
+            <span aria-hidden="true">&#x25C9;</span> Follow party
+        </button>
 
         @* The picture on the projector belongs in the bar for the same reason the reveal counts do:
            a DM in the middle of a fight must be able to see that a vampire is still on the beamer,
@@ -317,7 +328,13 @@
     private Task CentreMapOn(MapPoint point) =>
         mapPane is null ? Task.CompletedTask : mapPane.CenterOnAsync(point.X, point.Y, CentreZoom);
 
-    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+    // Every change of the shared state may have moved the party, by this window, another one or an
+    // undo, so the workspace follows it first, here on this circuit's own dispatcher.
+    private void OnStateChanged() => InvokeAsync(() =>
+    {
+        Workspace.FollowParty();
+        StateHasChanged();
+    });
 
     // Register the global keyboard shortcuts and the dock's divider once the circuit is live: Alt+Left /
     // Alt+Right for the reference history, Ctrl+1..4 for the dock and 1-8 for the map's tools.
@@ -396,6 +413,7 @@
 
     /// <summary>
     /// Invoked from JS for the DM screen's shortcuts: <c>"tab:N"</c> (Ctrl+1..4) switches the dock,
+    /// <c>"undo"</c> (Ctrl+Z) takes back the party's last move,
     /// <c>"tool:N"</c> (a bare 1..8) picks a map tool and <c>"tool:N:keep"</c> (Shift+1..8) keeps a
     /// one-click tool up, <c>"bare:esc"</c> puts the map back in Look and closes what is open in the
     /// dock, <c>"bare:drawer"</c> (Tab, on a narrow screen) opens and closes the dock, and <c>"bare:n|p|r|h"</c> go to whichever dock tab is on show — the turn order on Battle,
@@ -426,6 +444,10 @@
         {
             Escape();
         }
+        else if (string.Equals(key, "undo", StringComparison.Ordinal))
+        {
+            Session.UndoPartyMove();
+        }
         else if (string.Equals(key, "bare:drawer", StringComparison.Ordinal))
         {
             ToggleDrawer();
@@ -442,13 +464,20 @@
     }
 
     // Esc always puts the map back in Look, and closes what is open in the dock: the card sheet over
-    // the room or the campaign, the fight's detail pane, whatever the art tray has open.
+    // the room or the campaign, the fight's detail pane, whatever the art tray has open. On the Room tab,
+    // looking at another room than the party's, it goes back to the party's room.
     private void Escape()
     {
         mapPane?.ResetTool();
         if (SheetShown)
         {
             Workspace.CloseDrawer();
+            return;
+        }
+
+        if (activeTab == DockTab.Room && Workspace.LookingAway && !Workspace.Pinned)
+        {
+            Workspace.BackToParty();
             return;
         }
 

@@ -111,6 +111,10 @@ builder.Services.AddSingleton<EncounterContext>();
 // workspace and a second tab of the app does not inherit the first one's navigation.
 builder.Services.AddScoped<DmWorkspace>();
 
+// Moves the party token and works out what the party sees, from the map in the DM's own workspace,
+// so it is scoped beside it; the token and what it revealed are the shared session's.
+builder.Services.AddScoped<PartyMoves>();
+
 // Persistence. The reveal state and the running fight are one document per table in Postgres, so
 // a deploy, a crash or a laptop reboot mid-combat does not cost the evening.
 //
