@@ -1,17 +1,22 @@
 namespace DungeonTable.Web.Services;
 
 /// <summary>
-/// The Map tab's active tool. Exactly one is active at a time; it decides what a click on the map
-/// canvas does. The declared order is the order of the tool rail and of its <c>1</c>–<c>8</c>
-/// keyboard shortcuts.
+/// What a click on the DM's map does. Exactly one is active at a time. <see cref="Look"/> is the
+/// default and the map goes back to it on Esc and after a one-click tool has been used (see
+/// <see cref="ToolSelection"/>). The declared order is the order of the map's toolbar and of its
+/// <c>1</c>–<c>8</c> keyboard shortcuts.
 /// </summary>
 public enum MapTool
 {
     /// <summary>No tool (unset).</summary>
     None,
 
-    /// <summary>Click a region to load its briefing; nothing is shown to the players.</summary>
-    Inspect,
+    /// <summary>
+    /// The default: click a room to read it in the dock, click a door to open or close it. Nothing a
+    /// look does is shown to the players except a door, and a secret door the players have not found
+    /// is left alone.
+    /// </summary>
+    Look,
 
     /// <summary>Click a region, door or feature to show or hide it on the player projector.</summary>
     Reveal,

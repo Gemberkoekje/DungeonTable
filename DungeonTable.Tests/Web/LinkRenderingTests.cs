@@ -30,10 +30,10 @@ public sealed class LinkRenderingTests
     [Fact]
     public async Task The_read_aloud_box_renders_a_link()
     {
-        string html = await Render<RoomBriefingPanel>(new()
+        string html = await Render<RoomReading>(new()
         {
-            [nameof(RoomBriefingPanel.Dossier)] = new AreaDossier { AreaNodeId = "area", ReadAloud = Prose },
-            [nameof(RoomBriefingPanel.ResolveRefs)] = ResolveRefs,
+            [nameof(RoomReading.Dossier)] = new AreaDossier { AreaNodeId = "area", ReadAloud = Prose },
+            [nameof(RoomReading.ResolveRefs)] = ResolveRefs,
         });
 
         AssertLinked(html);

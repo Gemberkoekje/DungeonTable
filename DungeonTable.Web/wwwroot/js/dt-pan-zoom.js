@@ -104,5 +104,58 @@ window.dtPanZoom = (function () {
         if (factor > 0 && factor !== 1) { zoomAt(box, r.width / 2, r.height / 2, factor); }
     }
 
-    return { attach: attach, apply: apply, zoom: zoom, reset: reset, setPaused: setPaused, centerOn: centerOn };
+    // Keep the current pan and zoom under a name (the DM screen's dock layouts), and bring one back.
+    // The state is the wrapper's transform, which does not depend on the box's size, so a view kept at
+    // one width comes back exactly as it was when the box is that width again.
+    function saveView(box, key) {
+        const s = box && box.__dtpz;
+        if (!s) { return; }
+        box.__dtpzViews = box.__dtpzViews || {};
+        box.__dtpzViews[key] = { scale: s.scale, tx: s.tx, ty: s.ty };
+    }
+
+    function restoreView(box, key) {
+        const s = box && box.__dtpz;
+        const view = box && box.__dtpzViews && box.__dtpzViews[key];
+        if (!s || !view) { return false; }
+        s.scale = view.scale; s.tx = view.tx; s.ty = view.ty;
+        apply(box);
+        return true;
+    }
+
+    // Zoom and pan so a world rectangle fills the box, centred. Measured at the unzoomed view, from the
+    // SVG's own screen matrix, so it needs no knowledge of the viewBox. Never zooms out past the whole
+    // map (scale 1). The box must be visible, as for centerOn.
+    function fit(box, minX, minY, maxX, maxY) {
+        const s = box && box.__dtpz;
+        const svg = svgOf(box);
+        const target = targetOf(box);
+        if (!s || !svg || !target) { return; }
+        s.scale = 1; s.tx = 0; s.ty = 0;
+        apply(box);
+        const m = svg.getScreenCTM();
+        const frame = target.getBoundingClientRect();
+        if (!m || frame.width === 0 || frame.height === 0) { return; }
+        const at = function (x, y) {
+            const p = svg.createSVGPoint();
+            p.x = x; p.y = y;
+            const q = p.matrixTransform(m);
+            return { x: q.x - frame.left, y: q.y - frame.top };
+        };
+        const a = at(minX, minY), b = at(maxX, maxY);
+        const width = Math.abs(b.x - a.x), height = Math.abs(b.y - a.y);
+        if (width === 0 || height === 0) { return; }
+        const k = Math.min(MAX, Math.max(MIN, Math.min(frame.width / width, frame.height / height)));
+        if (k === MIN) { apply(box); return; }
+        const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+        s.scale = k;
+        s.tx = frame.width / 2 - k * cx;
+        s.ty = frame.height / 2 - k * cy;
+        apply(box);
+    }
+
+    return {
+        attach: attach, apply: apply, zoom: zoom, reset: reset, setPaused: setPaused, centerOn: centerOn,
+        saveView: saveView, restoreView: restoreView, fit: fit
+    };
 })();

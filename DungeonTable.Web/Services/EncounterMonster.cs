@@ -1,7 +1,7 @@
 namespace DungeonTable.Web.Services;
 
 /// <summary>
-/// One row of the Info tab's encounter strip: a creature this area lists. It carries the count to
+/// One row of the Room tab's encounter strip: a creature this area lists. It carries the count to
 /// pre-fill and enough context for the DM to judge whether it belongs in the fight they are about to
 /// start.
 /// </summary>

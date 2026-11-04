@@ -1,0 +1,68 @@
+@* What a DM needs about an enemy on its turn, on its initiative row: its six saving throws and its
+   attacks. Its AC is on each creature's own line beside it. Everything else (traits, spells, senses,
+   resistances) stays in the detail pane, one click away.
+
+   It is there so the DM can keep one creature's pane open all fight, Grask's say, and still run his
+   two bugbears from the order alone. *@
+
+@if (Block.NodeId.Length > 0 && (HasSaves || attacks.Count > 0))
+{
+    <div class="enemy-glance">
+        <span class="glance-saves" title="Saving throws; the proficient ones are marked">
+            <span class="glance-label">Saves</span>
+            @foreach (string ability in StatBlockMath.AbilityCodes)
+            {
+                <span class="glance-save @(StatBlockMath.IsProficientSave(Block, ability) ? "proficient" : string.Empty)">@ability @StatBlockMath.FormatModifier(StatBlockMath.SaveFor(Block, ability))</span>
+            }
+        </span>
+
+        @if (multiattack.Length > 0)
+        {
+            <span class="glance-multiattack" title="@multiattack">@multiattack</span>
+        }
+
+        @foreach ((string name, AttackLine attack, string sentence) in attacks)
+        {
+            <span class="glance-attack" title="@Title(attack, sentence)">
+                <span class="attack-name">@name</span>
+                <span class="attack-hit">@StatBlockMath.FormatModifier(attack.ToHit)</span>
+                @if (AttackText.Damage(attack).Length > 0)
+                {
+                    <span class="attack-damage">@AttackText.Damage(attack)</span>
+                }
+            </span>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The enemy's stat block. Nothing is drawn when it is empty (no block extracted).</summary>
+    [Parameter]
+    public StatBlock Block { get; set; } = new StatBlock();
+
+    // A block always has ability scores to derive saves from, so there is a saves line unless the
+    // extractor read no abilities at all.
+    private bool HasSaves => StatBlockMath.AbilityCodes.Any(code => StatBlockMath.ScoreFor(Block.Abilities, code) > 0);
+
+    private string multiattack = string.Empty;
+
+    // Every attack the extractor parsed out of the actions, named by the attack itself or else its action.
+    private IReadOnlyList<(string Name, AttackLine Attack, string Sentence)> attacks = Array.Empty<(string, AttackLine, string)>();
+
+    protected override void OnParametersSet()
+    {
+        multiattack = Block.Actions
+            .Where(entry => string.Equals(entry.Name, "Multiattack", StringComparison.OrdinalIgnoreCase))
+            .Select(entry => entry.Text)
+            .FirstOrDefault() ?? string.Empty;
+        attacks = Block.Actions
+            .SelectMany(entry => entry.Attacks.Select(attack => (attack.Name.Length > 0 ? attack.Name : entry.Name, attack, entry.Text)))
+            .ToArray();
+    }
+
+    private static string Title(AttackLine attack, string sentence)
+    {
+        string reach = AttackText.Reach(attack);
+        return reach.Length > 0 ? $"{reach} — {sentence}" : sentence;
+    }
+}

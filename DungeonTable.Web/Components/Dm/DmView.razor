@@ -2,55 +2,38 @@
 @rendermode InteractiveServer
 @inject DmWorkspace Workspace
 @inject SessionState Session
+@inject BattleState Fight
 @inject TablePersistence Persistence
 @inject LiveContent Live
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @*
-    The DM screen's shell. It owns what all three tabs share — which tab is on top, the loaded map,
-    and the player-view status bar — and nothing else: the map tools live in MapTab, the briefing in
-    InfoTab, the fight in BattleTab, and every piece of state they share lives in the scoped
+    The DM screen's shell: the bar across the top, the map on the left, and the dock on the right with
+    its four tabs (Room, Battle, Campaign, Art). The map never leaves the screen, so reveals, the
+    projector's frame and the doors work whichever dock tab is open; Ctrl+1..4 switch the dock only.
+
+    The shell owns which dock tab is up, the dock's width modes and the bar, and nothing else: the map
+    and its tools live in MapPane, the room in RoomTab, the campaign in CampaignTab, cards in
+    CardSheet, the fight in BattleTab, and every piece of state they share lives in the scoped
     DmWorkspace rather than in parameters threaded through here.
 
-    All three panels stay mounted; the inactive ones are hidden with CSS. That is deliberate: the map
-    canvas keeps its pan/zoom in JS (dt-pan-zoom / dt-editor), so unmounting it on a tab switch would
-    both reset the DM's view and cost a full re-render of a large SVG. It looks like an accident
-    otherwise — it is not.
+    All four dock tabs stay mounted; the inactive ones are hidden with CSS. That is deliberate: a tab
+    keeps its scroll position, its half-typed boxes and the fight's open pane when the DM looks
+    elsewhere and comes back. It looks like an accident otherwise; it is not.
+
+    The Battle tab has a layout of its own (DockLayout): a wide dock, so the order and a creature's
+    detail pane fit side by side, and the map a narrow bird's-eye strip framed on the fight's room
+    (MapViewMemory). The reading tabs share the other. Each layout keeps its own dock width, which the DM
+    drags (dt-dock.js keeps it per browser, following the shell's layout class), and its own pan and zoom;
+    "\" swaps the dock between narrow and wide. Below 1200 px wide the dock slides over the map as a
+    drawer, toggled with Tab.
 *@
 
 <PageTitle>DM view &mdash; DungeonTable</PageTitle>
 
-<div class="dm-shell">
-    <header class="dm-shell-head">
-        <nav class="dm-tabs" role="tablist" aria-label="DM screen">
-            @foreach ((DmTab tab, string label) in Tabs)
-            {
-                DmTab candidate = tab;
-                <button type="button" role="tab" id="dm-tab-@candidate"
-                        class="dm-tab @(activeTab == candidate ? "active" : string.Empty)"
-                        aria-selected="@(activeTab == candidate ? "true" : "false")"
-                        aria-controls="dm-panel-@candidate"
-                        title="@($"{label} (Ctrl+{TabIndex(candidate)})")"
-                        @onclick="() => SetTab(candidate)">
-                    @label
-                    <span class="dm-tab-key" aria-hidden="true">@TabIndex(candidate)</span>
-                </button>
-            }
-        </nav>
-
-        <label class="map-picker">
-            Map
-            <select @bind="selectedMapId" @bind:after="LoadMap">
-                @foreach (string id in Workspace.MapIds)
-                {
-                    <option value="@id">@Workspace.MapLabel(id)</option>
-                }
-            </select>
-        </label>
-    </header>
-
-    @* The reveal status bar belongs to the shell, not the Map tab: the DM must be able to see and
-       reframe what the projector shows without leaving whichever tab they are working in. *@
+<div class="dm-shell @LayoutClass @(drawerOpen ? "drawer-open" : string.Empty)" @ref="shellRef">
+    @* The bar belongs to the shell: the DM must be able to see and reframe what the projector shows
+       whatever the dock is showing. *@
     <div class="dm-player-bar">
         <span class="players-see @(PlayersSeeAnything ? "live" : string.Empty)"
               title="What the player projector is currently showing">
@@ -63,12 +46,12 @@
             Viewport: @(ViewportName.Length > 0 ? ViewportName : "unmapped")
         </span>
 
-        <button type="button" class="frame-btn" title="Move the player viewport onto the shown area"
-                disabled="@(!Workspace.MapLoaded)" @onclick="FrameSelected">Frame</button>
+        <button type="button" class="frame-btn" title="Move the player viewport onto the room in the Room tab"
+                disabled="@(!Workspace.MapLoaded)" @onclick="Workspace.FrameShownArea">Frame</button>
 
         @* The picture on the projector belongs in the bar for the same reason the reveal counts do:
-           a DM on the Battle tab must be able to see that a vampire is still on the beamer, and
-           take it down, without going to find the tab that put it there. *@
+           a DM in the middle of a fight must be able to see that a vampire is still on the beamer,
+           and take it down, without going to find the tab that put it there. *@
         @if (Session.ShownArtImageId.Length > 0)
         {
             <span class="art-live @(Session.ShownArtVisible ? "live" : string.Empty)"
@@ -77,12 +60,20 @@
                 @(Session.ShownArtVisible ? "Art shown" : "Art hidden")
             </span>
 
-            @* Its own class, not .frame-btn: that one carries margin-left:auto to take the bar's
-               slack, and a second one would fight it for the same space. *@
             <button type="button" class="art-btn"
                     title="@(Session.ShownArtVisible ? "Take the picture off the projector (h)" : "Put the staged picture back (h)")"
                     @onclick="ToggleArt">@(Session.ShownArtVisible ? "Hide art" : "Show art")</button>
         }
+
+        <span class="bar-spacer"></span>
+
+        <select class="map-picker" aria-label="Map" title="The map on the table; the projector follows"
+                @bind="selectedMapId" @bind:after="LoadMap">
+            @foreach (string id in Workspace.MapIds)
+            {
+                <option value="@id">@Workspace.MapLabel(id)</option>
+            }
+        </select>
 
         @* Whether the evening is being saved. A DM should never have to guess, and finding out after
            a restart that nothing was persisted is exactly the surprise persistence exists to remove. *@
@@ -90,56 +81,98 @@
             <span aria-hidden="true">@SaveGlyph</span>
             @SaveLabel
         </span>
+
+        <button type="button" class="drawer-btn" aria-expanded="@(drawerOpen ? "true" : "false")"
+                title="Show or hide the dock over the map (Tab)" @onclick="ToggleDrawer">Dock</button>
     </div>
 
-    <div class="dm-panels">
-        <div class="dm-panel @PanelClass(DmTab.Map)" role="tabpanel" id="dm-panel-Map"
-             aria-labelledby="dm-tab-Map" aria-hidden="@Hidden(DmTab.Map)">
-            <MapTab @ref="mapTab" OnOpenInfo="() => SetTab(DmTab.Info)" />
-        </div>
+    <div class="dm-body">
+        <section class="dm-map" aria-label="Map">
+            <MapPane @ref="mapPane" OnLooked="ShowRoom" />
+        </section>
 
-        <div class="dm-panel @PanelClass(DmTab.Info)" role="tabpanel" id="dm-panel-Info"
-             aria-labelledby="dm-tab-Info" aria-hidden="@Hidden(DmTab.Info)">
-            <InfoTab Active="@(activeTab == DmTab.Info)" OnShowOnMap="ShowOnMap" />
-        </div>
+        <div class="dm-divider" role="separator" aria-orientation="vertical" aria-label="Dock width" tabindex="0"
+             title="Drag to resize the dock; double-click for the default width"></div>
 
-        <div class="dm-panel @PanelClass(DmTab.Battle)" role="tabpanel" id="dm-panel-Battle"
-             aria-labelledby="dm-tab-Battle" aria-hidden="@Hidden(DmTab.Battle)">
-            <BattleTab @ref="battleTab" />
-        </div>
+        <aside class="dm-dock" aria-label="Dock">
+            <nav class="dock-tabs" role="tablist" aria-label="Dock">
+                @foreach ((DockTab tab, string label) in Tabs)
+                {
+                    DockTab candidate = tab;
+                    <button type="button" role="tab" id="dm-tab-@candidate"
+                            class="dock-tab @(activeTab == candidate ? "active" : string.Empty)"
+                            aria-selected="@(activeTab == candidate ? "true" : "false")"
+                            aria-controls="dm-panel-@candidate"
+                            title="@($"{label} (Ctrl+{TabIndex(candidate)})")"
+                            @onclick="() => SetTab(candidate)">
+                        @label
+                        <span class="dock-tab-key" aria-hidden="true">@TabIndex(candidate)</span>
+                    </button>
+                }
 
-        <div class="dm-panel @PanelClass(DmTab.Art)" role="tabpanel" id="dm-panel-Art"
-             aria-labelledby="dm-tab-Art" aria-hidden="@Hidden(DmTab.Art)">
-            <ArtTab @ref="artTab" />
-        </div>
+                @* No @onclick: the dock's width is the browser's own (dt-dock.js listens for this button). *@
+                <button type="button" class="dock-swap-btn"
+                        title="Swap the dock between narrow and wide (\\)">&#x21D4;</button>
+            </nav>
+
+            <div class="dock-panels">
+                <div class="dock-panel @PanelClass(DockTab.Room)" role="tabpanel" id="dm-panel-Room"
+                     aria-labelledby="dm-tab-Room" aria-hidden="@Hidden(DockTab.Room)">
+                    <RoomTab OnShowOnMap="CentreMapOn" />
+                </div>
+
+                <div class="dock-panel @PanelClass(DockTab.Battle)" role="tabpanel" id="dm-panel-Battle"
+                     aria-labelledby="dm-tab-Battle" aria-hidden="@Hidden(DockTab.Battle)">
+                    <BattleTab @ref="battleTab" />
+                </div>
+
+                <div class="dock-panel @PanelClass(DockTab.Campaign)" role="tabpanel" id="dm-panel-Campaign"
+                     aria-labelledby="dm-tab-Campaign" aria-hidden="@Hidden(DockTab.Campaign)">
+                    <CampaignTab OnShowRoom="ShowRoom" />
+                </div>
+
+                <div class="dock-panel @PanelClass(DockTab.Art)" role="tabpanel" id="dm-panel-Art"
+                     aria-labelledby="dm-tab-Art" aria-hidden="@Hidden(DockTab.Art)">
+                    <ArtTab @ref="artTab" />
+                </div>
+
+                @if (SheetShown)
+                {
+                    <CardSheet OnShowRoom="ShowRoom" />
+                }
+            </div>
+        </aside>
     </div>
 </div>
 
 @code {
-    private static readonly (DmTab Tab, string Label)[] Tabs =
+    private static readonly (DockTab Tab, string Label)[] Tabs =
     {
-        (DmTab.Map, "Map"),
-        (DmTab.Info, "Info"),
-        (DmTab.Battle, "Battle"),
-        (DmTab.Art, "Art"),
+        (DockTab.Room, "Room"),
+        (DockTab.Battle, "Battle"),
+        (DockTab.Campaign, "Campaign"),
+        (DockTab.Art, "Art"),
     };
 
-    // How far the Map tab zooms in when the Info tab's mini map jumps to an area. Modest on purpose:
-    // the DM keeps their bearings better than a hard zoom to the room's own bounds would allow.
-    private const double ShowOnMapZoom = 1.6;
+    // How far the map zooms in when the Room tab's Centre action brings a room to the middle. Modest
+    // on purpose: the DM keeps their bearings better than a hard zoom to the room's own bounds allows.
+    private const double CentreZoom = 1.6;
 
-    private DmTab activeTab = DmTab.Map;
-    private MapTab mapTab;
+    private DockTab activeTab = DockTab.Room;
+    private MapPane mapPane;
     private BattleTab battleTab;
     private ArtTab artTab;
+    private ElementReference shellRef;
     private string selectedMapId = string.Empty;
+    private bool drawerOpen;
+
+    // The map's pan and zoom per layout, and when the fight's room is framed. A change of layout is
+    // carried out after the render that made it, so the map is measured at its new width.
+    private readonly MapViewMemory views = new MapViewMemory();
+    private MapViewChange pendingView = MapViewChange.None;
+    private MapBounds pendingFight;
 
     private DotNetObjectReference<DmView> selfRef;
-
-    // A mini-map jump can only centre the canvas once the Map panel is actually on screen (a hidden
-    // panel has no layout), so the request is parked here and served from OnAfterRenderAsync.
-    private bool centreRequested;
-    private MapPoint centreTarget;
 
     protected override async Task OnInitializedAsync()
     {
@@ -166,13 +199,42 @@
         await Workspace.LoadMapAsync(selectedMapId, CancellationToken.None);
     }
 
-    private void SetTab(DmTab tab) => activeTab = tab;
+    private void SetTab(DockTab tab)
+    {
+        string fightArea = Fight.IsActive ? Fight.AreaNodeId : string.Empty;
+        MapBounds fight = Workspace.AreaSurroundings(fightArea);
+        MapViewChange change = views.Change(activeTab, tab, fightArea, fight.Width > 0 && fight.Height > 0);
+        if (change != MapViewChange.None)
+        {
+            pendingView = change;
+            pendingFight = fight;
+        }
 
-    private static int TabIndex(DmTab tab) => Array.FindIndex(Tabs, entry => entry.Tab == tab) + 1;
+        activeTab = tab;
+    }
 
-    private string PanelClass(DmTab tab) => activeTab == tab ? "dm-panel-active" : "dm-panel-hidden";
+    private string LayoutClass => MapViewMemory.LayoutOf(activeTab) == DockLayout.Battle ? "layout-battle" : "layout-reading";
 
-    private string Hidden(DmTab tab) => activeTab == tab ? "false" : "true";
+    // The map looked at a room, or a link led to one: the room is read on the Room tab. On a narrow
+    // screen the dock is a drawer, so it opens to show it.
+    private void ShowRoom()
+    {
+        SetTab(DockTab.Room);
+        drawerOpen = true;
+    }
+
+    private void ToggleDrawer() => drawerOpen = !drawerOpen;
+
+    // A card is a sheet over the reading tabs. The fight has a detail pane of its own, and the art tray
+    // is about pictures, so the sheet waits behind those until the DM comes back.
+    private bool SheetShown =>
+        Workspace.CardNode.Length > 0 && (activeTab == DockTab.Room || activeTab == DockTab.Campaign);
+
+    private static int TabIndex(DockTab tab) => Array.FindIndex(Tabs, entry => entry.Tab == tab) + 1;
+
+    private string PanelClass(DockTab tab) => activeTab == tab ? "dock-panel-active" : "dock-panel-hidden";
+
+    private string Hidden(DockTab tab) => activeTab == tab ? "false" : "true";
 
     private int RevealedRegionCount => Session.RevealedRegionIds().Count;
 
@@ -239,26 +301,6 @@
         }
     }
 
-    // Move the player viewport onto the shown area (or the whole map when nothing is selected),
-    // keeping the projector's aspect ratio and staying inside the map.
-    private void FrameSelected()
-    {
-        if (!Workspace.MapLoaded)
-        {
-            return;
-        }
-
-        MapBounds target = Workspace.SelectedBounds();
-        if (target.Width <= 0 && target.Height <= 0)
-        {
-            Session.SetPlayerViewport(MapFraming.DefaultViewport(Workspace.Map.Bounds, Session.PlayerAspect));
-            return;
-        }
-
-        MapBounds padded = MapFraming.Pad(target, Workspace.UnitSize);
-        Session.SetPlayerViewport(MapFraming.Frame(padded, Session.PlayerAspect, Workspace.Map.Bounds));
-    }
-
     // Same toggle the Art tab's own button and the "h" shortcut run, so all three agree.
     private void ToggleArt()
     {
@@ -272,43 +314,61 @@
         }
     }
 
-    private void ShowOnMap(MapPoint point)
-    {
-        centreTarget = point;
-        centreRequested = true;
-        SetTab(DmTab.Map);
-    }
+    private Task CentreMapOn(MapPoint point) =>
+        mapPane is null ? Task.CompletedTask : mapPane.CenterOnAsync(point.X, point.Y, CentreZoom);
 
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
-    // Register the global keyboard shortcuts once the circuit is live: Alt+Left / Alt+Right for the
-    // reference history, Ctrl+1..4 for the tabs and 1-8 for the Map tab's tools.
+    // Register the global keyboard shortcuts and the dock's divider once the circuit is live: Alt+Left /
+    // Alt+Right for the reference history, Ctrl+1..4 for the dock and 1-8 for the map's tools.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            await ChangeMapViewAsync();
+            return;
+        }
+
         try
         {
-            if (firstRender)
-            {
-                selfRef ??= DotNetObjectReference.Create(this);
-                await JS.InvokeVoidAsync("dtNavKeys.attach", selfRef);
-                await JS.InvokeVoidAsync("dtDmKeys.attach", selfRef);
+            selfRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dtNavKeys.attach", selfRef);
+            await JS.InvokeVoidAsync("dtDmKeys.attach", selfRef);
+            await JS.InvokeVoidAsync("dtDock.attach", shellRef);
 
-                await AskBrowserClockAsync();
-                if (browserClockKnown && Save.Kind == TableSaveKind.Saved)
-                {
-                    StateHasChanged();
-                }
-            }
-
-            if (centreRequested && activeTab == DmTab.Map && mapTab is not null)
+            await AskBrowserClockAsync();
+            if (browserClockKnown && Save.Kind == TableSaveKind.Saved)
             {
-                centreRequested = false;
-                await mapTab.CenterOnAsync(centreTarget.X, centreTarget.Y, ShowOnMapZoom);
+                StateHasChanged();
             }
         }
         catch (JSDisconnectedException)
         {
-            // The circuit dropped before interop could run; nothing to register or move.
+            // The circuit dropped before interop could run; nothing to register.
+        }
+        catch (OperationCanceledException)
+        {
+            // The render was cancelled during teardown.
+        }
+    }
+
+    // Carry out a change of layout on the map's pan and zoom, now that the render has resized the map.
+    private async Task ChangeMapViewAsync()
+    {
+        if (pendingView == MapViewChange.None || mapPane is null)
+        {
+            return;
+        }
+
+        MapViewChange change = pendingView;
+        pendingView = MapViewChange.None;
+        try
+        {
+            await mapPane.ChangeViewAsync(change, pendingFight);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit dropped; there is no map left to move.
         }
         catch (OperationCanceledException)
         {
@@ -335,11 +395,12 @@
     }
 
     /// <summary>
-    /// Invoked from JS for the DM screen's shortcuts: <c>"tab:N"</c> (Ctrl+1..4) switches the
-    /// top-level tab, <c>"tool:N"</c> (a bare 1..8) picks a Map tool, and <c>"bare:n|p|r|h|esc"</c>
-    /// goes to whichever tab is on show — the turn order on Battle, the art tray on Art. The
-    /// bare-key shortcuts only reach a tab that is actually up, which is why the routing lives here
-    /// and not in the key handler.
+    /// Invoked from JS for the DM screen's shortcuts: <c>"tab:N"</c> (Ctrl+1..4) switches the dock,
+    /// <c>"tool:N"</c> (a bare 1..8) picks a map tool and <c>"tool:N:keep"</c> (Shift+1..8) keeps a
+    /// one-click tool up, <c>"bare:esc"</c> puts the map back in Look and closes what is open in the
+    /// dock, <c>"bare:drawer"</c> (Tab, on a narrow screen) opens and closes the dock, and <c>"bare:n|p|r|h"</c> go to whichever dock tab is on show — the turn order on Battle,
+    /// the art tray on Art. The bare-letter shortcuts only reach a tab that is actually up, which is
+    /// why the routing lives here and not in the key handler.
     /// </summary>
     /// <param name="key">The shortcut token.</param>
     /// <returns>A task that completes once the view has re-rendered.</returns>
@@ -351,34 +412,62 @@
             && tab >= 1 && tab <= Tabs.Length)
         {
             SetTab(Tabs[tab - 1].Tab);
+            drawerOpen = true;
         }
-        else if (key.StartsWith("tool:", StringComparison.Ordinal)
-            && activeTab == DmTab.Map
-            && mapTab is not null
-            && int.TryParse(key.AsSpan(5), out int tool))
+        else if (key.StartsWith("tool:", StringComparison.Ordinal) && mapPane is not null)
         {
-            mapTab.SelectToolByIndex(tool);
+            string[] parts = key.Split(':');
+            if (int.TryParse(parts[1], out int tool))
+            {
+                mapPane.SelectToolByIndex(tool, parts.Length > 2 && string.Equals(parts[2], "keep", StringComparison.Ordinal));
+            }
+        }
+        else if (string.Equals(key, "bare:esc", StringComparison.Ordinal))
+        {
+            Escape();
+        }
+        else if (string.Equals(key, "bare:drawer", StringComparison.Ordinal))
+        {
+            ToggleDrawer();
         }
         else if (key.StartsWith("bare:", StringComparison.Ordinal))
         {
             // A bare letter goes to whichever tab is on show. The Battle and Art tabs both claim
             // n and p, which is safe precisely because this is the only place that decides who
             // gets them — dt-dm-keys.js reports the keystroke and nothing else.
-            string bare = key[5..];
-            if (activeTab == DmTab.Battle && battleTab is not null)
-            {
-                battleTab.HandleKey(bare);
-            }
-            else if (activeTab == DmTab.Art && artTab is not null)
-            {
-                artTab.HandleKey(bare);
-            }
+            RouteBare(key[5..]);
         }
 
         return InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Detaches the global key listeners and unsubscribes from the shared state.</summary>
+    // Esc always puts the map back in Look, and closes what is open in the dock: the card sheet over
+    // the room or the campaign, the fight's detail pane, whatever the art tray has open.
+    private void Escape()
+    {
+        mapPane?.ResetTool();
+        if (SheetShown)
+        {
+            Workspace.CloseDrawer();
+            return;
+        }
+
+        RouteBare("esc");
+    }
+
+    private void RouteBare(string bare)
+    {
+        if (activeTab == DockTab.Battle && battleTab is not null)
+        {
+            battleTab.HandleKey(bare);
+        }
+        else if (activeTab == DockTab.Art && artTab is not null)
+        {
+            artTab.HandleKey(bare);
+        }
+    }
+
+    /// <summary>Detaches the global key listeners and the divider, and unsubscribes from the shared state.</summary>
     /// <returns>A task that completes once teardown is done.</returns>
     public async ValueTask DisposeAsync()
     {
@@ -391,6 +480,7 @@
         {
             await JS.InvokeVoidAsync("dtNavKeys.detach");
             await JS.InvokeVoidAsync("dtDmKeys.detach");
+            await JS.InvokeVoidAsync("dtDock.detach");
         }
         catch (JSDisconnectedException)
         {

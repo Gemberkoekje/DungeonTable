@@ -155,8 +155,53 @@ Blazor Server keeps one circuit per browser tab. The state of the table is share
 
 The app assumes **one live table**. The shared state is a singleton so that a refreshed DM tab, a
 second DM window and the player view all agree, and each service raises `Changed` so the others
-re-render. The DM screen's four tabs (Map, Info, Battle, Art) stay mounted and are hidden with CSS, so
-switching never loses the map's pan and zoom or the navigation history.
+re-render.
+
+## The DM screen: one map, one dock
+
+The DM screen is the map, which never leaves the screen, and beside it a **dock** with four tabs: Room,
+Battle, Campaign and Art. It used to be four whole-screen tabs, Map and Info among them, and reading a
+room meant leaving the map: pick the inspect tool, click the room, switch to Info, read, switch back to
+Map, pick the lifter again. Five actions to answer "what do I say", and the projector's frame and the
+reveals worked on the Map tab only. Now the bar (what the players see, the frame, the map picker, the
+save status), the map and the dock are all on screen at once, and reveals, the frame and the doors work
+whichever dock tab is up.
+
+- **A click looks.** The map has a default mode, Look, and goes back to it on Esc. A click on a room
+  shows it on the Room tab and changes nothing for the players; a click on a door opens or closes it.
+  A secret door the players have not found gets no click target in Look, so the click reads the room
+  behind it: discovering one takes the Doors tool, so it never happens by accident (`MapHitTargets`).
+- **The tools are for the occasional job.** The ones that do one thing to one object (reveal, doors,
+  conceal, point) go back to Look after one click that did something; the fog brush, the lifter and
+  measuring stay until Esc; Shift keeps a one-click tool up (`ToolSelection`). The trap this removes is
+  being left in the wrong mode. The toolbar and its options are drawn over the map, not beside it, so
+  the canvas keeps its size whatever tool is up.
+- **The Room tab reads in table order**: the read-aloud first, then the checks and the short list, the
+  encounter, the detail, the DM's note, and, folded at the foot, who is here (`RoomReading`). It
+  started with the encounter and the note and reached the read-aloud only after nine sub-tabs.
+- **Cards are a sheet over the dock** (`CardSheet`), with the history's back, forward and breadcrumb,
+  so Esc puts the card away and the room is still there, scrolled where it was. The sheet covers the
+  Room and Campaign tabs only: the fight has its own detail pane.
+- **Every dock tab stays mounted**, stacked and hidden with CSS, so a tab keeps its scroll position,
+  half-typed boxes and the fight's open pane. The map pane is mounted once and never hidden, because
+  the canvas keeps its pan and zoom in JS.
+- **The fight has a layout of its own** (`DockLayout`). In a fight the DM keeps the map still and
+  reads stat blocks all the time, so the Battle tab gives the dock about 72 % of the width and the
+  reading tabs about 40 %. The fight's detail pane sits beside the order only when the dock has about
+  68rem: a row stays two lines only while the order has about 36rem, and whatever is left goes to
+  the pane, split evenly, because the pane is what the DM reads. (The redesign's plan assumed both
+  would fit in the reading dock; measured, each row wrapped to five lines.)
+- **Each layout keeps its own dock width and its own view of the map.** The DM drags the divider, and
+  `dt-dock.js` keeps a width per layout in local storage (guarded, since that can be refused), following
+  the shell's `layout-battle` class; it is not table state. `\` swaps the dock between the two default
+  widths. `MapViewMemory` decides what the map does on a change of layout: keep the view of the layout
+  being left, then bring back the other's, except that the first time the DM opens a fight the map
+  frames the fight's room and a few cells around it (`DmWorkspace.AreaSurroundings`), a bird's-eye
+  reminder of what is around the fight. The pan and zoom are a transform on the canvas's wrapper, which
+  does not depend on its size, so a view kept at one width comes back exactly at that width. The move
+  happens after the render that changed the layout, so the map is measured at its new size.
+- **Below 1200 px wide the dock is a drawer** over the map, toggled with Tab: a fallback, since the
+  table runs on a 1920×1080 laptop.
 
 ## Maps and what the players see
 
@@ -270,12 +315,16 @@ design:
 
 - **A row is read at a glance**: name, hit points, state, AC, passive Perception, a damage box.
   Everything that is typed rather than glanced at hides behind the row's "..." toggle.
+- **An enemy's row carries what its turn needs**: its six saves and its attacks (`EnemyGlance`), read
+  from the live stat block. The DM keeps one creature's pane open all fight (the one with the most to
+  read) and runs the rest from the order, so the pane never follows the turn marker: it changes only when
+  the DM opens another. The pane and the row word an attack the same way (`AttackText`).
 - **Nothing demands a roll.** A room's creature count ("4", or a dice expression such as "1d4+1") is
   a pre-fill the DM can change.
 - **The list never re-sorts under the cursor.** Enter and Tab walk the initiative column, and the order
   is sorted only once the last blank is filled.
 - **The detail pane stands on its own.** Damage, healing and conditions are repeated there, beside the
-  stat block and the room's own notes on that creature, so the DM never has to go back to the Info tab
+  stat block and the room's own notes on that creature, so the DM never has to go back to the Room tab
   mid-round.
 - **There is one fight.** `BattleState` replaces a running fight without asking; asking is the UI's
   job, because it knows how to word the question for where it came from.

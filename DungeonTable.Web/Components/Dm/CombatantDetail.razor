@@ -9,7 +9,7 @@
     a rulebook — how many attacks it gets and at what bonus, all six saving throws as a plus or a
     minus, its spells and how many slots are left, and what the room's own text says about it.
 
-    It renders StatBlockView, the same component the Info tab's reference drawer uses, so the two
+    It renders StatBlockView, the same component the card sheet's reference drawer uses, so the two
     surfaces can never disagree about a creature. What is NOT in StatBlockView is what belongs to this
     creature rather than to its species: current hit points, the damage box, its conditions, its spent
     slots, and the dossier blocks from the area the fight is in.
@@ -94,7 +94,7 @@
 
     @if (spell.NodeId.Length > 0)
     {
-        @* A spell opened from the spellcasting list stays inside the pane: jumping to the Info tab's
+        @* A spell opened from the spellcasting list stays inside the pane: jumping to the card sheet's
            reference drawer mid-round would move the DM off the fight to read three lines. *@
         <div class="detail-spell">
             <button type="button" class="link-btn detail-back" @onclick="CloseSpell">&#x25C2; Back to @Who.Name</button>
@@ -122,13 +122,13 @@
                         <p class="detail-attack" title="@entry.Text">
                             <span class="attack-name">@(attack.Name.Length > 0 ? attack.Name : entry.Name)</span>
                             <span class="attack-hit">@StatBlockMath.FormatModifier(attack.ToHit) to hit</span>
-                            @if (ReachLine(attack).Length > 0)
+                            @if (AttackText.Reach(attack).Length > 0)
                             {
-                                <span class="attack-reach">@ReachLine(attack)</span>
+                                <span class="attack-reach">@AttackText.Reach(attack)</span>
                             }
-                            @if (DamageLine(attack).Length > 0)
+                            @if (AttackText.Damage(attack).Length > 0)
                             {
-                                <span class="attack-damage">@DamageLine(attack)</span>
+                                <span class="attack-damage">@AttackText.Damage(attack)</span>
                             }
                         </p>
                     }
@@ -294,42 +294,6 @@
 
             return Who.Bloodied ? "is-bloodied" : string.Empty;
         }
-    }
-
-    // ---- Attacks ----------------------------------------------------------------------------
-
-    private static string ReachLine(AttackLine attack)
-    {
-        if (attack.Reach > 0 && attack.RangeNormal > 0)
-        {
-            return $"reach {attack.Reach} ft. or range {RangeText(attack)}";
-        }
-
-        if (attack.Reach > 0)
-        {
-            return $"reach {attack.Reach} ft.";
-        }
-
-        return attack.RangeNormal > 0 ? $"range {RangeText(attack)}" : string.Empty;
-    }
-
-    private static string RangeText(AttackLine attack) =>
-        attack.RangeLong > 0 ? $"{attack.RangeNormal}/{attack.RangeLong} ft." : $"{attack.RangeNormal} ft.";
-
-    // "11 (2d8 + 2) piercing + 7 (2d6) poison" — the average first, because that is the number a DM
-    // who is not rolling reads out.
-    private static string DamageLine(AttackLine attack)
-    {
-        var parts = new List<string>();
-        if (attack.DamageDice.Length > 0)
-        {
-            parts.Add($"{attack.DamageAverage} ({attack.DamageDice}) {attack.DamageType}".TrimEnd());
-        }
-
-        parts.AddRange(attack.ExtraDamage.Select(rider =>
-            $"+ {rider.DamageAverage} ({rider.DamageDice}) {rider.DamageType}".TrimEnd()));
-
-        return string.Join(" ", parts);
     }
 
     // ---- Spell slots ------------------------------------------------------------------------

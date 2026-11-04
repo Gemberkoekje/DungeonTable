@@ -9,8 +9,8 @@ namespace DungeonTable.Web.Services;
 /// <summary>
 /// World-unit framing helpers shared by the DM shell: turning region polygons into rectangles, and
 /// turning a rectangle into a player-projector viewport of the right aspect. All pure geometry —
-/// no state, no rendering — so the "frame this room for the players" and "show this room on the
-/// orientation mini map" controls agree on what a room's rectangle is.
+/// no state, no rendering — so the "frame this room for the players" and "centre my map on this
+/// room" controls agree on what a room's rectangle is.
 /// </summary>
 public static class MapFraming
 {
@@ -60,27 +60,6 @@ public static class MapFraming
             bounds.MinY - margin,
             bounds.MaxX + margin,
             bounds.MaxY + margin);
-    }
-
-    /// <summary>
-    /// Enlarges a rectangle to at least a minimum size, keeping its centre. Stops the mini map from
-    /// zooming absurdly far into a one-cell closet.
-    /// </summary>
-    /// <param name="bounds">The rectangle to grow.</param>
-    /// <param name="minimum">The minimum width and height in world units.</param>
-    /// <returns>The grown rectangle.</returns>
-    public static MapBounds AtLeast(MapBounds bounds, double minimum)
-    {
-        if (minimum <= 0)
-        {
-            return bounds;
-        }
-
-        double width = Math.Max(bounds.Width, minimum);
-        double height = Math.Max(bounds.Height, minimum);
-        double cx = bounds.MinX + (bounds.Width / 2);
-        double cy = bounds.MinY + (bounds.Height / 2);
-        return new MapBounds(cx - (width / 2), cy - (height / 2), cx + (width / 2), cy + (height / 2));
     }
 
     /// <summary>

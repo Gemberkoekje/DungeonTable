@@ -9,16 +9,17 @@ drawn in [Dungeon Scrawl](https://www.dungeonscrawl.com) and JSON documents that
 people, quests and monsters. This repository ships one small original adventure,
 [The Silent Bell](samples/demo/README.md), which shows every kind of document by example.
 
-![The DM screen on the sample adventure: its map with three rooms revealed, the map tools on the left, and the box that frames what the projector shows](docs/images/dm-map.png)
+![The DM screen on the sample adventure: the map with three rooms revealed and the box that frames what the projector shows, and beside it the Goblin Den on the Room tab, its read-aloud first](docs/images/dm-screen.png)
 
 ## What it does
 
 - **The map, on the projector.** Vector maps from Dungeon Scrawl, with fog of war the DM lifts room by
   room or brush by brush, doors to open, secrets to conceal, a measuring tool, and a pointer the players
   see (`/player`, meant to run full screen on the projector).
-- **The room briefing.** Click a room and the Info tab shows what the DM needs: the read-aloud text, who
-  is there and where it leads, the DM-only notes, and links to every person, monster, spell and place
-  it mentions, each opening a card of its own.
+- **The room, beside the map.** The map never leaves the screen. Click a room and the dock beside it
+  shows what the DM needs, in the order it is read: the read-aloud text first, then the checks, the
+  encounter, the DM-only detail and who is there, with links to every person, monster, spell and place
+  it mentions, each opening a card over the dock.
 - **The campaign around it:** the level and its factions, the quest log with tickable story beats, the
   party, the NPCs, the backstory, the evening's session prep, the rules, card decks to draw from, and a
   search across all of it and the books the campaign indexes.

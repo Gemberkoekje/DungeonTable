@@ -7,10 +7,11 @@ _To understand this repository, start with [README.md](README.md), then
 
 ## What this is
 
-A Blazor Server app for running a dungeon at the table: a DM screen (`/dm`), a player view for a
-projector (`/player`) and a Room Editor (`/editor`). The app holds no adventure. It reads one from a
-**content root**, a folder with `Maps/` and `data/`, and the only content in this repository is the
-sample pack in `samples/demo`, a small original adventure that is also the test fixture.
+A Blazor Server app for running a dungeon at the table: a DM screen (`/dm`: the map, with a dock of
+Room, Battle, Campaign and Art tabs beside it), a player view for a projector (`/player`) and a Room
+Editor (`/editor`). The app holds no adventure. It reads one from a **content root**, a folder with
+`Maps/` and `data/`, and the only content in this repository is the sample pack in `samples/demo`, a
+small original adventure that is also the test fixture.
 
 ## Real content stays out of this repository
 
@@ -110,7 +111,7 @@ Each of these compiled, passed every test, and still broke something.
   browser, sign in once with credentials, then load the plain URL.
 - **`HtmlRenderer` renders statically**: nothing can be clicked, and only a panel's active tab renders.
   A part that has to be tested on its own becomes a component of its own (`LevelTable`, `DeckPanel`),
-  or the panel takes the tab to open on (`RoomBriefingPanel.InitialTab`).
+  or the panel takes the tab to open on (`CampaignPanel.InitialTab`).
 - **A duplicate `@key` passes a first render.** Blazor compares keys only when it diffs a list against
   the one it rendered before, so two siblings with one key throw on the next render, which a live tab
   does at its next change. A render test of keys must render twice (`RenderAgainHost` in the tests).
