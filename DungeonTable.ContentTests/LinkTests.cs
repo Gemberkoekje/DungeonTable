@@ -40,6 +40,12 @@ public sealed class LinkTests
     }
 
     [Fact]
+    public void No_area_lists_more_of_one_somebody_or_one_band_than_there_are()
+    {
+        Report.None(LinkAudit.OverfullListings(ContentRoot.Dossiers, ContentRoot.Targets), "Listings larger than who they name");
+    }
+
+    [Fact]
     public void Every_exit_leads_to_an_area_or_waits_for_its_floor()
     {
         Report.None(LinkAudit.BrokenExits(ContentRoot.Dossiers, ContentRoot.Targets), "Broken exits");

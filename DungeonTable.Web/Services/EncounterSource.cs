@@ -68,6 +68,7 @@ public sealed class EncounterSource
     {
         OccupantEntry first = listed[0];
         CountEstimate count = Count(listed);
+        int band = listed.Max(occupant => occupant.BandSize);
 
         string block = first.MonsterRef;
         Result<Core.Stats.StatBlock> found = block.Length > 0
@@ -77,6 +78,7 @@ public sealed class EncounterSource
             ? content.GetReferenceCard(block)
             : Result.WithMessages<ReferenceCard>(ValidationMessage.Error("Fights with no stat block.", nameof(block)));
 
+        bool shared = !string.Equals(first.NodeId, block, StringComparison.Ordinal);
         return new EncounterMonster
         {
             NodeId = first.NodeId,
@@ -89,8 +91,11 @@ public sealed class EncounterSource
             HasStatBlock = found.IsValid,
 
             // A stat block listed as itself is a kind of creature, added as a numbered group. Anyone
-            // else (an entity, an NPC, a player character) is one particular somebody.
-            Individual = !string.Equals(first.NodeId, block, StringComparison.Ordinal),
+            // else (an entity, an NPC, a player character) is one particular somebody, or one band,
+            // which is added as a numbered group too.
+            Individual = shared && band == 0,
+            Shared = shared,
+            BandSize = band,
 
             // Secret only while none of them is known to the players.
             Secret = listed.All(occupant => occupant.Secret),

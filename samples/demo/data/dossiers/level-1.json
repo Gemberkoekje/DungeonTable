@@ -64,6 +64,14 @@
         "description": "A [[gargoyle]] the bell-founders set on a plinth in the nave ([[area 3a]]) to keep the way between the chapel and their crypt. It sleeps while the bell tolls at dusk. Since the bell fell silent it has been awake, and it attacks anything that crosses the nave, from above or below, until the bell rings again. Until it moves, it is one more statue."
       },
       {
+        "id": "crew-bugbear",
+        "kind": "creature",
+        "name": "Crew bugbear",
+        "statBlock": "bugbear",
+        "count": 2,
+        "description": "One of the two [[bugbear|bugbears]] of [[grasks-crew|Grask's crew]]. Both work the furnace in [[area 4]], and while the goblins fetch coal one of them stands over them in the den ([[area 2]]). They are the same two wherever they are listed: one dealt with in the den leaves one in the workshop."
+      },
+      {
         "id": "silver-clapper",
         "kind": "item",
         "name": "silver clapper",
@@ -185,7 +193,8 @@
       ],
       "creatures": [
         { "ref": "nib" },
-        { "ref": "goblin", "count": "1d4+2", "note": "Around the fire. They fight until three have fallen, then scatter." }
+        { "ref": "goblin", "count": "1d4+2", "note": "Around the fire. They fight until three have fallen, then scatter." },
+        { "ref": "crew-bugbear", "note": "Only while the goblins fetch coal: one of the two from the workshop ([[area 4]]) stands over them, and runs back to warn Grask at the first sign of trouble." }
       ],
       "exits": [
         { "to": "area 1", "note": "The open door east, and the passage to the landing." },
@@ -333,7 +342,8 @@
         }
       ],
       "creatures": [
-        { "ref": "brother-aldous", "note": "Only on the nights he pays Grask: waiting at the lectern with a candle.", "secret": true }
+        { "ref": "brother-aldous", "note": "Only on the nights he pays Grask: waiting at the lectern with a candle.", "secret": true },
+        { "ref": "grask", "note": "Only if he flees the workshop ([[area 4]]): through the secret door, to bargain with Aldous for a way out.", "secret": true }
       ],
       "exits": [
         { "to": "area 3a", "note": "The archway, east." },
@@ -405,7 +415,7 @@
       ],
       "creatures": [
         { "ref": "grask" },
-        { "ref": "bugbear", "count": 2, "note": "Grask's crew. One works the bellows; one sleeps by the wall." },
+        { "ref": "crew-bugbear", "count": 2, "note": "One works the bellows; one sleeps by the wall." },
         { "ref": "tam-brask", "note": "Chained to the anvil." }
       ],
       "exits": [

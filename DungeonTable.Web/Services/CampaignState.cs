@@ -185,10 +185,13 @@ public sealed class CampaignState
 
         lock (gate)
         {
+            // Either way the one-at-a-time counts go: ticked, every one is dealt with; put back,
+            // none is.
             AreaProgress entry = AreaEntry(areaNodeId);
             entry.ClearedCreatureIds = entry.ClearedCreatureIds.Contains(creatureNodeId, StringComparer.Ordinal)
                 ? entry.ClearedCreatureIds.Where(id => !string.Equals(id, creatureNodeId, StringComparison.Ordinal)).ToArray()
                 : entry.ClearedCreatureIds.Append(creatureNodeId).ToArray();
+            entry.CreatureCounts = Without(entry.CreatureCounts, creatureNodeId);
 
             Prune(areaNodeId, entry);
         }
@@ -225,6 +228,9 @@ public sealed class CampaignState
             entry.ClearedCreatureIds = cleared
                 ? entry.ClearedCreatureIds.Union(ids, StringComparer.Ordinal).ToArray()
                 : entry.ClearedCreatureIds.Except(ids, StringComparer.Ordinal).ToArray();
+            entry.CreatureCounts = entry.CreatureCounts
+                .Where(count => !ids.Contains(count.CreatureId, StringComparer.Ordinal))
+                .ToArray();
 
             Prune(areaNodeId, entry);
         }
@@ -256,6 +262,183 @@ public sealed class CampaignState
 
             var done = new HashSet<string>(found.ClearedCreatureIds, StringComparer.Ordinal);
             return creatureNodeIds.Distinct(StringComparer.Ordinal).Count(done.Contains);
+        }
+    }
+
+    /// <summary>What the table recorded of one creature in one area.</summary>
+    /// <param name="areaNodeId">The area's node id.</param>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    /// <returns>The record; <see cref="CreatureRecord.None"/> when nothing is recorded.</returns>
+    public CreatureRecord RecordOf(string areaNodeId, string creatureNodeId)
+    {
+        lock (gate)
+        {
+            if (!areas.TryGetValue(areaNodeId ?? string.Empty, out AreaProgress found))
+            {
+                return CreatureRecord.None;
+            }
+
+            CreatureCount count = CountOf(found, creatureNodeId);
+            return new CreatureRecord(
+                found.ClearedCreatureIds.Contains(creatureNodeId, StringComparer.Ordinal),
+                count is null ? 0 : count.Dealt,
+                count is null ? 0 : count.Fled);
+        }
+    }
+
+    /// <summary>
+    /// Where some of a creature have been dealt with, and how many in each area: what one somebody or
+    /// one band listed in several rooms has lost, wherever it happened. A whole listing ticked off at
+    /// once counts as one, which it is for one somebody; a band is always counted one at a time.
+    /// </summary>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    /// <returns>The areas with how many were dealt with in each, in no particular order.</returns>
+    public IReadOnlyList<KeyValuePair<string, int>> DealtByArea(string creatureNodeId)
+    {
+        if (string.IsNullOrWhiteSpace(creatureNodeId))
+        {
+            return Array.Empty<KeyValuePair<string, int>>();
+        }
+
+        lock (gate)
+        {
+            var dealt = new List<KeyValuePair<string, int>>();
+            foreach (AreaProgress entry in areas.Values)
+            {
+                int here = entry.ClearedCreatureIds.Contains(creatureNodeId, StringComparer.Ordinal)
+                    ? 1
+                    : CountOf(entry, creatureNodeId)?.Dealt ?? 0;
+                if (here > 0)
+                {
+                    dealt.Add(new KeyValuePair<string, int>(entry.AreaNodeId, here));
+                }
+            }
+
+            return dealt;
+        }
+    }
+
+    /// <summary>
+    /// Counts one creature in an area down or back up: dealt with, or fled. Neither count goes below
+    /// nothing. Counting a listing that was ticked off whole does nothing: it is all dealt with
+    /// already. To take one back from such a listing, use <see cref="TakeBackOne"/>.
+    /// </summary>
+    /// <param name="areaNodeId">The area's node id.</param>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    /// <param name="dealt">How many more were dealt with; negative to take some back.</param>
+    /// <param name="fled">How many more fled; negative to bring some back.</param>
+    public void Count(string areaNodeId, string creatureNodeId, int dealt, int fled)
+    {
+        if (string.IsNullOrWhiteSpace(areaNodeId) || string.IsNullOrWhiteSpace(creatureNodeId) || (dealt == 0 && fled == 0))
+        {
+            return;
+        }
+
+        lock (gate)
+        {
+            AreaProgress entry = AreaEntry(areaNodeId);
+            if (!entry.ClearedCreatureIds.Contains(creatureNodeId, StringComparer.Ordinal))
+            {
+                CreatureCount count = CountOf(entry, creatureNodeId) ?? new CreatureCount { CreatureId = creatureNodeId };
+                SetCount(entry, creatureNodeId, Math.Max(0, count.Dealt + dealt), Math.Max(0, count.Fled + fled));
+            }
+
+            Prune(areaNodeId, entry);
+        }
+
+        Notify();
+    }
+
+    /// <summary>
+    /// Takes one creature dealt with in an area back: one fewer counted down, or, from a listing
+    /// ticked off whole, every one of it but one.
+    /// </summary>
+    /// <param name="areaNodeId">The area's node id.</param>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    /// <param name="listed">How many the area lists, for a listing ticked off whole.</param>
+    public void TakeBackOne(string areaNodeId, string creatureNodeId, int listed)
+    {
+        if (string.IsNullOrWhiteSpace(areaNodeId) || string.IsNullOrWhiteSpace(creatureNodeId))
+        {
+            return;
+        }
+
+        lock (gate)
+        {
+            AreaProgress entry = AreaEntry(areaNodeId);
+            if (entry.ClearedCreatureIds.Contains(creatureNodeId, StringComparer.Ordinal))
+            {
+                entry.ClearedCreatureIds = entry.ClearedCreatureIds
+                    .Where(id => !string.Equals(id, creatureNodeId, StringComparison.Ordinal))
+                    .ToArray();
+                SetCount(entry, creatureNodeId, Math.Max(0, listed - 1), 0);
+            }
+            else
+            {
+                CreatureCount count = CountOf(entry, creatureNodeId);
+                if (count is not null)
+                {
+                    SetCount(entry, creatureNodeId, Math.Max(0, count.Dealt - 1), count.Fled);
+                }
+            }
+
+            Prune(areaNodeId, entry);
+        }
+
+        Notify();
+    }
+
+    /// <summary>Puts a creature in an area back as the book lists it: nothing ticked, counted down or fled.</summary>
+    /// <param name="areaNodeId">The area's node id.</param>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    public void PutBack(string areaNodeId, string creatureNodeId)
+    {
+        if (string.IsNullOrWhiteSpace(areaNodeId) || string.IsNullOrWhiteSpace(creatureNodeId))
+        {
+            return;
+        }
+
+        bool changed = false;
+        lock (gate)
+        {
+            if (areas.TryGetValue(areaNodeId, out AreaProgress entry))
+            {
+                changed = Forget(entry, creatureNodeId, keepFled: false);
+                Prune(areaNodeId, entry);
+            }
+        }
+
+        if (changed)
+        {
+            Notify();
+        }
+    }
+
+    /// <summary>
+    /// Brings one somebody or one band back on the board everywhere: what was dealt with of it in
+    /// every area is forgotten. Who fled from where is kept, since that still happened.
+    /// </summary>
+    /// <param name="creatureNodeId">The creature's node id.</param>
+    public void PutBackEverywhere(string creatureNodeId)
+    {
+        if (string.IsNullOrWhiteSpace(creatureNodeId))
+        {
+            return;
+        }
+
+        bool changed = false;
+        lock (gate)
+        {
+            foreach (AreaProgress entry in areas.Values.ToArray())
+            {
+                changed |= Forget(entry, creatureNodeId, keepFled: true);
+                Prune(entry.AreaNodeId, entry);
+            }
+        }
+
+        if (changed)
+        {
+            Notify();
         }
     }
 
@@ -600,6 +783,20 @@ public sealed class CampaignState
                 // A repeated id would be counted twice and could make "3 of 2 dealt with" appear on
                 // an area card, so de-duplicate on the way in as the quest beats do.
                 restored.ClearedCreatureIds = restored.ClearedCreatureIds.Distinct(StringComparer.Ordinal).ToArray();
+
+                // The same goes for the counts: one entry per creature (the first), none below
+                // nothing, and none that records nothing.
+                restored.CreatureCounts = restored.CreatureCounts
+                    .Where(count => !string.IsNullOrWhiteSpace(count.CreatureId))
+                    .GroupBy(count => count.CreatureId, StringComparer.Ordinal)
+                    .Select(counts => new CreatureCount
+                    {
+                        CreatureId = counts.Key,
+                        Dealt = Math.Max(0, counts.First().Dealt),
+                        Fled = Math.Max(0, counts.First().Fled),
+                    })
+                    .Where(count => count.Dealt > 0 || count.Fled > 0)
+                    .ToArray();
                 areas[restored.AreaNodeId] = restored;
             }
 
@@ -683,8 +880,44 @@ public sealed class CampaignState
     {
         AreaNodeId = entry.AreaNodeId,
         ClearedCreatureIds = (entry.ClearedCreatureIds ?? Array.Empty<string>()).ToArray(),
+        CreatureCounts = (entry.CreatureCounts ?? Array.Empty<CreatureCount>())
+            .Where(count => count is not null)
+            .Select(count => new CreatureCount { CreatureId = count.CreatureId ?? string.Empty, Dealt = count.Dealt, Fled = count.Fled })
+            .ToArray(),
         Note = entry.Note ?? string.Empty,
     };
+
+    // One creature's counts in an area, or null when it has none. Caller holds gate.
+    private static CreatureCount CountOf(AreaProgress entry, string creatureNodeId) =>
+        entry.CreatureCounts.FirstOrDefault(count => string.Equals(count.CreatureId, creatureNodeId, StringComparison.Ordinal));
+
+    // Sets one creature's counts in an area, dropping its entry when both are nothing. Caller holds gate.
+    private static void SetCount(AreaProgress entry, string creatureNodeId, int dealt, int fled)
+    {
+        CreatureCount[] others = Without(entry.CreatureCounts, creatureNodeId);
+        entry.CreatureCounts = dealt > 0 || fled > 0
+            ? others.Append(new CreatureCount { CreatureId = creatureNodeId, Dealt = dealt, Fled = fled }).ToArray()
+            : others;
+    }
+
+    private static CreatureCount[] Without(IEnumerable<CreatureCount> counts, string creatureNodeId) =>
+        counts.Where(count => !string.Equals(count.CreatureId, creatureNodeId, StringComparison.Ordinal)).ToArray();
+
+    // Forgets what an area recorded of one creature: its tick and its counts, or only what was dealt
+    // with when keepFled is set. True when anything was forgotten. Caller holds gate.
+    private static bool Forget(AreaProgress entry, string creatureNodeId, bool keepFled)
+    {
+        bool ticked = entry.ClearedCreatureIds.Contains(creatureNodeId, StringComparer.Ordinal);
+        CreatureCount count = CountOf(entry, creatureNodeId);
+        int fled = keepFled && count is not null ? count.Fled : 0;
+        bool changed = ticked || (count is not null && (count.Dealt > 0 || count.Fled != fled));
+
+        entry.ClearedCreatureIds = entry.ClearedCreatureIds
+            .Where(id => !string.Equals(id, creatureNodeId, StringComparison.Ordinal))
+            .ToArray();
+        SetCount(entry, creatureNodeId, 0, fled);
+        return changed;
+    }
 
     // The progress row for an area, created on first write. Caller holds gate.
     private AreaProgress AreaEntry(string areaNodeId)
@@ -703,7 +936,7 @@ public sealed class CampaignState
     // holds gate.
     private void Prune(string areaNodeId, AreaProgress entry)
     {
-        if (entry.ClearedCreatureIds.Count == 0 && entry.Note.Length == 0)
+        if (entry.ClearedCreatureIds.Count == 0 && entry.CreatureCounts.Count == 0 && entry.Note.Length == 0)
         {
             areas.Remove(areaNodeId);
         }

@@ -3783,6 +3783,53 @@ input.battle-init,
     color: var(--error);
 }
 
+/* The encounter row's counting controls: -1, +1 and fled. Two classes and an element, so they beat the
+   shared ".encounter button" rule above whatever the order; they come after it all the same. */
+.encounter .encounter-tally {
+    display: inline-flex;
+    gap: 0.25rem;
+}
+
+.encounter .encounter-tally button {
+    padding: 0.1rem 0.4rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+/* Fled is a record too: pressed while some have fled, and a click brings them back. */
+.encounter .encounter-tally button.tally-fled {
+    background: rgba(106, 160, 214, 0.16);
+    border-color: rgba(106, 160, 214, 0.55);
+    color: #9cc3ea;
+}
+
+/* What is left of a row, and of a band across the rooms that list it. */
+.encounter-status,
+.encounter-band {
+    padding: 0.05rem 0.45rem;
+    border-radius: 0.6rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.encounter-status {
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--accent);
+}
+
+.encounter-row.cleared .encounter-status {
+    background: rgba(46, 139, 87, 0.18);
+    color: #64c08a;
+}
+
+.encounter-band {
+    border: 1px solid var(--border);
+    color: var(--muted);
+}
+
 /* The Battle tab's small controls. Each must MATCH the shared rule's specificity (three classes and
    an element — its two :not()s each count as a class) and come after it, or the shared padding and
    colour win. That is why they live down here and why the .battle-order in the middle is

@@ -23,7 +23,10 @@ public sealed class RoomBadges
     /// <summary>No badges: a room with nothing to show.</summary>
     public static RoomBadges None { get; } = new RoomBadges();
 
-    /// <summary>The creatures the area lists that are not ticked off yet, in its order.</summary>
+    /// <summary>
+    /// The creatures the area lists that are not ticked off yet, in its order, each carrying what is
+    /// left of it as its count.
+    /// </summary>
     public IReadOnlyList<EncounterMonster> StillUp { get; init; } = Array.Empty<EncounterMonster>();
 
     /// <summary>
@@ -101,15 +104,15 @@ public sealed class RoomBadges
             return None;
         }
 
-        EncounterMonster[] stillUp = glance.Creatures
-            .Where(creature => !campaign.IsCreatureCleared(glance.AreaNodeId, creature.NodeId))
-            .ToArray();
+        // What is left of each, counted down one at a time and across the rooms one somebody or one
+        // band is listed in (see CreatureStanding).
+        IReadOnlyList<EncounterMonster> stillUp = CreatureStanding.StillUp(glance.AreaNodeId, glance.Creatures, campaign);
 
         return new RoomBadges
         {
             StillUp = stillUp,
             Creatures = CreatureTally.Count(stillUp),
-            Cleared = glance.Creatures.Count > 0 && stillUp.Length == 0,
+            Cleared = glance.Creatures.Count > 0 && stillUp.Count == 0,
             Loot = glance.Loot.Count > 0,
             Hazard = glance.Hazards.Count > 0,
             Secret = glance.HasSecret,

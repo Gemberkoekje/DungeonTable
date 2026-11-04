@@ -500,10 +500,12 @@ public sealed class AuthoredProjection : IContentProjection
         LinkTarget target = resolved.Value;
         string label = target.DisplayName;
         string block = string.Empty;
+        int band = 0;
         if (entities.TryGetValue(target.TargetId, out (Entity Entity, string Floor) entity))
         {
             label = entity.Entity.Name.Length > 0 ? entity.Entity.Name : entity.Entity.Id;
             block = ResolveBlock(entity.Entity.StatBlock, entity.Floor);
+            band = BandSize(entity.Entity);
         }
         else if (npcs.TryGetValue(target.TargetId, out NpcDossier npc))
         {
@@ -525,7 +527,19 @@ public sealed class AuthoredProjection : IContentProjection
             Count = Count(creature),
             Note = creature.Note ?? string.Empty,
             Secret = creature.Secret,
+            BandSize = band,
         };
+    }
+
+    // How many make up an entity that is a band: its count when that is a whole number above one, and
+    // zero for one somebody. A count that does not read is one somebody here, and the content checks
+    // say so.
+    private static int BandSize(Entity entity)
+    {
+        string written = (entity.Count ?? string.Empty).Trim();
+        return int.TryParse(written, NumberStyles.None, CultureInfo.InvariantCulture, out int size) && size > 1
+            ? size
+            : 0;
     }
 
     private List<ConnectionEntry> Connections(AreaDossier area, string floor) =>

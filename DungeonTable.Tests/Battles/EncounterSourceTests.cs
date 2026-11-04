@@ -90,6 +90,31 @@ public sealed class EncounterSourceTests
     }
 
     [Fact]
+    public void One_somebody_and_a_band_share_their_record_between_rooms_and_a_kind_of_creature_does_not()
+    {
+        EncounterSource source = Build();
+        var briefing = Listing(
+            new OccupantEntry { NodeId = "grukk", MonsterRef = Bugbear, Label = "Grukk the Chief" },
+            new OccupantEntry { NodeId = "grukks-guard", MonsterRef = Bugbear, Label = "Guard", Count = "2", BandSize = 5 },
+            new OccupantEntry { NodeId = Goblin, MonsterRef = Goblin, Label = "Goblin", Count = "3" });
+
+        IReadOnlyList<EncounterMonster> rows = source.For(briefing);
+
+        Assert.True(rows[0].Shared);
+        Assert.True(rows[0].Individual);
+        Assert.Equal(0, rows[0].BandSize);
+
+        // A band is shared too, but joins a fight as a numbered group, as a kind of creature does.
+        Assert.True(rows[1].Shared);
+        Assert.False(rows[1].Individual);
+        Assert.Equal(5, rows[1].BandSize);
+        Assert.Equal(2, rows[1].SuggestedCount);
+
+        Assert.False(rows[2].Shared);
+        Assert.Equal(0, rows[2].BandSize);
+    }
+
+    [Fact]
     public void A_creature_listed_twice_is_one_row_with_the_counts_added_and_both_notes()
     {
         EncounterSource source = Build();

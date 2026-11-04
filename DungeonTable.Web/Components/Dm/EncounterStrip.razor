@@ -13,6 +13,10 @@
     we kill the things in it?", and nothing else in the app can answer: the dossier says what the book
     puts in the room, the fight says what is happening now, and neither remembers three sessions ago.
     "Area cleared" is read off the ticks rather than stored beside them, so the two cannot disagree.
+
+    A row of several counts down one at a time (-1, and +1 to take one back). One somebody or one band
+    listed in several rooms is the same somebody in each (CreatureStanding): dealt with here is dealt
+    with everywhere, so such a row can also flee, which takes it out of this room only.
 *@
 
 <section class="encounter @(AllCleared ? "encounter-cleared" : string.Empty)" aria-label="Encounter">
@@ -54,14 +58,16 @@
             @foreach (EncounterMonster monster in Monsters)
             {
                 EncounterMonster row = monster;
-                bool cleared = Campaign.IsCreatureCleared(AreaNodeId, row.NodeId);
+                CreatureStanding standing = StandingOf(row);
+                bool cleared = standing.Gone;
+                string status = StatusOf(standing);
                 <li class="encounter-row @(cleared ? "cleared" : string.Empty)">
                     @* A checkbox, not a button: this is a record of what happened, and it is the one
                        control on the row a DM might tab through a list of. *@
-                    <label class="encounter-done" title="@(cleared ? "Put these back on the board" : "These have been dealt with")">
+                    <label class="encounter-done" title="@DoneTitle(row, standing)">
                         <input type="checkbox" checked="@cleared"
                                aria-label="@($"{row.Name} dealt with")"
-                               @onchange="() => Campaign.ToggleCreatureCleared(AreaNodeId, row.NodeId)" />
+                               @onchange="() => ToggleDone(row)" />
                     </label>
 
                     <button type="button" class="encounter-name ref-link" title="Open the stat block"
@@ -79,6 +85,14 @@
                     {
                         <span class="secret-badge" title="DM only — the players don't know these are here">DM</span>
                     }
+                    @if (status.Length > 0)
+                    {
+                        <span class="encounter-status" title="@StatusTitle(row, standing)">@status</span>
+                    }
+                    @if (standing.BandSize > 1 && !standing.GoneElsewhere)
+                    {
+                        <span class="encounter-band" title="@($"A band: {standing.BandLeft} of {standing.BandSize} still up, across every room that lists them")">@($"{standing.BandLeft} of {standing.BandSize} in all")</span>
+                    }
 
                     <span class="encounter-context" title="@row.Context">@row.Context</span>
 
@@ -86,6 +100,38 @@
                     {
                         <span class="encounter-dice" title="The book rolls for this — roll it and type the result">@row.CountExpression</span>
                     }
+
+                    @* Counting down and fleeing: what happens one creature at a time in a fight. *@
+                    <span class="encounter-tally">
+                        @if (CanCountDown(standing))
+                        {
+                            <button type="button" class="tally-down" title="One of them dealt with"
+                                    aria-label="@($"One {row.Name} dealt with")"
+                                    @onclick="() => Campaign.Count(AreaNodeId, row.NodeId, 1, 0)">&minus;1</button>
+                        }
+                        @if (CanTakeBack(standing))
+                        {
+                            <button type="button" class="tally-back" title="Take one back: one fewer dealt with"
+                                    aria-label="@($"One {row.Name} back")"
+                                    @onclick="() => Campaign.TakeBackOne(AreaNodeId, row.NodeId, standing.Listed)">+1</button>
+                        }
+                        @if (row.Shared && standing.FledHere > 0)
+                        {
+                            <button type="button" class="tally-fled on" aria-pressed="true"
+                                    title="Fled from here, still up wherever else they are listed. Click to bring them back"
+                                    @onclick="() => Campaign.Count(AreaNodeId, row.NodeId, 0, -standing.FledHere)">
+                                <span aria-hidden="true">&#x21AA;</span> @(standing.FledHere > 1 ? $"{standing.FledHere} fled" : "fled")
+                            </button>
+                        }
+                        @if (row.Shared && !cleared)
+                        {
+                            <button type="button" class="tally-flee"
+                                    title="@(standing.Left > 1 ? "One of them fled from here: still up wherever else they are listed" : "Fled from here: still up wherever else listed, so not dealt with")"
+                                    @onclick="() => Campaign.Count(AreaNodeId, row.NodeId, 0, 1)">
+                                <span aria-hidden="true">&#x21AA;</span> @(standing.Left > 1 ? "one fled" : "fled")
+                            </button>
+                        }
+                    </span>
 
                     <span class="encounter-stepper">
                         <button type="button" title="One fewer" @onclick="() => Step(row.NodeId, -1)">&minus;</button>
@@ -132,6 +178,10 @@
     [Parameter]
     public EventCallback<string> OnOpenReference { get; set; }
 
+    /// <summary>An area's name by its node id, for "dealt with in ..."; the id itself when not given.</summary>
+    [Parameter]
+    public Func<string, string> AreaLabel { get; set; } = id => id;
+
     // Steppers the DM has adjusted, keyed by node id. Anything absent shows the authored pre-fill, so
     // navigating to another area and back does not strand a count from a different room.
     private readonly Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -150,15 +200,132 @@
         Campaign.Changed += OnBattleChanged;
     }
 
-    // How many of the creatures this area lists have been ticked off, and whether that is all of
-    // them. Counted against the shown rows, never against everything stored: a tick left behind by a
+    // How many of the creatures this area lists are gone from it, and whether that is all of them.
+    // Counted against the shown rows, never against everything stored: a tick left behind by a
     // creature the area no longer lists must not make a room read as more cleared than it is.
-    private int ClearedCount => Campaign.ClearedCount(AreaNodeId, Monsters.Select(monster => monster.NodeId));
+    private int ClearedCount => Monsters.Count(monster => StandingOf(monster).Gone);
 
     private bool AllCleared => Monsters.Count > 0 && ClearedCount == Monsters.Count;
 
-    private void ToggleAllCleared() =>
-        Campaign.SetAreaCleared(AreaNodeId, Monsters.Select(monster => monster.NodeId), !AllCleared);
+    private CreatureStanding StandingOf(EncounterMonster row) => CreatureStanding.Of(AreaNodeId, row, Campaign);
+
+    private void ToggleAllCleared()
+    {
+        bool reopen = AllCleared;
+        foreach (EncounterMonster row in Monsters)
+        {
+            CreatureStanding standing = StandingOf(row);
+            if (reopen)
+            {
+                PutBack(row);
+            }
+            else if (!standing.Gone)
+            {
+                DealWith(row, standing);
+            }
+        }
+    }
+
+    private void ToggleDone(EncounterMonster row)
+    {
+        CreatureStanding standing = StandingOf(row);
+        if (standing.Gone)
+        {
+            PutBack(row);
+        }
+        else
+        {
+            DealWith(row, standing);
+        }
+    }
+
+    // Every one still here dealt with. A kind of creature is ticked off whole, which stays true if an
+    // edit changes its count. One somebody or a band is counted, exactly what is left here, so the
+    // band elsewhere loses no more than this room had.
+    private void DealWith(EncounterMonster row, CreatureStanding standing)
+    {
+        if (!row.Shared)
+        {
+            if (!Campaign.RecordOf(AreaNodeId, row.NodeId).Whole)
+            {
+                Campaign.ToggleCreatureCleared(AreaNodeId, row.NodeId);
+            }
+
+            return;
+        }
+
+        Campaign.Count(AreaNodeId, row.NodeId, standing.Rolled ? 1 : standing.Left, 0);
+    }
+
+    // Back on the board as the book lists them. One somebody or a band still gone after that was dealt
+    // with in another room, and putting them back means everywhere: he is alive again, and so is the band.
+    private void PutBack(EncounterMonster row)
+    {
+        Campaign.PutBack(AreaNodeId, row.NodeId);
+        if (row.Shared && StandingOf(row).Gone)
+        {
+            Campaign.PutBackEverywhere(row.NodeId);
+        }
+    }
+
+    private static bool CanCountDown(CreatureStanding standing) =>
+        !standing.Rolled && standing.Listed > 1 && standing.Left > 0;
+
+    private static bool CanTakeBack(CreatureStanding standing) =>
+        !standing.Rolled && standing.Listed > 1 && standing.DealtHere > 0;
+
+    // What the row's chip says: where one somebody was dealt with, that a whole band is gone, or how
+    // many of a listing are left. Empty when the row is as the book lists it, or simply ticked off.
+    private string StatusOf(CreatureStanding standing)
+    {
+        if (standing.GoneElsewhere)
+        {
+            if (standing.BandSize > 1)
+            {
+                return $"all {standing.BandSize} dealt with";
+            }
+
+            return standing.DealtIn.Count > 0 ? "dealt with in " + AreaLabel(standing.DealtIn[0]) : "dealt with elsewhere";
+        }
+
+        return !standing.Rolled && standing.Left > 0 && standing.Left < standing.Listed
+            ? $"{standing.Left} of {standing.Listed} left"
+            : string.Empty;
+    }
+
+    private string StatusTitle(EncounterMonster row, CreatureStanding standing)
+    {
+        if (!standing.GoneElsewhere)
+        {
+            return standing.Shared
+                ? "What is left here: counted down here, and across every room that lists them"
+                : "What is left here, counted down one at a time";
+        }
+
+        string where = string.Join(", ", standing.DealtIn.Select(AreaLabel));
+        return where.Length > 0
+            ? $"{row.Name}: dealt with in {where}"
+            : $"{row.Name}: dealt with elsewhere";
+    }
+
+    private static string DoneTitle(EncounterMonster row, CreatureStanding standing)
+    {
+        if (standing.GoneElsewhere)
+        {
+            return standing.BandSize > 1
+                ? "The whole band is dealt with. Untick to put the band back on the board everywhere"
+                : "Dealt with in another room. Untick to put them back on the board everywhere";
+        }
+
+        if (standing.Gone)
+        {
+            return "Put these back on the board";
+        }
+
+        return row.Shared
+            ? "These have been dealt with: here, and in every other room that lists them"
+            : "These have been dealt with";
+    }
 
     protected override void OnParametersSet()
     {
@@ -190,8 +357,18 @@
         }
     }
 
-    private int CountOf(EncounterMonster monster) =>
-        counts.TryGetValue(monster.NodeId, out int edited) ? edited : monster.SuggestedCount;
+    // The stepper starts at what is left here (all of it before anything is dealt with), so "Add"
+    // brings the survivors into a fight, not the whole listing.
+    private int CountOf(EncounterMonster monster)
+    {
+        if (counts.TryGetValue(monster.NodeId, out int edited))
+        {
+            return edited;
+        }
+
+        CreatureStanding standing = StandingOf(monster);
+        return !standing.Rolled && standing.Left > 0 ? standing.Left : monster.SuggestedCount;
+    }
 
     private void Step(string nodeId, int delta)
     {

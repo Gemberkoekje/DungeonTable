@@ -20,8 +20,8 @@ public sealed class OnTheMapHostTests
 {
     private const string GoblinDen = "data_dossiers_level_1_area_2";
 
-    // Who the Goblin Den lists: Nib, and the goblins by their stat block.
-    private static readonly string[] DenCreatures = { "nib", "data_statblocks_monsters_goblin" };
+    // Who the Goblin Den lists: Nib, the goblins by their stat block, and one of the crew's bugbears.
+    private static readonly string[] DenCreatures = { "nib", "data_statblocks_monsters_goblin", "crew-bugbear" };
 
     [Fact]
     public async Task The_map_and_the_room_tab_say_what_is_in_each_room_and_the_projector_does_not()
@@ -31,10 +31,11 @@ public sealed class OnTheMapHostTests
 
         string dm = await client.GetStringAsync("/dm", CancellationToken.None);
 
-        // On the map, under the Goblin Den's label: Nib and 1d4+2 goblins, its loot, and its secret.
+        // On the map, under the Goblin Den's label: Nib, 1d4+2 goblins and a bugbear, its loot, and its
+        // secret.
         string map = Between(dm, "class=\"editor-overlay\"", "class=\"dt-live\"");
         Assert.Contains(">Goblin Den</text><text class=\"dt-label dt-badges\"", map, StringComparison.Ordinal);
-        Assert.Contains("☠\uFE0E 1d4+3</tspan>", map, StringComparison.Ordinal);
+        Assert.Contains("☠\uFE0E 1d4+4</tspan>", map, StringComparison.Ordinal);
 
         // The screen opens on the Landing, whose ways out lead to the Goblin Den and the Nave.
         string nearby = Between(dm, "<section class=\"nearby\">", "</section>");
@@ -49,7 +50,7 @@ public sealed class OnTheMapHostTests
         Assert.DoesNotContain("class=\"dt-badge", player, StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"dt-cleared\"", player, StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"room-badge", player, StringComparison.Ordinal);
-        Assert.DoesNotContain("1d4+3", player, StringComparison.Ordinal);
+        Assert.DoesNotContain("1d4+4", player, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public sealed class OnTheMapHostTests
         string map = Between(dm, "class=\"editor-overlay\"", "class=\"dt-live\"");
         Assert.Contains("class=\"dt-cleared\"", map, StringComparison.Ordinal);
         Assert.Contains("✔\uFE0E</tspan>", map, StringComparison.Ordinal);
-        Assert.DoesNotContain("1d4+3", map, StringComparison.Ordinal);
+        Assert.DoesNotContain("1d4+4", map, StringComparison.Ordinal);
     }
 
     private static WebApplicationFactory<Program> Factory() =>

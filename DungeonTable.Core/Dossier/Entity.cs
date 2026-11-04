@@ -40,4 +40,12 @@ public sealed class Entity
 
     /// <summary>True when the players must not learn of it, as for a secret dossier block.</summary>
     public bool Secret { get; init; }
+
+    /// <summary>
+    /// How many of it there are in all when it is a band rather than one somebody ("7", the gang's
+    /// seven bandits): every area that lists it lists some of the same band, so a bandit dealt with in
+    /// one room is one fewer everywhere. Empty for one somebody, which is what an entity is unless it
+    /// says otherwise.
+    /// </summary>
+    public string Count { get; init; } = string.Empty;
 }
