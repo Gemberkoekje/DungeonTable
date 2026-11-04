@@ -24,6 +24,12 @@ namespace DungeonTable.Web.Services;
 /// they left it.
 /// </para>
 /// <para>
+/// The projector does not follow the DM to another map by itself. It stays on the map it shows, with
+/// what was revealed there and its framing, until the DM shows the new map to the players
+/// (<see cref="ShowCurrentMapOnProjector"/>), so the DM can look ahead, or set up the next floor, while
+/// the players still see the one they are on. <see cref="Projector"/> is what the player view draws.
+/// </para>
+/// <para>
 /// <see cref="Capture"/> and <see cref="Restore"/> are how this outlives the process: the
 /// persistence coordinator captures a <see cref="RevealSnapshot"/> whenever <see cref="Changed"/>
 /// fires and restores one at startup, before any circuit connects.
@@ -88,6 +94,10 @@ public sealed class SessionState
     private MapBounds playerViewport;
     private double playerAspect = DefaultAspect;
     private string currentMapId = string.Empty;
+    // The map on the projector. The same as currentMapId until the DM moves to another map; then it
+    // stays where it was, its state set aside in otherMaps, until the DM shows the new map. Empty only
+    // before the table was ever on a map.
+    private string projectorMapId = string.Empty;
     // The map whose default-open doors and starting viewport have already been seeded. It lives here
     // rather than on the (scoped) DM workspace because seeding is a property of the *table*, not of a
     // browser tab: a refresh, a second DM window or an app restart would otherwise re-seed and throw
@@ -110,10 +120,25 @@ public sealed class SessionState
         get { lock (gate) { return playerAspect; } }
     }
 
-    /// <summary>The id of the map the reveal state belongs to.</summary>
+    /// <summary>The id of the map the reveal state belongs to: the map the DM is on.</summary>
     public string CurrentMapId
     {
         get { lock (gate) { return currentMapId; } }
+    }
+
+    /// <summary>
+    /// The id of the map on the player projector: the DM's map, or the one the DM left until they show
+    /// the new one (<see cref="ShowCurrentMapOnProjector"/>). Empty before the table was ever on a map.
+    /// </summary>
+    public string ProjectorMapId
+    {
+        get { lock (gate) { return projectorMapId; } }
+    }
+
+    /// <summary>True when the DM is on another map than the one the projector shows.</summary>
+    public bool ProjectorOnAnotherMap
+    {
+        get { lock (gate) { return IsProjectorElsewhere(); } }
     }
 
     /// <summary>
@@ -269,6 +294,11 @@ public sealed class SessionState
     /// the new one, or nothing the first time it is shown. Each map has its own world coordinates,
     /// regions and doors, so nothing carries over from one to the other.
     /// </summary>
+    /// <remarks>
+    /// The projector stays on the map it shows (<see cref="ProjectorMapId"/>) until
+    /// <see cref="ShowCurrentMapOnProjector"/>; only the very first map the table is on goes straight to
+    /// it, since there is nothing else to keep showing.
+    /// </remarks>
     /// <param name="mapId">The id of the newly loaded map.</param>
     public void SetCurrentMap(string mapId)
     {
@@ -280,6 +310,11 @@ public sealed class SessionState
             {
                 SetAside();
                 currentMapId = id;
+                if (projectorMapId.Length == 0)
+                {
+                    projectorMapId = id;
+                }
+
                 ClearRevealState();
                 openDoorIds.Clear();
                 party = new PartyToken { VisionFeet = PartyToken.DefaultVisionFeet };
@@ -299,6 +334,77 @@ public sealed class SessionState
         if (changed)
         {
             Changed?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Puts the map the DM is on onto the player projector, with what was revealed on it and its
+    /// framing. Until this is called after a change of map, the players go on seeing the map they were
+    /// on. Does nothing when the projector already shows it.
+    /// </summary>
+    public void ShowCurrentMapOnProjector()
+    {
+        bool changed;
+        lock (gate)
+        {
+            changed = currentMapId.Length > 0 && IsProjectorElsewhere();
+            if (changed)
+            {
+                projectorMapId = currentMapId;
+                // A point the DM made while the players were looking at another map was never seen;
+                // flashing it up now, a moment late, would point at something the DM has moved on from.
+                ping = PingMarker.None;
+            }
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// What the player projector shows now, as one consistent picture: the DM's map and its reveals, or,
+    /// while the projector stays on a map the DM left, what was left on that one.
+    /// </summary>
+    /// <returns>The projector's map, its reveals, open doors and framing.</returns>
+    public ProjectorView Projector()
+    {
+        lock (gate)
+        {
+            if (!IsProjectorElsewhere())
+            {
+                return new ProjectorView
+                {
+                    MapId = currentMapId,
+                    IsCurrentMap = true,
+                    RevealedRegionIds = revealedRegionIds.ToArray(),
+                    RevealedFeatureIds = revealedFeatureIds.ToArray(),
+                    OpenDoorIds = openDoorIds.ToArray(),
+                    FogCells = fogCells.ToArray(),
+                    Viewport = playerViewport,
+                    Ping = ping,
+                };
+            }
+
+            // A map the table left with nothing on it was not kept (SetAside): the players see it dark.
+            if (!otherMaps.TryGetValue(projectorMapId, out MapRevealSnapshot held))
+            {
+                return new ProjectorView { MapId = projectorMapId };
+            }
+
+            return new ProjectorView
+            {
+                MapId = projectorMapId,
+                RevealedRegionIds = Ids(held.RevealedRegionIds),
+                RevealedFeatureIds = Ids(held.RevealedFeatureIds),
+                OpenDoorIds = Ids(held.OpenDoorIds),
+                FogCells = (held.FogCells ?? Array.Empty<FogCell>())
+                    .Where(cell => cell is not null)
+                    .Select(cell => (cell.Col, cell.Row))
+                    .ToArray(),
+                Viewport = ToBounds(held.PlayerViewport),
+            };
         }
     }
 
@@ -996,6 +1102,7 @@ public sealed class SessionState
             return new RevealSnapshot
             {
                 CurrentMapId = currentMapId,
+                ProjectorMapId = projectorMapId,
                 SeededMapId = seededMapId,
                 RevealedRegionIds = revealedRegionIds.ToArray(),
                 RevealedFeatureIds = revealedFeatureIds.ToArray(),
@@ -1047,6 +1154,8 @@ public sealed class SessionState
         lock (gate)
         {
             currentMapId = snapshot.CurrentMapId ?? string.Empty;
+            // A document from before the projector could stay behind: it always showed the map in play.
+            projectorMapId = string.IsNullOrEmpty(snapshot.ProjectorMapId) ? currentMapId : snapshot.ProjectorMapId;
             seededMapId = snapshot.SeededMapId ?? string.Empty;
 
             Replace(revealedRegionIds, snapshot.RevealedRegionIds);
@@ -1194,6 +1303,10 @@ public sealed class SessionState
         (ids ?? Array.Empty<string>()).Where(id => !string.IsNullOrEmpty(id)).ToArray();
 
     private static bool IsUsableAspect(double aspect) => double.IsFinite(aspect) && aspect > 0;
+
+    // True when the projector shows a map the DM has left. Caller holds gate.
+    private bool IsProjectorElsewhere() =>
+        projectorMapId.Length > 0 && !string.Equals(projectorMapId, currentMapId, StringComparison.Ordinal);
 
     private static double ClampAspect(double aspect) => Math.Clamp(aspect, 0.2, 5.0);
 

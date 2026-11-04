@@ -103,18 +103,27 @@
     }
 </style>
 
+@* What the projector shows is read once per render, as one picture: the DM may be on another map,
+   and the projector stays on its own until the DM shows the new one (SessionState.Projector). *@
+@{
+    ProjectorView view = Session.Projector();
+    // Only over the map it belongs to: for a moment while a switch loads, the geometry is the old
+    // map's. With no map chosen at all, the first map shows, dark.
+    bool showing = mapLoaded && (view.MapId.Length == 0 || string.Equals(view.MapId, loadedMapId, StringComparison.Ordinal));
+}
+
 @* The "cursor-idle" class is owned by dt-projector.js, not by this render: Blazor leaves an attribute
    it did not change alone, so the idle state survives the re-renders the DM's reveals cause. *@
 <div class="player-stage" @ref="stageRef">
     <div class="player-turn turn-@Session.PlayerTurns">
-    @if (mapLoaded)
+    @if (showing)
     {
-        <VectorMapCanvas Map="map" ViewBox="Session.PlayerViewport" CssClass="player-map"
+        <VectorMapCanvas Map="map" ViewBox="view.Viewport" CssClass="player-map"
                          SecretDoorIds="secretDoorIds" MarkSecretDoors="false"
                          ConcealedObjectIds="concealedObjectIds"
-                         RevealedFeatureIds="Session.RevealedFeatureIds()"
-                         OpenDoorIds="Session.OpenDoorIds()" DoubleDoorIds="doubleDoorIds"
-                         Fog="BuildFog()" />
+                         RevealedFeatureIds="view.RevealedFeatureIds"
+                         OpenDoorIds="view.OpenDoorIds" DoubleDoorIds="doubleDoorIds"
+                         Fog="BuildFog(view)" />
     }
     else
     {
@@ -128,10 +137,10 @@
 
     @* Where the DM is pointing. Above the map, below the picture: art is a scene the party is
        looking at, the pointer is about the map underneath it. *@
-    @if (mapLoaded && Session.Ping.IsSet)
+    @if (showing && view.Ping.IsSet)
     {
-        PingMarker ping = Session.Ping;
-        <svg class="player-ping-layer" viewBox="@PingViewBox()" preserveAspectRatio="xMidYMid meet"
+        PingMarker ping = view.Ping;
+        <svg class="player-ping-layer" viewBox="@PingViewBox(view.Viewport)" preserveAspectRatio="xMidYMid meet"
              xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             @* Keyed on the sequence, which is the whole mechanism: same key, same element, animation
                left alone; new key, new element, animation replays. *@
@@ -195,9 +204,9 @@
 
     // The ping layer must use the map's own viewBox, or the pointer lands somewhere else entirely.
     // The player canvas falls back to the whole map when the DM has set no viewport, so this does too.
-    private string PingViewBox()
+    private string PingViewBox(MapBounds viewport)
     {
-        MapBounds view = Session.PlayerViewport;
+        MapBounds view = viewport;
         if (view.Width <= 0 || view.Height <= 0)
         {
             view = map.Bounds;
@@ -216,8 +225,8 @@
         Session.Changed += OnSessionChanged;
         Live.Changed += OnContentChanged;
 
-        // Follow the DM's chosen map when it has picked one; otherwise default to the first map.
-        string target = Session.CurrentMapId;
+        // Show the projector's map when the table has one; otherwise default to the first map.
+        string target = Session.ProjectorMapId;
         if (string.IsNullOrEmpty(target))
         {
             IReadOnlyList<string> ids = Maps.ListMapIds();
@@ -314,17 +323,17 @@
     }
 
     // The reveal mask sent to the player: opaque fog everywhere except the regions and grid cells the
-    // DM has revealed, plus the individually-revealed markers. Built fresh each render from the
-    // shared reveal state so it stays in sync as the DM reveals more.
-    private FogOverlay BuildFog()
+    // DM has revealed, plus the individually-revealed markers. Built fresh each render from what the
+    // projector's map has revealed, so it stays in sync as the DM reveals more.
+    private FogOverlay BuildFog(ProjectorView view)
     {
         if (!mapLoaded)
         {
             return FogOverlay.None;
         }
 
-        var revealedRegions = new HashSet<string>(Session.RevealedRegionIds(), StringComparer.Ordinal);
-        var revealedFeatures = new HashSet<string>(Session.RevealedFeatureIds(), StringComparer.Ordinal);
+        var revealedRegions = new HashSet<string>(view.RevealedRegionIds, StringComparer.Ordinal);
+        var revealedFeatures = new HashSet<string>(view.RevealedFeatureIds, StringComparer.Ordinal);
 
         var polygons = new List<IReadOnlyList<MapPoint>>();
         foreach (Region region in regions)
@@ -336,7 +345,7 @@
         }
 
         var cells = new List<MapBounds>();
-        foreach ((int col, int row) in Session.FogCells())
+        foreach ((int col, int row) in view.FogCells)
         {
             cells.Add(GridCells.CellBounds(map.Grid, col, row));
         }
@@ -436,17 +445,19 @@
         });
     }
 
-    // The DM may switch maps mid-session (SetCurrentMap). Reload the player's geometry when that
-    // happens; otherwise this is a reveal/viewport change and a re-render is enough.
+    // The DM may put another map on the projector mid-session (ShowCurrentMapOnProjector). Reload the
+    // player's geometry when that happens; otherwise this is a reveal/viewport change and a re-render
+    // is enough.
     private void OnSessionChanged() => InvokeAsync(async () =>
     {
         await SyncMap();
         StateHasChanged();
     });
 
-    // Follow the DM's chosen map, serialized with a flag + loop so rapid map switches (each awaits an
+    // Follow the projector's map, serialized with a flag + loop so rapid map switches (each awaits an
     // async load) can't interleave two LoadMap calls over the shared geometry. A switch that arrives
-    // mid-load is picked up when the current load finishes; a non-map change just re-renders.
+    // mid-load is picked up when the current load finishes; a non-map change just re-renders. The DM
+    // moving to another map is not a switch here: the projector stays where it is until shown it.
     private async Task SyncMap()
     {
         if (syncingMap)
@@ -457,11 +468,11 @@
         syncingMap = true;
         try
         {
-            string target = Session.CurrentMapId;
+            string target = Session.ProjectorMapId;
             while (!string.IsNullOrEmpty(target) && !string.Equals(target, loadedMapId, StringComparison.Ordinal))
             {
                 await LoadMap(target);
-                target = Session.CurrentMapId;
+                target = Session.ProjectorMapId;
             }
         }
         finally

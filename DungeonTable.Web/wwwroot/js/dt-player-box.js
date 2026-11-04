@@ -7,8 +7,11 @@ window.dtPlayerBox = (function () {
     const UP = ['n', 'w', 's', 'e'];
     const TURNED = ['', ' \u00B7 turned 90\u00B0', ' \u00B7 turned 180\u00B0', ' \u00B7 turned 270\u00B0'];
 
-    function init(box, dotnet, world, aspect, turns) {
-        if (box.__dtbox) { box.__dtbox.set(world, aspect, turns); return; }
+    // Said on the box while the projector shows another map (the DM moved on, the players did not).
+    const HELD = ' \u00B7 not on the projector yet';
+
+    function init(box, dotnet, world, aspect, turns, held) {
+        if (box.__dtbox) { box.__dtbox.set(world, aspect, turns, held); return; }
 
         const overlay = document.createElement('div');
         overlay.className = 'dt-player-box';
@@ -35,12 +38,20 @@ window.dtPlayerBox = (function () {
         let W = world;      // { x, y, w, h } in world units
         let A = aspect;     // width / height lock
 
+        let Q = 0, H = false;
+        function label_() { label.textContent = 'Player view' + TURNED[Q] + (H ? HELD : ''); }
         function turn(t) {
-            const q = ((t || 0) % 4 + 4) % 4;
-            overlay.dataset.up = UP[q];
-            label.textContent = 'Player view' + TURNED[q];
+            Q = ((t || 0) % 4 + 4) % 4;
+            overlay.dataset.up = UP[Q];
+            label_();
+        }
+        function hold(h) {
+            H = !!h;
+            overlay.classList.toggle('dt-held', H);
+            label_();
         }
         turn(turns);
+        hold(held);
 
         function svg() { return box.querySelector('svg'); }
         function ctm() { const s = svg(); return s ? s.getScreenCTM() : null; }
@@ -115,10 +126,11 @@ window.dtPlayerBox = (function () {
         }
 
         box.__dtbox = {
-            set: function (nw, na, nt) {
+            set: function (nw, na, nt, nh) {
                 if (nw) { W = nw; }
                 if (na && na > 0) { A = na; }
                 turn(nt);
+                hold(nh);
                 repositionSoon();
             }
         };
@@ -127,8 +139,8 @@ window.dtPlayerBox = (function () {
 
     return {
         init: init,
-        update: function (box, x, y, w, h, aspect, turns) {
-            if (box && box.__dtbox) { box.__dtbox.set({ x: x, y: y, w: w, h: h }, aspect, turns); }
+        update: function (box, x, y, w, h, aspect, turns, held) {
+            if (box && box.__dtbox) { box.__dtbox.set({ x: x, y: y, w: w, h: h }, aspect, turns, held); }
         }
     };
 })();

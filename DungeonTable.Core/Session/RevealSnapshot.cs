@@ -15,6 +15,15 @@ public sealed class RevealSnapshot
     public string CurrentMapId { get; set; } = string.Empty;
 
     /// <summary>
+    /// The id of the map on the player projector. The DM can move to another map without the players
+    /// following until the DM shows it to them, so this can differ from <see cref="CurrentMapId"/>; that
+    /// map's reveals and framing are then in <see cref="OtherMaps"/>. Additive like
+    /// <see cref="ShownArt"/>: blank in a document written before it existed, which is read as
+    /// <see cref="CurrentMapId"/>, the map the projector always showed then.
+    /// </summary>
+    public string ProjectorMapId { get; set; } = string.Empty;
+
+    /// <summary>
     /// The map whose default-open doors and starting viewport have already been seeded. Stored so a
     /// restart (or a second DM circuit) re-opens the table where it was left rather than re-seeding
     /// over the DM's own framing and opened doors.

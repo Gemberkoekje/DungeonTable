@@ -33,17 +33,23 @@
 
 <PageTitle>DM view &mdash; DungeonTable</PageTitle>
 
+@* What the projector shows, read once per render: the DM's map, or the one the DM left while the
+   projector stays on it (SessionState.Projector). The bar counts what the players see from this. *@
+@{
+    ProjectorView projector = Session.Projector();
+}
+
 <div class="dm-shell @LayoutClass @(drawerOpen ? "drawer-open" : string.Empty)" @ref="shellRef">
     @* The bar belongs to the shell: the DM must be able to see and reframe what the projector shows
        whatever the dock is showing. *@
     <div class="dm-player-bar">
-        <span class="players-see @(PlayersSeeAnything ? "live" : string.Empty)"
+        <span class="players-see @(PlayersSeeAnything(projector) ? "live" : string.Empty)"
               title="What the player projector is currently showing">
             <span class="see-dot" aria-hidden="true">&#x25CF;</span>
-            Players see @Count(RevealedRegionCount, "region") &middot; @Count(FogCellCount, "cell")
+            Players see @Count(projector.RevealedRegionIds.Count, "region") &middot; @Count(projector.FogCells.Count, "cell")
         </span>
 
-        <span class="viewport-at" title="The region under the centre of the player viewport">
+        <span class="viewport-at" title="@(projector.IsCurrentMap ? "The region under the centre of the player viewport" : "The region under the centre of the Player view box on this map: where the projector looks once this map is on it")">
             <span aria-hidden="true">&#x2922;</span>
             Viewport: @(ViewportName.Length > 0 ? ViewportName : "unmapped")
         </span>
@@ -106,7 +112,25 @@
 
         <span class="bar-spacer"></span>
 
-        <select class="map-picker" aria-label="Map" title="The map on the table; the projector follows"
+        @* Moving to another map does not move the projector: the players go on seeing the map they are
+           on, as it was, until the DM shows them this one. Both halves sit by the map picker, where the
+           move was made. *@
+        @if (!projector.IsCurrentMap)
+        {
+            <span class="projector-held" role="status"
+                  title="The players still see this map. Reveal and frame this one as you like; they see it once you show it.">
+                <span aria-hidden="true">&#x23F8;&#xFE0E;</span>
+                Projector on @Workspace.MapLabel(projector.MapId)
+            </span>
+
+            <button type="button" class="frame-btn show-map-btn"
+                    title="Put this map on the projector, with what is revealed on it, framed where its Player view box is"
+                    disabled="@(!Workspace.MapLoaded)"
+                    @onclick="Session.ShowCurrentMapOnProjector">Show on projector</button>
+        }
+
+        <select class="map-picker" aria-label="Map"
+                title="The map you are on. The projector stays on its own map until you press Show on projector."
                 @bind="selectedMapId" @bind:after="LoadMap">
             @foreach (string id in Workspace.MapIds)
             {
@@ -326,11 +350,8 @@
 
     private string Hidden(DockTab tab) => activeTab == tab ? "false" : "true";
 
-    private int RevealedRegionCount => Session.RevealedRegionIds().Count;
-
-    private int FogCellCount => Session.FogCells().Count;
-
-    private bool PlayersSeeAnything => RevealedRegionCount > 0 || FogCellCount > 0;
+    private static bool PlayersSeeAnything(ProjectorView projector) =>
+        projector.RevealedRegionIds.Count > 0 || projector.FogCells.Count > 0;
 
     private static string Count(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 

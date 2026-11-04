@@ -53,10 +53,15 @@ whichever tab is up. The bar across the top is in view all the time:
   around it.
 - **Find anything** (**Ctrl+K**, or **/**) looks up a room, a person, a rule or any line of the
   campaign's text (see [finding anything](#finding-anything-and-pins)).
-- When the campaign has more than one map, the **map picker** switches between them. The projector
-  follows. Each map keeps what you revealed on it, its open doors, where the projector was framed and
-  where the party stands, so when the party goes back to a floor they see it as they left it. A map shown for the first time
+- When the campaign has more than one map, the **map picker** switches between them. Each map keeps
+  what you revealed on it, its open doors, where the projector was framed and where the party stands,
+  so when the party goes back to a floor they see it as they left it. A map shown for the first time
   starts dark, with its doors as the Room Editor set them.
+- **The projector does not follow the map picker.** When you pick another map, the players go on
+  seeing the one they were on, as it was, and the bar says **Projector on Level 1 - The Undercroft**.
+  Look ahead, reveal the landing, put the party down and frame the new map as you like; the players see
+  none of it until you press **Show on projector**, beside the map picker. Picking the projector's map
+  again does the same. The **Players see** count is always the projector's.
 - The save status is on the right (see [what "Not saved" means](#what-not-saved-means)). When a
   picture is on the projector, the bar says so too.
 
@@ -71,7 +76,8 @@ the map instead: **Tab**, or the **Dock** button in the bar, brings it out and p
 
 Rooms the players can see are drawn light; the rest are shaded. The box labelled **Player view** is
 exactly what the projector shows. Drag it by its border to move the projector's view, or by a corner to
-zoom in or out, or press **Frame**. Drag anywhere else on the map to pan it, and use the mouse wheel
+zoom in or out, or press **Frame**. While the projector is on another map, the box is dashed and says
+**not on the projector yet**: it is where the projector will look once you show the players this map. Drag anywhere else on the map to pan it, and use the mouse wheel
 (or **+**, **−** and **Reset** at the bottom right) to zoom.
 
 **The map says what is in each room.** Beside each room's name are badges that only you see:
@@ -132,7 +138,7 @@ On a map with no calibrated grid the token still marks the party's room, but rev
 | **5** | Doors | Click a door to open or close it. A secret door is drawn as wall until you click it to discover it; click again to open it, and again to hide it. | back to Look |
 | **6** | Conceal | Click a concealed object (a hidden stair, a pit, a chest) to show it to the players, and again to hide it. It is drawn ghosted on your map until then. You mark what is concealed in the [Room Editor](#step-3-mark-the-rooms-in-the-room-editor). | back to Look |
 | **7** | Measure | Drag between two points to read the distance, with diagonals counted the 5e way. Only you see it. | stays |
-| **8** | Point | Click a spot to point at it on the projector. It pulses a few times and fades. | back to Look |
+| **8** | Point | Click a spot to point at it on the projector. It pulses a few times and fades. While the projector is on another map, only your map marks it. | back to Look |
 
 "Back to Look" happens after a click that did something, so a click that misses keeps the tool. To keep
 one of those tools up, for revealing a whole wing room by room, hold **Shift** as you pick it
@@ -721,7 +727,8 @@ The content tests name every broken link, with the file it is in.
   regions · 0 cells** means nothing yet.
 - **The projector shows only what is inside the Player view box** on the map. Press **Frame** to
   bring it to the room on the Room tab.
-- **The projector follows the map picked on the DM screen.**
+- **The projector stays on its map when you pick another one** on the DM screen, until you press
+  **Show on projector** beside the map picker. The bar says which map the projector is on.
 - **Dragging the party reveals nothing**: the map has no calibrated grid (Measure says so too), so
   there are no squares to see from. Reveal its rooms with **Reveal** instead.
 - **A room cannot be revealed**, or is revealed but does not show: it has no region, or its region
