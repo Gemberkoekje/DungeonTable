@@ -208,6 +208,63 @@ public sealed class RevealSnapshotTests
     }
 
     [Fact]
+    public void The_party_token_and_its_vision_survive_a_restart_on_every_map()
+    {
+        var state = new SessionState();
+        state.SetCurrentMap("level-1-undercroft");
+        state.SetPartyVision(60);
+        state.MoveParty(315, 245, CellFourNine, joinLast: false);
+        state.SetCurrentMap("level-2-crypt");
+        state.SetPartyVision(120);
+        state.MoveParty(95, 105, Array.Empty<(int, int)>(), joinLast: false);
+        state.SetProjectorFollowsParty(true);
+
+        var restored = new SessionState();
+        restored.Restore(state.Capture());
+
+        Assert.True(restored.Party.IsPlaced);
+        Assert.Equal(95, restored.Party.X);
+        Assert.Equal(105, restored.Party.Y);
+        Assert.Equal(120, restored.Party.VisionFeet);
+        Assert.True(restored.ProjectorFollowsParty);
+        Assert.False(restored.CanUndoPartyMove);
+
+        restored.SetCurrentMap("level-1-undercroft");
+
+        Assert.Equal(315, restored.Party.X);
+        Assert.Equal(245, restored.Party.Y);
+        Assert.Equal(60, restored.Party.VisionFeet);
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 0)]
+    [InlineData(double.PositiveInfinity, 600)]
+    public void A_stored_token_with_no_sane_position_or_range_is_off_the_map_at_the_default_range(double x, int vision)
+    {
+        var state = new SessionState();
+
+        state.Restore(new RevealSnapshot
+        {
+            CurrentMapId = "level-1-undercroft",
+            PartyToken = new PartyTokenSnapshot { Placed = true, X = x, Y = 10, VisionFeet = vision },
+        });
+
+        Assert.False(state.Party.IsPlaced);
+        Assert.Equal(vision == 0 ? 30 : 120, state.Party.VisionFeet);
+    }
+
+    [Fact]
+    public void A_stored_document_without_a_token_restores_with_none()
+    {
+        var state = new SessionState();
+
+        state.Restore(new RevealSnapshot { CurrentMapId = "level-1-undercroft", PartyToken = null });
+
+        Assert.False(state.Party.IsPlaced);
+        Assert.Equal(30, state.Party.VisionFeet);
+    }
+
+    [Fact]
     public void A_stored_entry_for_the_map_in_play_or_without_an_id_is_not_read()
     {
         // The map in play is the snapshot's own fields; an entry for it would bring stale reveals back

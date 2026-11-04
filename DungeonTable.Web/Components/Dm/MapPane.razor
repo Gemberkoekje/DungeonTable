@@ -1,4 +1,5 @@
 @inherits DmTabBase
+@inject PartyMoves Party
 @*
     The DM's map, which never leaves the screen: the pannable canvas, a small toolbar over it, the
     active tool's options under the toolbar, and the grid toggle and Clear reveals at its foot.
@@ -6,8 +7,12 @@
     A click looks by default (MapTool.Look): a room shows in the dock's Room tab, a door opens or
     closes, and nothing else changes for the players. The tools are for the occasional job. The ones
     that do one thing to one object go back to Look after one click that did something, so the DM is
-    never left in the wrong mode; the fog brush, the lifter and measuring stay until Esc (see
-    ToolSelection).
+    never left in the wrong mode; the fog brush and measuring stay until Esc (see ToolSelection).
+
+    Revealing is moving the party: the DM drags the party token, and what the party sees from every
+    square on the way is revealed (PartyMoves). Opening a door looks again from the token, so the room
+    beyond shows without a second action. The Party tool puts the token down somewhere new without a
+    walk (the stairs, a teleport), and clicking the token opens its menu: the vision range.
 
     The pane is never unmounted, because the canvas keeps its pan and zoom in JS (dt-editor,
     dt-pan-zoom) and re-mounting the SVG would reset the view. The toolbar and the strips are drawn
@@ -34,7 +39,10 @@
                          OpenDoorIds="Session.OpenDoorIds()" DoubleDoorIds="Workspace.DoubleDoorIds"
                          Fog="BuildFog()"
                          Overlay="BuildOverlay()" CanvasClicked="OnCanvasClicked"
-                         FogPainted="OnFogPainted" Measured="OnMeasured" />
+                         FogPainted="OnFogPainted" Measured="OnMeasured"
+                         ShowPartyToken="true" Party="Session.Party" PartyVisionRadius="Party.VisionRadius"
+                         PartyDraggable="PartyDraggable" PartyMoved="OnPartyMoved" PartyClicked="TogglePartyMenu"
+                         MapOverlay="PartyMenu" />
     }
     else
     {
@@ -59,15 +67,7 @@
     @if (selection.Active != MapTool.Look)
     {
         <div class="map-tool-options">
-            @if (selection.Active == MapTool.Lift)
-            {
-                <label class="vision-range">
-                    Vision
-                    <input type="number" min="5" max="120" step="5" @bind="visionFeet" aria-label="Vision range in feet" />
-                    ft
-                </label>
-            }
-            else if (selection.Active == MapTool.Fog)
+            @if (selection.Active == MapTool.Fog)
             {
                 <div class="brush-size" role="group" aria-label="Fog brush size">
                     Brush
@@ -138,6 +138,17 @@
                     @onclick="Session.ClearPing">Clear point</button>
         }
 
+        @if (Session.CanUndoPartyMove)
+        {
+            <button type="button" class="map-foot-btn party-undo" title="Take back what the party's last move showed, and put the token back (Ctrl+Z)"
+                    @onclick="Session.UndoPartyMove">Undo move</button>
+        }
+
+        @if (Workspace.MapLoaded && !Session.Party.IsPlaced)
+        {
+            <span class="party-hint">No party on this map yet: pick Party (4) and click where they stand.</span>
+        }
+
         @if (confirmingClear)
         {
             <span class="clear-confirm">Hide everything from the players again?</span>
@@ -167,14 +178,14 @@
     [Parameter]
     public EventCallback OnLooked { get; set; }
 
-    // The toolbar, in order; the index of each entry is also its keyboard shortcut (1-8). The lifter
-    // stays until the party token replaces it (the redesign's phase 3).
+    // The toolbar, in order; the index of each entry is also its keyboard shortcut (1-8). The Party
+    // tool took the lifter's place, so the numbers did not move.
     private static readonly (MapTool Tool, string Glyph, string Label)[] Tools =
     {
         (MapTool.Look, "☞", "Look"),
         (MapTool.Reveal, "◍", "Reveal"),
         (MapTool.Fog, "▨", "Fog"),
-        (MapTool.Lift, "☀", "Lifter"),
+        (MapTool.Party, "◉", "Party"),
         (MapTool.Doors, "⌸", "Doors"),
         (MapTool.Conceal, "◐", "Conceal"),
         (MapTool.Measure, "⟺", "Measure"),
@@ -183,16 +194,16 @@
 
     private static readonly int[] BrushSizes = { 1, 2, 3 };
 
-    // Bound the fog lifter's radius: a huge value would scan a giant tile grid and freeze the DM circuit.
-    private const int MaxVisionFeet = 120;
+    // The vision ranges the token's menu offers in one click; any other is typed.
+    private static readonly int[] VisionPresets = { 30, 60, 120 };
 
     private readonly ToolSelection selection = new ToolSelection();
 
     private VectorMapCanvas canvas;
     private bool showGrid;
-    private int visionFeet = 30;
     private int brushCells = 1;
     private bool confirmingClear;
+    private bool partyMenuOpen;
 
     // The last distance measured. Kept on the pane rather than the shared workspace: it is one DM's
     // scratch working, of no interest to the players and of none to a second DM window either.
@@ -215,11 +226,12 @@
         StateHasChanged();
     }
 
-    /// <summary>Puts the map back in Look, as Esc does.</summary>
+    /// <summary>Puts the map back in Look and closes the party token's menu, as Esc does.</summary>
     public void ResetTool()
     {
         selection.Reset();
         confirmingClear = false;
+        partyMenuOpen = false;
         StateHasChanged();
     }
 
@@ -267,6 +279,7 @@
     {
         selection.Pick(tool, keep);
         confirmingClear = false;
+        partyMenuOpen = false;
     }
 
     private static int ToolIndex(MapTool tool) => Array.FindIndex(Tools, entry => entry.Tool == tool) + 1;
@@ -299,7 +312,7 @@
         MapTool.Doors => "Doors: click a door to open or close it. Click a secret door to discover it (then open or close it); click again to hide it.",
         MapTool.Conceal => ConcealHint,
         MapTool.Fog => "Fog brush: drag to reveal grid cells; hold Alt (or right-drag) to hide them again.",
-        MapTool.Lift => "Fog lifter: set a vision range, then click where the party stands to reveal every tile they could see.",
+        MapTool.Party => "Party: click where the party stands. The token goes there and shows what the party sees from there, nothing on the way (the stairs, a teleport). To walk, drag the token.",
         MapTool.Measure => "Measure: drag between two points. Squares are counted the 5e way (a diagonal costs one). Only you see it.",
         MapTool.Ping => "Point: click a spot to point at it on the projector. It pulses a few times and fades.",
         _ => string.Empty,
@@ -353,6 +366,7 @@
     // to Look.
     private Task OnCanvasClicked(CanvasClick click)
     {
+        partyMenuOpen = false;
         if (selection.Active == MapTool.Look)
         {
             return LookClick(click);
@@ -364,7 +378,7 @@
             MapTool.Reveal => RevealClick(click),
             MapTool.Doors => DoorClick(click),
             MapTool.Conceal => ConcealClick(click),
-            MapTool.Lift => LiftFog(click),
+            MapTool.Party => PlaceParty(click),
             MapTool.Ping => PingClick(click),
             _ => false,
         };
@@ -384,7 +398,9 @@
     {
         if (string.Equals(click.HitKind, "door", StringComparison.Ordinal) && !string.IsNullOrEmpty(click.HitId))
         {
+            DoorState before = Session.DoorStateOf(click.HitId);
             Session.ToggleDoorOpen(click.HitId);
+            Party.AfterDoor(before);
             return Task.CompletedTask;
         }
 
@@ -448,10 +464,18 @@
         }
 
         string id = click.HitId;
+        DoorState before = Session.DoorStateOf(id);
+        ChangeDoor(id);
+        Party.AfterDoor(before);
+        return true;
+    }
+
+    private void ChangeDoor(string id)
+    {
         if (!Workspace.SecretDoorIds.Contains(id))
         {
             Session.ToggleDoorOpen(id);
-            return true;
+            return;
         }
 
         bool discovered = new HashSet<string>(Session.RevealedFeatureIds(), StringComparer.Ordinal).Contains(id);
@@ -460,14 +484,13 @@
         {
             // Discovered and closed -> open it for the players.
             Session.SetDoorOpen(id, true);
-            return true;
+            return;
         }
 
         // Either not yet discovered (discover it, closed) or discovered-and-open (re-hide it): both
         // flip the discovered state and leave the door closed. ToggleFeature does the flip either way.
         Session.SetDoorOpen(id, false);
         Session.ToggleFeature(id);
-        return true;
     }
 
     // Conceal: a click on a concealed object shows it to the players; clicking it again hides it
@@ -484,24 +507,65 @@
         return true;
     }
 
-    // The fog lifter: from the clicked point, reveal every whole floor tile a viewer with the chosen
-    // vision range (feet) would see — line of sight, stopping at walls and still-hidden secret doors.
-    private bool LiftFog(CanvasClick click)
+    // The Party tool: the token goes where the DM clicked, and the party sees from there only.
+    private bool PlaceParty(CanvasClick click)
     {
-        if (visionFeet <= 0)
-        {
-            return false;
-        }
-
-        int feet = Math.Min(visionFeet, MaxVisionFeet);
-
-        // A discovered secret door no longer blocks sight — it is a normal door now.
-        var discovered = new HashSet<string>(Session.RevealedFeatureIds(), StringComparer.Ordinal);
-        var blocking = new HashSet<string>(Workspace.SecretDoorIds, StringComparer.Ordinal);
-        blocking.ExceptWith(discovered);
-        Session.PaintCells(VisionReveal.Find(Workspace.Map, click.WorldX, click.WorldY, feet, blocking, Session.OpenDoorIds()));
+        Party.Move(click.WorldX, click.WorldY, PartyMoveKind.Place);
         return true;
     }
+
+    // ---- The party token ----------------------------------------------------------------------
+
+    // The fog brush and measuring own the drag; under them the token lets the pointer through.
+    private bool PartyDraggable => selection.Active != MapTool.Fog && selection.Active != MapTool.Measure;
+
+    private void OnPartyMoved(PartyStep step)
+    {
+        partyMenuOpen = false;
+        Party.Move(step.WorldX, step.WorldY, step.Kind);
+    }
+
+    private void TogglePartyMenu() => partyMenuOpen = !partyMenuOpen;
+
+    private void SetVision(int feet) => Party.SetVision(feet);
+
+    private void OnVisionTyped(ChangeEventArgs change)
+    {
+        if (int.TryParse(Convert.ToString(change.Value, System.Globalization.CultureInfo.InvariantCulture), out int feet))
+        {
+            Party.SetVision(feet);
+        }
+    }
+
+    private void RemoveParty()
+    {
+        partyMenuOpen = false;
+        Party.Remove();
+    }
+
+    // The token's menu, beside the token (dt-party.js places it): how far the party sees. A range
+    // changed here shows straight away what the party sees with it.
+    private RenderFragment PartyMenu => @<text>
+        @if (partyMenuOpen && Session.Party.IsPlaced)
+        {
+            <div class="dt-party-pop" role="dialog" aria-label="Party">
+                <div class="party-pop-title">Party vision</div>
+                <div class="party-vision" role="group" aria-label="Vision range">
+                    @foreach (int feet in VisionPresets)
+                    {
+                        int candidate = feet;
+                        <button type="button" class="vision-preset @(Session.Party.VisionFeet == candidate ? "active" : string.Empty)"
+                                aria-pressed="@(Session.Party.VisionFeet == candidate ? "true" : "false")"
+                                @onclick="() => SetVision(candidate)">@candidate ft</button>
+                    }
+                    <input type="number" class="vision-feet" min="5" max="120" step="5" value="@Session.Party.VisionFeet"
+                           aria-label="Vision range in feet" @onchange="OnVisionTyped" />
+                    <span>ft</span>
+                </div>
+                <button type="button" class="party-pop-remove" @onclick="RemoveParty">Take the token off the map</button>
+            </div>
+        }
+    </text>;
 
     // The fog brush reports a world point; paint (or erase) the brush-sized block of cells over it.
     private void OnFogPainted(FogPaint paint) =>

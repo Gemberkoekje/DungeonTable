@@ -30,7 +30,7 @@ the DM screen, and the frame you draw takes that shape.
 
 ### The DM screen
 
-![The DM screen: the map with three rooms revealed and the player view framed on the Nave, and the Goblin Den on the Room tab](images/dm-screen.png)
+![The DM screen: the map with three rooms revealed, the party token in the Goblin Den with its vision ring, the player view framed on the Nave, and the Goblin Den on the Room tab, party here](images/dm-screen.png)
 
 The DM screen is the map, which never leaves the screen, and beside it the **dock**, with four tabs:
 **Room**, **Battle**, **Campaign** and **Art**. **Ctrl+1** to **Ctrl+4** switch the dock from
@@ -41,9 +41,11 @@ whichever tab is up. The bar across the top is in view all the time:
 - **Viewport: Nave** is the room under the middle of the projector's view.
 - **Frame** moves the projector's view onto the room on the Room tab, or the whole map when it has no
   room on this map.
+- **Follow party**, beside it, keeps the projector on the party: while it is on, the projector frames
+  the party again whenever the token leaves the middle of its view. It is off until you turn it on.
 - When the campaign has more than one map, the **map picker** switches between them. The projector
-  follows. Each map keeps what you revealed on it, its open doors and where the projector was framed,
-  so when the party goes back to a floor they see it as they left it. A map shown for the first time
+  follows. Each map keeps what you revealed on it, its open doors, where the projector was framed and
+  where the party stands, so when the party goes back to a floor they see it as they left it. A map shown for the first time
   starts dark, with its doors as the Room Editor set them.
 - The save status is on the right (see [what "Not saved" means](#what-not-saved-means)). When a
   picture is on the projector, the bar says so too.
@@ -62,6 +64,26 @@ exactly what the projector shows. Drag it by its border to move the projector's 
 zoom in or out, or press **Frame**. Drag anywhere else on the map to pan it, and use the mouse wheel
 (or **+**, **−** and **Reset** at the bottom right) to zoom.
 
+**The party is a token, and moving it is how you reveal.** The blue token is where the party stands,
+and the faint ring round it is how far they see.
+
+- **Put the party down** with the **Party** tool (**4**): click where they stand. The token goes there
+  and the party sees from there. Use it at the start of a session, and when the party arrives without
+  walking (the stairs, a teleport): it shows nothing on the way.
+- **Drag the token to walk the party.** Everything the party could see from each square on the way is
+  revealed as it goes, stopping at walls, closed doors and secret doors nobody has found. Squares of
+  solid rock you drag across do not count. Drag it in Look or with any tool but Fog and Measure,
+  which use the drag themselves.
+- **Opening a door shows what is behind it**: the party looks again from where it stands.
+- **Click the token** for its vision range: **30**, **60** or **120 ft**, or type another. A longer
+  range shows straight away what it reaches. **Take the token off the map** is there too.
+- **Ctrl+Z** (or **Undo move** at the foot of the map) takes back the party's last move: what it showed
+  is hidden again and the token goes back. A whole drag is one move. What an opened door showed goes
+  back with the door, which closes again. It goes back up to fifty moves, on the map you are on.
+- The players never see the token, only what the party has seen. What they have seen stays revealed.
+
+On a map with no calibrated grid the token still marks the party's room, but reveals nothing.
+
 **A click looks.** Unless you pick a tool, the map is in **Look**:
 
 - **Click a room** and the Room tab shows it. Nothing changes for the players.
@@ -77,7 +99,7 @@ zoom in or out, or press **Frame**. Drag anywhere else on the map to pan it, and
 | **1** | Look | Click a room to read it, click a door to open or close it. | |
 | **2** | Reveal | Click a room, a door or a marker (a trap, a hazard) to show it to the players, and again to hide it. | back to Look |
 | **3** | Fog | A brush: drag to reveal grid cells. Hold **Alt**, or drag with the right button, to hide them again. For caves, and for rooms the players only glimpse. | stays |
-| **4** | Lifter | Set a vision range, then click where the party stands. Every tile they could see from there is revealed, stopping at walls. | stays |
+| **4** | Party | Click where the party stands: the token goes there, and what the party sees from there is revealed. Nothing on the way is: to walk, drag the token instead. | back to Look |
 | **5** | Doors | Click a door to open or close it. A secret door is drawn as wall until you click it to discover it; click again to open it, and again to hide it. | back to Look |
 | **6** | Conceal | Click a concealed object (a hidden stair, a pit, a chest) to show it to the players, and again to hide it. It is drawn ghosted on your map until then. You mark what is concealed in the [Room Editor](#step-3-mark-the-rooms-in-the-room-editor). | back to Look |
 | **7** | Measure | Drag between two points to read the distance, with diagonals counted the 5e way. Only you see it. | stays |
@@ -88,19 +110,26 @@ one of those tools up, for revealing a whole wing room by room, hold **Shift** a
 (**Shift+2**, or Shift and click). Pressing a tool's number again also puts Look back.
 
 **Clear reveals…** at the foot of the map hides everything on this map again, and offers to undo the
-clear. Other maps keep their reveals. **Grid** draws the grid.
+clear. Other maps keep their reveals, and the token stays where it is. **Grid** draws the grid.
 
 The single-key shortcuts (these, and the ones on the Battle and Art tabs) do nothing while you are
 typing in a box, so a note never changes your tool.
 
 ### The Room tab: what the room says
 
-The Room tab shows the room you last clicked, in the order you need it at the table:
+The Room tab follows the party: walk the token into a room and that room is on the Room tab, ready to
+read. Click another room on the map to look at it; a strip at the top then says which room the party
+is in, and **Back to the party's room** (or **Esc**) goes back. Looking at another room lasts until the
+party walks into a new one, and then the tab follows it again, unless you **Pin** it: a pinned tab stays
+on what you show it whatever the party does.
 
-- **The header**: the area number, the title, and whether the room is **cleared** and **revealed**.
-  **Reveal** shows the whole room to the players (a room drawn as several regions is revealed whole),
-  **Frame** frames the projector on it, and **Centre** brings it to the middle of your map. **←** and
-  **→** step back and forth through what you opened.
+The room is laid out in the order you need it at the table:
+
+- **The header**: the area number, the title, and whether the **party is here** and the room is
+  **cleared** and **revealed**. **Reveal** shows the whole room to the players (a room drawn as several
+  regions is revealed whole), **Frame** frames the projector on it, **Centre** brings it to the middle of
+  your map, and **Pin** keeps the tab here while the party moves. **←** and **→** step back and forth
+  through what you opened.
 - **The text to read aloud**, in a box, first.
 - **Skill checks** as DC pills, then **At a glance**, the short list to read next.
 - **The encounter**: each creature the room lists, with where its stat block comes from and how many
@@ -607,6 +636,8 @@ The content tests name every broken link, with the file it is in.
 - **The projector shows only what is inside the Player view box** on the map. Press **Frame** to
   bring it to the room on the Room tab.
 - **The projector follows the map picked on the DM screen.**
+- **Dragging the party reveals nothing**: the map has no calibrated grid (Measure says so too), so
+  there are no squares to see from. Reveal its rooms with **Reveal** instead.
 - **A room cannot be revealed**, or is revealed but does not show: it has no region, or its region
   is not linked to it. Open the Room Editor and check the room's region says **linked**.
 - **A map whose `.regions.json` does not parse** shows nothing on the projector, rather than risk

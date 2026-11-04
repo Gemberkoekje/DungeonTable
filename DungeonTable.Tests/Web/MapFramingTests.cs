@@ -14,6 +14,44 @@ public sealed class MapFramingTests
     private static readonly MapBounds Map = new MapBounds(0, 0, 1000, 800);
 
     [Fact]
+    public void Following_the_party_leaves_the_projector_be_while_the_party_is_in_the_middle_half()
+    {
+        var view = new MapBounds(300, 300, 700, 525);
+
+        // The middle half is x 400..600, y 356.25..468.75; its edges still count as the middle.
+        Assert.Equal(view, MapFraming.KeepInMiddle(view, 500, 400, Map));
+        Assert.Equal(view, MapFraming.KeepInMiddle(view, 400, 356.25, Map));
+        Assert.Equal(view, MapFraming.KeepInMiddle(view, 600, 468.75, Map));
+    }
+
+    [Theory]
+    [InlineData(650, 400)]
+    [InlineData(350, 400)]
+    [InlineData(500, 500)]
+    [InlineData(500, 320)]
+    public void Following_the_party_centres_the_projector_on_it_once_it_leaves_the_middle(double x, double y)
+    {
+        var view = new MapBounds(300, 300, 700, 525);
+
+        MapBounds framed = MapFraming.KeepInMiddle(view, x, y, Map);
+
+        Assert.Equal(400, framed.Width, 6);
+        Assert.Equal(225, framed.Height, 6);
+        Assert.Equal(x, framed.MinX + (framed.Width / 2), 6);
+        Assert.Equal(y, framed.MinY + (framed.Height / 2), 6);
+    }
+
+    [Fact]
+    public void Following_the_party_to_the_edge_of_the_map_keeps_the_projector_on_the_map()
+    {
+        var view = new MapBounds(100, 100, 500, 325);
+
+        MapBounds framed = MapFraming.KeepInMiddle(view, 980, 790, Map);
+
+        Assert.Equal(new MapBounds(600, 575, 1000, 800), framed);
+    }
+
+    [Fact]
     public void Bounds_unions_every_region_polygon()
     {
         MapBounds bounds = MapFraming.Bounds(new[] { Rect("a", 10, 20, 50, 60), Rect("b", 100, 5, 120, 40) });

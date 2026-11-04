@@ -57,4 +57,16 @@ public sealed class RevealSnapshot
     /// <see cref="TableSnapshot.CurrentVersion"/> was not bumped for it either.
     /// </summary>
     public IReadOnlyList<MapRevealSnapshot> OtherMaps { get; set; } = Array.Empty<MapRevealSnapshot>();
+
+    /// <summary>
+    /// The party token on the map in play: where it stands and how far the party sees. Additive like
+    /// <see cref="ShownArt"/> (see <see cref="PartyTokenSnapshot"/>).
+    /// </summary>
+    public PartyTokenSnapshot PartyToken { get; set; } = new PartyTokenSnapshot();
+
+    /// <summary>
+    /// Whether the projector follows the party token, re-framing when it leaves the middle of the
+    /// projector's view. A setting of the table rather than of a map. Additive and off by default.
+    /// </summary>
+    public bool ProjectorFollowsParty { get; set; }
 }

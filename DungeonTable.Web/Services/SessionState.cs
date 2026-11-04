@@ -10,13 +10,15 @@ namespace DungeonTable.Web.Services;
 /// Server-authoritative state shared by the DM and player circuits (one live table). Holds the
 /// player projector's viewport rectangle (in map world units), the player screen's aspect ratio,
 /// the reveal state that drives fog-of-war (which regions and features are revealed and which grid
-/// cells the DM has painted), and the picture laid over the map on the projector. Raises
+/// cells the DM has painted), the party token the DM moves on their own map, and the picture laid over
+/// the map on the projector. Raises
 /// <see cref="Changed"/> so both views re-render when any of it updates. Registered as a singleton;
 /// mutated by the DM circuit and observed by the player.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The reveals, the open doors and the framing belong to one map. When the table moves to another,
+/// The reveals, the open doors, the framing and the party token belong to one map. When the table moves
+/// to another,
 /// <see cref="SetCurrentMap"/> sets them aside under the map they were on and brings back whatever
 /// was left on the new one, so a party that goes down a floor and back up finds the first floor as
 /// they left it.
@@ -31,6 +33,10 @@ public sealed class SessionState
 {
     // What the player screen is assumed to be until it reports its own aspect ratio.
     private const double DefaultAspect = 16.0 / 9.0;
+
+    // How many of the party's reveals Ctrl+Z can take back, newest first. An evening's worth of steps
+    // back is more than anyone undoes; the bound only keeps the list from growing all night.
+    private const int PartyUndoDepth = 50;
 
     // The DM and player circuits run on different threads; guard the shared fields so each sees
     // the other's writes. Changed is always raised outside the lock to avoid reentrancy.
@@ -64,6 +70,14 @@ public sealed class SessionState
     // on a map switch because its coordinates belong to the map it was placed on.
     private PingMarker ping = PingMarker.None;
     private long pingSequence;
+    // The party token on the map in play: the DM's own, never drawn on the projector. Set aside with the
+    // reveals on a map switch and saved with them, vision range included.
+    private PartyToken party = PartyToken.None;
+    // What each of the party's moves, opened doors and vision changes showed, newest last, for Ctrl+Z.
+    // Live only, like the clear's undo: it belongs to the map it was made on and to this evening.
+    private readonly List<PartyReveal> partyReveals = new List<PartyReveal>();
+    // Whether the projector re-frames on the party when the token leaves the middle of its view.
+    private bool projectorFollowsParty;
     private MapBounds playerViewport;
     private double playerAspect = DefaultAspect;
     private string currentMapId = string.Empty;
@@ -187,13 +201,16 @@ public sealed class SessionState
                 currentMapId = id;
                 ClearRevealState();
                 openDoorIds.Clear();
+                party = new PartyToken { VisionFeet = PartyToken.DefaultVisionFeet };
                 BringBack();
                 // A ping is a point in the old map's world coordinates; on another map it would
                 // land somewhere arbitrary.
                 ping = PingMarker.None;
                 // The undo snapshot belongs to the map that was cleared; another map's reveal ids
-                // mean nothing here, so drop it rather than let Undo restore foreign ids.
+                // mean nothing here, so drop it rather than let Undo restore foreign ids. The party's
+                // undo is the same: its cells and positions belong to the map it was made on.
                 DropClearSnapshot();
+                partyReveals.Clear();
                 changed = true;
             }
         }
@@ -327,6 +344,10 @@ public sealed class SessionState
 
             changed = ClearRevealState();
 
+            // What the party's moves showed is gone with everything else; taking one back now would
+            // only move the token.
+            partyReveals.Clear();
+
             // Nothing was cleared: leave no snapshot, so Undo stays unavailable rather than
             // offering to restore an empty set.
             hasClearSnapshot = changed;
@@ -397,6 +418,202 @@ public sealed class SessionState
     public IReadOnlyCollection<string> OpenDoorIds()
     {
         lock (gate) { return openDoorIds.ToArray(); }
+    }
+
+    // ---- The party token -----------------------------------------------------------------------
+
+    /// <summary>The party token on the map in play: where it stands, and how far the party sees.</summary>
+    public PartyToken Party
+    {
+        get { lock (gate) { return party; } }
+    }
+
+    /// <summary>True when the projector follows the party token (see <see cref="SetProjectorFollowsParty"/>).</summary>
+    public bool ProjectorFollowsParty
+    {
+        get { lock (gate) { return projectorFollowsParty; } }
+    }
+
+    /// <summary>True when Ctrl+Z has one of the party's reveals to take back.</summary>
+    public bool CanUndoPartyMove
+    {
+        get { lock (gate) { return partyReveals.Count > 0; } }
+    }
+
+    /// <summary>How a door stands for the players now: open or closed, found or not.</summary>
+    /// <param name="doorId">The door's object id.</param>
+    /// <returns>The door's state, or <see cref="DoorState.None"/> for an empty id.</returns>
+    public DoorState DoorStateOf(string doorId)
+    {
+        if (string.IsNullOrEmpty(doorId))
+        {
+            return DoorState.None;
+        }
+
+        lock (gate)
+        {
+            return new DoorState(doorId, openDoorIds.Contains(doorId), revealedFeatureIds.Contains(doorId));
+        }
+    }
+
+    /// <summary>
+    /// Moves the party token and reveals what the party saw on the way. A move is one thing to take
+    /// back: a drag reports itself a cell at a time, and every report after the first joins the move the
+    /// first one started, so Ctrl+Z takes back the whole drag.
+    /// </summary>
+    /// <param name="worldX">Where the token now stands, in world units.</param>
+    /// <param name="worldY">Where the token now stands, in world units.</param>
+    /// <param name="seen">The cells the party saw on the way; those not yet revealed are revealed.</param>
+    /// <param name="joinLast">True when this continues the last move rather than starting a new one.</param>
+    public void MoveParty(double worldX, double worldY, IEnumerable<(int Col, int Row)> seen, bool joinLast)
+    {
+        if (!double.IsFinite(worldX) || !double.IsFinite(worldY))
+        {
+            return;
+        }
+
+        bool changed;
+        lock (gate)
+        {
+            PartyToken before = party;
+            party = new PartyToken { IsPlaced = true, X = worldX, Y = worldY, VisionFeet = before.VisionFeet };
+
+            bool joining = joinLast && partyReveals.Count > 0;
+            PartyReveal move = joining ? partyReveals[^1] : new PartyReveal(before, DoorState.None);
+            int added = RevealInto(move, seen);
+            changed = added > 0 || !before.IsPlaced || Moved(before, worldX, worldY);
+
+            // A move that went nowhere and showed nothing (a drag let go in the square it started from)
+            // is nothing to take back: kept, it would make the next Ctrl+Z seem to do nothing.
+            if (changed && !joining)
+            {
+                AddPartyReveal(move);
+            }
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Reveals what the party sees from where it stands now that something changed: a door opened, or
+    /// the vision range grew. Something to take back only when it showed anything new; then Ctrl+Z hides
+    /// it again and puts the door back as it stood.
+    /// </summary>
+    /// <param name="seen">The cells the party now sees.</param>
+    /// <param name="door">The door that was changed, as it stood before; <see cref="DoorState.None"/> for none.</param>
+    public void RevealFromParty(IEnumerable<(int Col, int Row)> seen, DoorState door)
+    {
+        bool changed;
+        lock (gate)
+        {
+            var reveal = new PartyReveal(party, door);
+            changed = RevealInto(reveal, seen) > 0;
+            if (changed)
+            {
+                AddPartyReveal(reveal);
+            }
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Takes back the party's last reveal: hides what it showed that was not already showing, puts the
+    /// token back where it stood, and puts back a door it came from as that door stood. The vision
+    /// range stays as the DM last set it. Does nothing when there is nothing to take back.
+    /// </summary>
+    public void UndoPartyMove()
+    {
+        lock (gate)
+        {
+            if (partyReveals.Count == 0)
+            {
+                return;
+            }
+
+            PartyReveal last = partyReveals[^1];
+            partyReveals.RemoveAt(partyReveals.Count - 1);
+            fogCells.ExceptWith(last.Added);
+            party = new PartyToken
+            {
+                IsPlaced = last.Before.IsPlaced,
+                X = last.Before.X,
+                Y = last.Before.Y,
+                VisionFeet = party.VisionFeet,
+            };
+
+            if (last.Door.IsSet)
+            {
+                SetIn(openDoorIds, last.Door.Id, last.Door.Open);
+                SetIn(revealedFeatureIds, last.Door.Id, last.Door.Discovered);
+            }
+        }
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>Sets how far the party sees, brought into bounds (<see cref="PartyToken.ClampVision"/>).</summary>
+    /// <param name="feet">The vision range in feet.</param>
+    public void SetPartyVision(int feet)
+    {
+        int vision = PartyToken.ClampVision(feet);
+        bool changed;
+        lock (gate)
+        {
+            changed = vision != party.VisionFeet;
+            party = new PartyToken { IsPlaced = party.IsPlaced, X = party.X, Y = party.Y, VisionFeet = vision };
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Takes the token off the map, keeping its vision range. Nothing it revealed is hidden: what the
+    /// party has seen stays seen.
+    /// </summary>
+    public void RemoveParty()
+    {
+        bool changed;
+        lock (gate)
+        {
+            changed = party.IsPlaced;
+            party = new PartyToken { VisionFeet = party.VisionFeet };
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Sets whether the projector follows the party. The re-framing itself needs the map, so the DM's
+    /// screen does it as the token moves (see <see cref="PartyMoves"/>); this is the setting, which is
+    /// the table's, so every DM window and a restart agree on it.
+    /// </summary>
+    /// <param name="follow">True to follow the party.</param>
+    public void SetProjectorFollowsParty(bool follow)
+    {
+        bool changed;
+        lock (gate)
+        {
+            changed = follow != projectorFollowsParty;
+            projectorFollowsParty = follow;
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke();
+        }
     }
 
     // ---- Pointing at the projector ------------------------------------------------------------
@@ -674,6 +891,8 @@ public sealed class SessionState
                     .OrderBy(map => map.MapId, StringComparer.Ordinal)
                     .Select(Copy)
                     .ToArray(),
+                PartyToken = ToSnapshot(party),
+                ProjectorFollowsParty = projectorFollowsParty,
             };
         }
     }
@@ -683,8 +902,8 @@ public sealed class SessionState
     /// any circuit connects, so the first DM and player views render the table as it was left.
     /// </summary>
     /// <remarks>
-    /// The clear-reveals undo snapshot is dropped rather than restored: it is a "take that back"
-    /// affordance measured in seconds, and offering to undo a clear from a previous evening would be
+    /// The clear-reveals undo snapshot, and the party's, are dropped rather than restored: each is a
+    /// "take that back" affordance measured in seconds, and offering to undo a clear from a previous evening would be
     /// worse than not offering it. A stored aspect ratio is put through the same validation as one
     /// reported by a browser, so a corrupt document cannot collapse the viewport.
     /// </remarks>
@@ -731,7 +950,11 @@ public sealed class SessionState
                 ? ClampAspect(snapshot.PlayerAspect)
                 : DefaultAspect;
 
+            party = ToToken(snapshot.PartyToken);
+            projectorFollowsParty = snapshot.ProjectorFollowsParty;
+
             DropClearSnapshot();
+            partyReveals.Clear();
         }
 
         Changed?.Invoke();
@@ -779,7 +1002,46 @@ public sealed class SessionState
             .Select(cell => new FogCell { Col = cell.Col, Row = cell.Row })
             .ToArray(),
         PlayerViewport = ToViewport(ToBounds(map.PlayerViewport)),
+        PartyToken = ToSnapshot(ToToken(map.PartyToken)),
     };
+
+    private static PartyTokenSnapshot ToSnapshot(PartyToken token) => new PartyTokenSnapshot
+    {
+        Placed = token.IsPlaced,
+        X = token.X,
+        Y = token.Y,
+        VisionFeet = token.VisionFeet,
+    };
+
+    // A stored token with a position that is not a number is left off the map rather than drawn
+    // nowhere, and a range a document lacks or garbles is the default.
+    private static PartyToken ToToken(PartyTokenSnapshot stored)
+    {
+        PartyTokenSnapshot token = stored ?? new PartyTokenSnapshot();
+        bool placed = token.Placed && double.IsFinite(token.X) && double.IsFinite(token.Y);
+        return new PartyToken
+        {
+            IsPlaced = placed,
+            X = placed ? token.X : 0,
+            Y = placed ? token.Y : 0,
+            VisionFeet = PartyToken.ClampVision(token.VisionFeet),
+        };
+    }
+
+    private static bool Moved(PartyToken token, double worldX, double worldY) =>
+        Math.Abs(token.X - worldX) > 1e-9 || Math.Abs(token.Y - worldY) > 1e-9;
+
+    private static void SetIn(HashSet<string> set, string id, bool present)
+    {
+        if (present)
+        {
+            set.Add(id);
+        }
+        else
+        {
+            set.Remove(id);
+        }
+    }
 
     private static string[] Ids(IReadOnlyList<string> ids) =>
         (ids ?? Array.Empty<string>()).Where(id => !string.IsNullOrEmpty(id)).ToArray();
@@ -824,7 +1086,7 @@ public sealed class SessionState
     {
         bool seeded = string.Equals(seededMapId, currentMapId, StringComparison.Ordinal);
         bool anything = revealedRegionIds.Count > 0 || revealedFeatureIds.Count > 0
-            || fogCells.Count > 0 || openDoorIds.Count > 0;
+            || fogCells.Count > 0 || openDoorIds.Count > 0 || party.IsPlaced;
         if (currentMapId.Length == 0 || !(seeded || anything))
         {
             return;
@@ -838,6 +1100,7 @@ public sealed class SessionState
             OpenDoorIds = openDoorIds.ToArray(),
             FogCells = ToFogCells(fogCells),
             PlayerViewport = ToViewport(playerViewport),
+            PartyToken = ToSnapshot(party),
         };
     }
 
@@ -856,7 +1119,31 @@ public sealed class SessionState
         Replace(openDoorIds, left.OpenDoorIds);
         ReplaceCells(left.FogCells);
         playerViewport = ToBounds(left.PlayerViewport);
+        party = ToToken(left.PartyToken);
         seededMapId = currentMapId;
+    }
+
+    // Keeps a party reveal for Ctrl+Z, keeping only the newest PartyUndoDepth. Caller holds gate.
+    private void AddPartyReveal(PartyReveal reveal)
+    {
+        partyReveals.Add(reveal);
+        if (partyReveals.Count > PartyUndoDepth)
+        {
+            partyReveals.RemoveAt(0);
+        }
+    }
+
+    // Reveals the cells not yet revealed and records them on the reveal, so taking it back hides those
+    // and leaves alone what was showing already. Returns how many were new. Caller holds gate.
+    private int RevealInto(PartyReveal reveal, IEnumerable<(int Col, int Row)> seen)
+    {
+        (int Col, int Row)[] fresh = (seen ?? Array.Empty<(int, int)>())
+            .Where(cell => !fogCells.Contains(cell))
+            .Distinct()
+            .ToArray();
+        fogCells.UnionWith(fresh);
+        reveal.Added.UnionWith(fresh);
+        return fresh.Length;
     }
 
     // Forgets the one-step clear-reveals undo snapshot. Caller holds gate.
@@ -876,5 +1163,22 @@ public sealed class SessionState
         revealedFeatureIds.Clear();
         fogCells.Clear();
         return changed;
+    }
+
+    // One thing Ctrl+Z takes back: where the token stood before, the cells it revealed that were not
+    // showing already, and the door it came from as that door stood.
+    private sealed class PartyReveal
+    {
+        public PartyReveal(PartyToken before, DoorState door)
+        {
+            Before = before;
+            Door = door;
+        }
+
+        public PartyToken Before { get; }
+
+        public DoorState Door { get; }
+
+        public HashSet<(int Col, int Row)> Added { get; } = new HashSet<(int Col, int Row)>();
     }
 }

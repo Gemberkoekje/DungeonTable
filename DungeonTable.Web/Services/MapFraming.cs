@@ -122,6 +122,37 @@ public static class MapFraming
     }
 
     /// <summary>
+    /// The projector following the party: the viewport as it is while the point (the party token) is
+    /// in the middle half of it, and otherwise the same size moved to centre on the point, kept inside
+    /// the map. Re-framing in steps rather than on every move keeps the projector still while the party
+    /// walks about a room, which is what the players are looking at.
+    /// </summary>
+    /// <param name="viewport">The viewport now.</param>
+    /// <param name="worldX">The point to keep in view.</param>
+    /// <param name="worldY">The point to keep in view.</param>
+    /// <param name="map">The map's bounds.</param>
+    /// <returns>The viewport to show.</returns>
+    public static MapBounds KeepInMiddle(MapBounds viewport, double worldX, double worldY, MapBounds map)
+    {
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            return viewport;
+        }
+
+        double marginX = viewport.Width / 4, marginY = viewport.Height / 4;
+        bool inMiddle = worldX >= viewport.MinX + marginX && worldX <= viewport.MaxX - marginX
+            && worldY >= viewport.MinY + marginY && worldY <= viewport.MaxY - marginY;
+        if (inMiddle)
+        {
+            return viewport;
+        }
+
+        double halfWidth = viewport.Width / 2, halfHeight = viewport.Height / 2;
+        var centred = new MapBounds(worldX - halfWidth, worldY - halfHeight, worldX + halfWidth, worldY + halfHeight);
+        return ClampToMap(centred, map);
+    }
+
+    /// <summary>
     /// The starting player viewport for a freshly loaded map: the widest rectangle of the
     /// projector's aspect ratio that fits, centred on the map.
     /// </summary>

@@ -6,9 +6,9 @@ namespace DungeonTable.Web.Services;
 /// <remarks>
 /// The trap this exists to remove is getting stuck in the wrong mode: after a reveal the DM had to
 /// switch modes to read a room, and after reading, switch back. So the tools that do one thing to
-/// one object (reveal a room, a secret door, a concealed object, a point on the projector) are
-/// <b>one-click</b>: once a click has done something, the map is back in Look. The tools that are
-/// used in a run (the fog brush, the lifter, measuring) stay until Esc. Picking a one-click tool
+/// one object (reveal a room, a secret door, a concealed object, a point on the projector, put the
+/// party down) are <b>one-click</b>: once a click has done something, the map is back in Look. The
+/// tools that are used in a run (the fog brush, measuring) stay until Esc. Picking a one-click tool
 /// with Shift held keeps it up, for the evening the DM reveals a whole wing room by room.
 /// </remarks>
 public sealed class ToolSelection
@@ -31,6 +31,7 @@ public sealed class ToolSelection
         MapTool.Doors => true,
         MapTool.Conceal => true,
         MapTool.Ping => true,
+        MapTool.Party => true,
         _ => false,
     };
 

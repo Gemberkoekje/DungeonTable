@@ -1762,6 +1762,14 @@ code {
     cursor: default;
 }
 
+/* The projector following the party: a toggle beside Frame, lit while it is on. */
+.frame-btn.follow-btn.on {
+    background: #1f6feb;
+    border-color: #1f6feb;
+    color: #ffffff;
+    font-weight: 600;
+}
+
 .bar-spacer {
     flex: 1 1 0;
 }
@@ -2143,7 +2151,6 @@ code {
     font-size: 0.82rem;
 }
 
-.map-tool-options .vision-range,
 .map-tool-options .brush-size,
 .map-tool-options .measure-readout,
 .map-tool-options .ping-readout,
@@ -2198,10 +2205,6 @@ code {
 
 .measure-clear:hover {
     border-color: #b8860b;
-}
-
-.vision-range input {
-    width: 4rem;
 }
 
 .brush-size .brush {
@@ -2260,9 +2263,84 @@ code {
     color: var(--error);
 }
 
-.map-foot-btn.clear-undo {
+.map-foot-btn.clear-undo,
+.map-foot-btn.party-undo {
     border-color: var(--accent);
     color: var(--accent);
+}
+
+.party-hint {
+    color: var(--muted);
+}
+
+/* The party token's menu, beside the token (dt-party.js places it and makes it visible): how far the
+   party sees, in one click for the usual ranges. */
+.dt-party-pop {
+    position: absolute;
+    z-index: 5;
+    visibility: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0.5rem 0.65rem;
+    background: rgba(30, 26, 23, 0.96);
+    border: 1px solid #1f6feb;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    color: var(--ink);
+    font-size: 0.82rem;
+    cursor: default;
+}
+
+.party-pop-title {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.party-vision {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
+.party-vision .vision-preset,
+.party-pop-remove {
+    padding: 0.15rem 0.5rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.party-vision .vision-preset:hover,
+.party-pop-remove:hover {
+    border-color: #58a6ff;
+}
+
+.party-vision .vision-preset.active {
+    background: #1f6feb;
+    border-color: #1f6feb;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.party-vision .vision-feet {
+    width: 3.6rem;
+    padding: 0.15rem 0.3rem;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    font: inherit;
+}
+
+.party-pop-remove {
+    align-self: flex-start;
+    color: var(--muted);
 }
 
 .map-warning {
@@ -2317,6 +2395,46 @@ code {
 .room-chip.revealed {
     background: rgba(201, 162, 39, 0.14);
     color: var(--accent);
+}
+
+.room-chip.party {
+    background: rgba(31, 111, 235, 0.2);
+    color: #79b8ff;
+}
+
+/* The dock follows the party; this strip says when it is showing another room, and goes back. */
+.room-follow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.6rem;
+    margin-bottom: 0.6rem;
+    padding: 0.35rem 0.6rem;
+    background: rgba(31, 111, 235, 0.12);
+    border: 1px solid rgba(31, 111, 235, 0.45);
+    border-radius: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.room-follow strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.room-follow-back {
+    padding: 0.15rem 0.55rem;
+    background: none;
+    border: 1px solid #1f6feb;
+    border-radius: 0.3rem;
+    color: #79b8ff;
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.room-follow-back:hover {
+    background: rgba(31, 111, 235, 0.2);
 }
 
 .room-actions {
