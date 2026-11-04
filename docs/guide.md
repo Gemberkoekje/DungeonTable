@@ -43,6 +43,14 @@ whichever tab is up. The bar across the top is in view all the time:
   room on this map.
 - **Follow party**, beside it, keeps the projector on the party: while it is on, the projector frames
   the party again whenever the token leaves the middle of its view. It is off until you turn it on.
+- **↻ Turn** turns the projector's picture of the map a quarter turn clockwise, for a table the players
+  sit around; press it again for the next quarter. The Player view box on your map turns with it, about
+  its middle, so the squares on the table keep their size, and its heavier edge is the top of the
+  projector's screen.
+- **Remember size** keeps the size of the projector's view, in squares. On another map, **Use 18×10**
+  (the size you remembered) sizes the view to the same squares, so a square on the table stays the
+  size of a miniature's base from map to map. A map smaller than the view shows at that size, with dark
+  around it.
 - **Find anything** (**Ctrl+K**, or **/**) looks up a room, a person, a rule or any line of the
   campaign's text (see [finding anything](#finding-anything-and-pins)).
 - When the campaign has more than one map, the **map picker** switches between them. The projector
@@ -158,7 +166,16 @@ The room is laid out in the order you need it at the table:
 - **The encounter**: each creature the room lists, with where its stat block comes from and how many
   there are. A count written as dice (**1d4+2**) is yours to roll: set the number with **−** and
   **+**. **Add** puts them in the fight, and **Add all to battle** puts in everyone. Tick a creature
-  off once it has been dealt with; when all are, the room reads **cleared**.
+  off once it has been dealt with; when all are, the room reads **cleared**. Where a room lists several,
+  **−1** counts one down as it falls (**+1** takes one back), and the row says how many are left.
+- **One somebody is the same in every room.** Grask is listed in the workshop and, if he flees, in the
+  vestry. Deal with him in one and he is dealt with in both: the vestry's row says **dealt with in
+  Bell-Founder's Workshop**. If he runs instead, press **↪ fled** on the workshop's row: he is gone from
+  the workshop and still up in the vestry. A **band** (an entity with a count, below) works the same
+  for each of its members: the crew's two bugbears are listed in the workshop and, one of them, in the
+  den, and one dealt with in the den leaves one in the workshop. A room never shows more of a band than
+  it has left, so a hall that lists the whole gang again where they gather counts down with everyone
+  else. Unticking someone dealt with in another room puts them back on the board everywhere.
 - **Nearby**: the rooms this one leads to, one line each, with their badges, who is still up in them and
   how you get there. A secret way is marked **DM**. Rest the pointer on a line for that room's card, and
   click it to read the room. A way to a floor you have not written yet waits as plain text.
@@ -285,7 +302,11 @@ round the corner, or a handout.
 - Search the catalogue and add pictures to the **tray** before the scene.
 - Click a picture in the tray to show it. **n** and **p** step through the tray, and **h** hides the
   picture and brings it back.
-- **S**, **M**, **L** and **Full** set its size on the projector.
+- **S**, **M**, **L** and **Full** set its size on the projector. **Full** fills the screen, enlarging
+  a small picture to fit.
+- **↻ Turn** (**r**) turns the picture a quarter turn clockwise and **⇄ Mirror** (**m**) flips it left to
+  right. Each picture keeps its own, so the tray shows each one as you set it. A tall picture turned on
+  its side fills a wide screen at **Full**.
 - **Add from the fight** adds a picture for every creature in the running fight that has one.
 - **Your own pictures**, at the bottom, adds one from your computer. It is converted to WebP and kept
   in `data/art/uploads/`.
@@ -450,6 +471,11 @@ What the parts do:
   DM's only.
 - **`creatures` is the encounter.** Name a monster the way a link names it (below). `count` is empty
   for one, a number, or dice for the DM to roll. `[]` says, deliberately, that nobody is here.
+- **Someone listed in more than one room** is the same somebody in each when the list names an entity
+  or a person: dealt with in one room, they are dealt with in all of them. For a gang listed in parts
+  (two at the gate, four in the barracks, all of them where they gather), give the level an entity with
+  a `count`, `{ "id": "gang-bandit", "kind": "creature", "name": "Gang bandit", "statBlock": "bandit",
+  "count": 7 }`, and list it instead of the stat block.
 - **`exits`** are where the party can go: they become jumps to those rooms.
 
 Every field is described in [content-format.md §5.2](content-format.md#52-level-njson-a-floor).
