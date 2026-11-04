@@ -460,6 +460,28 @@ public sealed class DmWorkspaceTests
     }
 
     [Fact]
+    public async Task Opening_another_map_leaves_the_projector_on_the_one_the_players_see()
+    {
+        // The DM looks ahead to the next floor while the party is still on this one: the projector stays
+        // here, as it was, and the new map is set up (framed) for when the DM shows it.
+        Harness harness = await Harness.Started();
+        harness.Maps.Maps["level-2"] = new VectorMap { MapId = "level-2", Bounds = new MapBounds(0, 0, 500, 400), Grid = new Grid { CellSizePx = 10 } };
+        harness.Annotations.Definitions["level-2"] = new MapDefinition { MapId = "level-2" };
+        harness.Session.ToggleRegion("r-pillars");
+        MapBounds framing = harness.Session.PlayerViewport;
+
+        await harness.Workspace.LoadMapAsync("level-2", CancellationToken.None);
+
+        Assert.Equal("level-2", harness.Session.CurrentMapId);
+        Assert.Equal("level-1", harness.Session.ProjectorMapId);
+        ProjectorView projector = harness.Session.Projector();
+        Assert.Contains("r-pillars", projector.RevealedRegionIds);
+        Assert.Equal(framing, projector.Viewport);
+        Assert.Equal("level-2", harness.Session.SeededMapId);
+        Assert.NotEqual(framing, harness.Session.PlayerViewport);
+    }
+
+    [Fact]
     public async Task A_map_on_show_that_goes_missing_is_not_swapped_for_another()
     {
         // Pointing the table at another map moves the projector off the one in play, so a map file

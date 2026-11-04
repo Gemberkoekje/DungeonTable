@@ -1717,6 +1717,31 @@ code {
     font-size: 0.85rem;
 }
 
+/* The projector held on the map the DM left, and the button that shows it this one. Amber, like the
+   Player view box: what the players see is not what the DM is looking at, and the DM must not miss it. */
+.projector-held {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border: 1px dashed #b8860b;
+    border-radius: 0.35rem;
+    color: #e0b84a;
+    white-space: nowrap;
+}
+
+.frame-btn.show-map-btn:not(:disabled) {
+    background: #b8860b;
+    border-color: #b8860b;
+    color: #1b1b1b;
+    font-weight: 600;
+}
+
+.frame-btn.show-map-btn:hover:not(:disabled) {
+    background: #d19a12;
+    border-color: #d19a12;
+}
+
 /* Whether the table is being persisted, at the right of the bar. */
 .table-saved {
     display: inline-flex;

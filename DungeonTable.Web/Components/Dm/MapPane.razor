@@ -39,6 +39,7 @@
                          PlayerViewport="Session.PlayerViewport"
                          PlayerAspect="Session.FramingAspect"
                          PlayerTurns="Session.PlayerTurns"
+                         PlayerBoxHeld="Session.ProjectorOnAnotherMap"
                          PlayerViewportChanged="OnBoxChanged"
                          EnableEditor="true" EditorTool="@EditorToolName()"
                          SecretDoorIds="Workspace.SecretDoorIds" MarkSecretDoors="true"
@@ -122,8 +123,10 @@
             }
             else if (selection.Active == MapTool.Ping && Session.Ping.IsSet)
             {
+                @* The projector shows a point only on the map it is showing, so while it stays on another
+                   one the DM is told the players do not see this one. *@
                 <span class="ping-readout" role="status">
-                    <span class="ping-live">Pointing at the projector</span>
+                    <span class="ping-live">@(Session.ProjectorOnAnotherMap ? "Marked on your map only: the projector is on another map" : "Pointing at the projector")</span>
                     <button type="button" class="measure-clear" title="Take the pointer off both maps"
                             @onclick="Session.ClearPing">Clear</button>
                 </span>
@@ -364,7 +367,9 @@
         MapTool.Fog => "Fog brush: drag to reveal grid cells; hold Alt (or right-drag) to hide them again.",
         MapTool.Party => "Party: click where the party stands. The token goes there and shows what the party sees from there, nothing on the way (the stairs, a teleport). To walk, drag the token.",
         MapTool.Measure => "Measure: drag between two points. Squares are counted the 5e way (a diagonal costs one). Only you see it.",
-        MapTool.Ping => "Point: click a spot to point at it on the projector. It pulses a few times and fades.",
+        MapTool.Ping => Session.ProjectorOnAnotherMap
+            ? "Point: the projector is on another map, so the players will not see this. Show them this map first."
+            : "Point: click a spot to point at it on the projector. It pulses a few times and fades.",
         _ => string.Empty,
     };
 

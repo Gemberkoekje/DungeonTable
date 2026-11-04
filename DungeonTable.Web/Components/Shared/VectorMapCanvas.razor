@@ -92,6 +92,11 @@
     .dt-player-box[data-up="e"] { border-right-width: 6px; }
     .dt-player-box[data-up="s"] { border-bottom-width: 6px; }
     .dt-player-box[data-up="w"] { border-left-width: 6px; }
+    /* The box on a map the projector is not showing yet (the DM moved on and the players did not): it
+       is where the projector will look once the DM shows them this map, so it is drawn as a plan, not
+       as what they see now. */
+    .dt-player-box.dt-held { border-style: dashed; background: rgba(184, 134, 11, 0.04); }
+    .dt-player-box.dt-held .dt-player-box-label { font-style: italic; }
 
     /* The party token (dt-party.js): a fixed size on screen at every zoom, above the player-view box;
        its vision ring scales with the map and never takes a click. Each sits on a compositing layer of
@@ -173,6 +178,13 @@ else
     /// </summary>
     [Parameter]
     public int PlayerTurns { get; set; }
+
+    /// <summary>
+    /// True when the projector is showing another map: the box is then where the projector will look
+    /// once this map is shown to the players, and is drawn dashed and labelled so.
+    /// </summary>
+    [Parameter]
+    public bool PlayerBoxHeld { get; set; }
 
     /// <summary>Raised when the DM moves or resizes the player-view box.</summary>
     [Parameter]
@@ -394,7 +406,7 @@ else
                     await JS.InvokeVoidAsync(
                         "dtPlayerBox.init", boxRef, selfRef,
                         new { x = PlayerViewport.MinX, y = PlayerViewport.MinY, w = PlayerViewport.Width, h = PlayerViewport.Height },
-                        PlayerAspect, PlayerTurns);
+                        PlayerAspect, PlayerTurns, PlayerBoxHeld);
                 }
 
                 if (EnableEditor)
@@ -421,7 +433,7 @@ else
             {
                 await JS.InvokeVoidAsync(
                     "dtPlayerBox.update", boxRef,
-                    PlayerViewport.MinX, PlayerViewport.MinY, PlayerViewport.Width, PlayerViewport.Height, PlayerAspect, PlayerTurns);
+                    PlayerViewport.MinX, PlayerViewport.MinY, PlayerViewport.Width, PlayerViewport.Height, PlayerAspect, PlayerTurns, PlayerBoxHeld);
             }
 
             if (ShowPartyToken)

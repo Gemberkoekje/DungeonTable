@@ -8,6 +8,7 @@ using DungeonTable.Core.Art;
 using DungeonTable.Core.Battle;
 using DungeonTable.Core.Session;
 using DungeonTable.Infrastructure.Sessions;
+using DungeonTable.Web.Services;
 using Marten;
 
 namespace DungeonTable.Tests.Sessions;
@@ -34,6 +35,7 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal(stored.SavedAt, restored.SavedAt);
         Assert.Equal("level-1-undercroft", restored.Reveals.CurrentMapId);
         Assert.Equal("level-1-undercroft", restored.Reveals.SeededMapId);
+        Assert.Equal("level-2-crypt", restored.Reveals.ProjectorMapId);
         Assert.Equal("region-entrywell", Assert.Single(restored.Reveals.RevealedRegionIds));
         Assert.Equal("trap-pit-1", Assert.Single(restored.Reveals.RevealedFeatureIds));
         Assert.Equal("door-7", Assert.Single(restored.Reveals.OpenDoorIds));
@@ -127,6 +129,23 @@ public sealed class SessionDocumentJsonTests
         Assert.Equal("region-entrywell", Assert.Single(restored.Reveals.RevealedRegionIds));
         Assert.NotNull(restored.Reveals.OtherMaps);
         Assert.Empty(restored.Reveals.OtherMaps);
+    }
+
+    [Fact]
+    public void A_document_written_before_the_projector_could_stay_behind_shows_the_map_in_play()
+    {
+        // ProjectorMapId went into the reveals additively, without bumping CurrentVersion. Until then the
+        // projector always showed the map in play, so that is where a document without it puts it.
+        JsonNode document = JsonNode.Parse(SessionDocuments.Serializer().ToJson(Sample()));
+        Assert.True(document["reveals"].AsObject().Remove("projectorMapId"));
+
+        TableSnapshot restored = Read(document.ToJsonString());
+        var session = new SessionState();
+        session.Restore(restored.Reveals);
+
+        Assert.Equal(string.Empty, restored.Reveals.ProjectorMapId);
+        Assert.Equal("level-1-undercroft", session.ProjectorMapId);
+        Assert.False(session.ProjectorOnAnotherMap);
     }
 
     [Fact]
@@ -351,6 +370,7 @@ public sealed class SessionDocumentJsonTests
         Reveals = new RevealSnapshot
         {
             CurrentMapId = "level-1-undercroft",
+            ProjectorMapId = "level-2-crypt",
             SeededMapId = "level-1-undercroft",
             RevealedRegionIds = new[] { "region-entrywell" },
             RevealedFeatureIds = new[] { "trap-pit-1" },

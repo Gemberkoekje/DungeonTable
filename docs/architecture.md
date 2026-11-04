@@ -149,7 +149,7 @@ Blazor Server keeps one circuit per browser tab. The state of the table is share
 
 | service | lifetime | holds |
 |---|---|---|
-| `SessionState` | singleton | what the projector shows: the map, revealed regions and features, fog cells, open doors, concealed objects, the framing, the picture over the map; the party token and the undo of what it revealed; and the same per map the table has left |
+| `SessionState` | singleton | the map the DM is on and the map on the projector (the same, until the DM moves on); revealed regions and features, fog cells, open doors, concealed objects, the framing, the picture over the map; the party token and the undo of what it revealed; and the same per map the table has left |
 | `BattleState` | singleton | the one running fight |
 | `CampaignState` | singleton | quest progress, each deck's drawn cards, per-area checklists and notes, the pins along the foot of the dock |
 | `DmWorkspace` | scoped | one DM tab's own view: the loaded map, the room shown, the reference history, the passage open over the dock, whether the dock is pinned |
@@ -232,6 +232,19 @@ back up finds the first floor as they left it. A map brought back counts as alre
 default-open doors and starting framing are not applied again over what the DM changed. A map left
 before it was ever set up, with nothing on it, is not kept, so it still gets them on its first real
 visit. The maps set aside are saved with the rest, in `RevealSnapshot.OtherMaps`.
+
+**The projector does not follow the DM to another map.** `SessionState` keeps two map ids: the map the
+DM is on (`CurrentMapId`, which the reveals, the framing and the party token belong to) and the map on
+the projector (`ProjectorMapId`). Moving to another map changes only the first, so the players go on
+seeing the floor they are on while the DM looks ahead or sets up the next one, and the projector's map
+is drawn from what was set aside for it in `OtherMaps`. The DM's **Show on projector**
+(`ShowCurrentMapOnProjector`) makes them the same again; so does going back to the projector's map.
+The player view draws `SessionState.Projector()`, one `ProjectorView` taken under the lock, never the
+current map's sets directly. The very first map the table is on goes straight to the projector, since
+there is nothing else to show. A point the DM makes is drawn on the projector only while it shows the
+DM's map, and is dropped when the map is shown, because the players never saw it. A document saved
+before `ProjectorMapId` existed has it blank, and is read as the map in play, which is where the
+projector always was then.
 
 Leaking hidden detail into the player view's DOM is not treated as a security problem: past the
 passphrase, only the people at the table have the URL, and the player view is a projector. What the
