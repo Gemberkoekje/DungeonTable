@@ -448,7 +448,7 @@ public sealed class DmWorkspace
         // also restored from the database, so an app restart does not re-seed either.
         if (!string.Equals(mapId, session.SeededMapId, StringComparison.Ordinal))
         {
-            session.SetPlayerViewport(MapFraming.DefaultViewport(Map.Bounds, session.PlayerAspect));
+            session.SetPlayerViewport(MapFraming.DefaultViewport(Map.Bounds, session.FramingAspect));
             session.SeedOpenDoors(defaultOpenDoorIds);
             session.MarkSeeded(mapId);
         }
@@ -740,12 +740,49 @@ public sealed class DmWorkspace
         MapBounds target = SelectedBounds();
         if (target.Width <= 0 && target.Height <= 0)
         {
-            session.SetPlayerViewport(MapFraming.DefaultViewport(Map.Bounds, session.PlayerAspect));
+            session.SetPlayerViewport(MapFraming.DefaultViewport(Map.Bounds, session.FramingAspect));
             return;
         }
 
         MapBounds padded = MapFraming.Pad(target, UnitSize);
-        session.SetPlayerViewport(MapFraming.Frame(padded, session.PlayerAspect, Map.Bounds));
+        session.SetPlayerViewport(MapFraming.Frame(padded, session.FramingAspect, Map.Bounds));
+    }
+
+    /// <summary>
+    /// The size of the projector's view now, in grid squares across and down the projector's own
+    /// screen (which is the other way round on the map while the picture lies on its side).
+    /// </summary>
+    /// <returns>The size; <see cref="ViewSize.None"/> with no map or no view.</returns>
+    public ViewSize PlayerViewSize()
+    {
+        MapBounds view = session.PlayerViewport;
+        if (!MapLoaded || view.Width <= 0 || view.Height <= 0)
+        {
+            return ViewSize.None;
+        }
+
+        bool onItsSide = session.PlayerTurns % 2 == 1;
+        double across = (onItsSide ? view.Height : view.Width) / UnitSize;
+        double down = (onItsSide ? view.Width : view.Height) / UnitSize;
+        return new ViewSize(across, down);
+    }
+
+    /// <summary>Remembers the size of the projector's view now, to frame another map at the same scale.</summary>
+    public void RememberPlayerViewSize() => session.RememberView(PlayerViewSize());
+
+    /// <summary>
+    /// Sizes the projector's view to the remembered size, about its middle, so a square on the table is
+    /// the size it was on the map the size was remembered on.
+    /// </summary>
+    public void UseRememberedViewSize()
+    {
+        if (!MapLoaded || !session.RememberedView.IsSet)
+        {
+            return;
+        }
+
+        session.SetPlayerViewport(MapFraming.AtSize(
+            session.PlayerViewport, session.RememberedView, UnitSize, session.PlayerAspect, session.PlayerTurns, Map.Bounds));
     }
 
     /// <summary>

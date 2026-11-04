@@ -1,3 +1,4 @@
+@using System.Globalization
 @inject IArtCatalogue Art
 @*
     The picture the DM has pushed onto the projector, laid over the map.
@@ -67,17 +68,32 @@
         border-radius: 0;
     }
 
-    .player-art.art-full img { max-width: 96vw; max-height: 94vh; }
+    /* Turned and flipped (ArtOrientation). The frame turns with the picture, about its middle; the
+       picture is flipped inside it. Turned on its side, the frame's own box is laid out upright and
+       turned after, so each limit above is taken on the other axis: the box's width becomes the height
+       on screen. That is what lets a tall picture turned on its side fill a wide screen. */
+    .player-art figure { flex: none; }
+    .player-art img.mirrored { transform: scaleX(-1); }
+    .player-art.on-side figure { max-width: 92vh; max-height: 92vw; }
+    .player-art.on-side.art-small img { max-width: 34vh; max-height: 26vw; }
+    .player-art.on-side.art-medium img { max-width: 56vh; max-height: 42vw; }
+    .player-art.on-side.art-large img { max-width: 76vh; max-height: 62vw; }
+    .player-art.on-side.art-full figure { max-width: 100vh; max-height: 100vw; }
+
+    /* Full fills the screen, which a small picture would not do at its own size: its width is worked
+       out from its shape (FullWidth), and the limits above stand aside. */
+    .player-art.art-full img { max-width: none; max-height: none; }
 </style>
 
 @if (image is not null)
 {
-    <div class="player-art @SizeClass">
-        <figure>
+    <div class="player-art @SizeClass @(Orientation.OnItsSide ? "on-side" : string.Empty)">
+        <figure style="@FigureStyle">
             @* alt is empty on purpose: this is decorative-for-the-room, the players are looking at
                a beamer, and a screen reader announcing "Vampire spawn" on the DM's own second
                monitor would give away the bluff the picture exists to sell. *@
-            <img src="art/@image.File" alt="" width="@image.Width" height="@image.Height" />
+            <img src="art/@image.File" alt="" width="@image.Width" height="@image.Height"
+                 class="@(Orientation.Mirrored ? "mirrored" : string.Empty)" style="@ImageStyle" />
         </figure>
     </div>
 }
@@ -91,6 +107,10 @@
     [Parameter]
     public ArtSize Size { get; set; } = ArtSize.Medium;
 
+    /// <summary>How it is turned and flipped.</summary>
+    [Parameter]
+    public ArtOrientation Orientation { get; set; }
+
     private ArtImage image;
 
     protected override void OnParametersSet()
@@ -99,6 +119,30 @@
         // upload, a hand-edited snapshot) simply shows nothing instead of breaking the render.
         var result = Art.GetImage(ImageId ?? string.Empty);
         image = result.IsValid ? result.Value : null;
+    }
+
+    private string FigureStyle => Orientation.QuarterTurns == 0
+        ? string.Empty
+        : string.Create(CultureInfo.InvariantCulture, $"transform: rotate({Orientation.Degrees}deg)");
+
+    // At Full the picture's width is set from its shape, so it is as large as the screen allows, taken
+    // the other way round while it lies on its side: upright, at most 96 % of the width, or 94 % of the
+    // height times its shape; on its side, at most 94 % of the height, or 96 % of the width times its
+    // shape. Its height follows from the width and height it carries.
+    private string ImageStyle
+    {
+        get
+        {
+            if (Size != ArtSize.Full || image.Width <= 0 || image.Height <= 0)
+            {
+                return string.Empty;
+            }
+
+            double shape = (double)image.Width / image.Height;
+            return Orientation.OnItsSide
+                ? string.Create(CultureInfo.InvariantCulture, $"width: min(94vh, calc(96vw * {shape:0.####})); height: auto")
+                : string.Create(CultureInfo.InvariantCulture, $"width: min(96vw, calc(94vh * {shape:0.####})); height: auto");
+        }
     }
 
     private string SizeClass => Size switch

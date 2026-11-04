@@ -1687,7 +1687,14 @@ code {
     cursor: default;
 }
 
-/* The projector following the party: a toggle beside Frame, lit while it is on. */
+/* The player view's size: remember it on one map, use it on the next. */
+.view-size {
+    display: inline-flex;
+    gap: 0.25rem;
+}
+
+/* The projector following the party, and turned: toggles beside Frame, lit while they are on. */
+.frame-btn.turn-btn.on,
 .frame-btn.follow-btn.on {
     background: #1f6feb;
     border-color: #1f6feb;
@@ -3161,7 +3168,7 @@ code {
 /* The prose quote takes whatever room is left and truncates rather than wrapping the row open —
    it is a reminder of why the creature is listed, not something to read at length. */
 .encounter-context {
-    flex: 1 1 8rem;
+    flex: 1 1 5rem;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

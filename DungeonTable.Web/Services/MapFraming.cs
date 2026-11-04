@@ -153,6 +153,56 @@ public static class MapFraming
     }
 
     /// <summary>
+    /// The projector's view at a remembered size in grid squares, kept about the middle of the view it
+    /// replaces (the map's middle when there is none), so a square on the table is the size it was on
+    /// the map the size was remembered on. The squares across the screen hold the scale; the squares
+    /// down follow the screen's shape. Moved onto the map, but never shrunk to fit it: a map smaller
+    /// than the view shows at the same scale, with dark around it.
+    /// </summary>
+    /// <param name="viewport">The view now.</param>
+    /// <param name="size">The remembered size, in grid squares across and down the projector's screen.</param>
+    /// <param name="cellSize">One grid square, in world units.</param>
+    /// <param name="screenAspect">The projector screen's width / height ratio.</param>
+    /// <param name="quarterTurns">How far the projector's picture is turned, in quarter turns clockwise.</param>
+    /// <param name="map">The map's bounds.</param>
+    /// <returns>The view at that size; the view unchanged when the size or the square is not usable.</returns>
+    public static MapBounds AtSize(MapBounds viewport, ViewSize size, double cellSize, double screenAspect, int quarterTurns, MapBounds map)
+    {
+        if (!size.IsSet || !double.IsFinite(cellSize) || cellSize <= 0)
+        {
+            return viewport;
+        }
+
+        double ratio = double.IsFinite(screenAspect) && screenAspect > 0 ? screenAspect : DefaultAspect;
+        double across = size.Across * cellSize;
+        double down = across / ratio;
+        bool onItsSide = quarterTurns % 2 == 1;
+        double width = onItsSide ? down : across;
+        double height = onItsSide ? across : down;
+
+        bool hasView = viewport.Width > 0 && viewport.Height > 0;
+        double cx = hasView ? viewport.MinX + (viewport.Width / 2) : map.MinX + (map.Width / 2);
+        double cy = hasView ? viewport.MinY + (viewport.Height / 2) : map.MinY + (map.Height / 2);
+        double x = Slide(cx - (width / 2), width, map.MinX, map.Width);
+        double y = Slide(cy - (height / 2), height, map.MinY, map.Height);
+        return new MapBounds(x, y, x + width, y + height);
+    }
+
+    // Where one side of a view starts once it is moved onto the map: inside it when the view fits on
+    // that axis, centred on it when the view is the larger.
+    private static double Slide(double start, double length, double mapStart, double mapLength)
+    {
+        if (mapLength <= 0)
+        {
+            return start;
+        }
+
+        return length >= mapLength
+            ? mapStart + ((mapLength - length) / 2)
+            : Math.Clamp(start, mapStart, mapStart + mapLength - length);
+    }
+
+    /// <summary>
     /// The starting player viewport for a freshly loaded map: the widest rectangle of the
     /// projector's aspect ratio that fits, centred on the map.
     /// </summary>

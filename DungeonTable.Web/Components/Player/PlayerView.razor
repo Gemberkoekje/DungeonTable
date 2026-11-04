@@ -13,9 +13,26 @@
 <h1 class="visually-hidden">Player view</h1>
 
 <style>
-    .player-stage { position: fixed; inset: 0; background: #000000; overflow: hidden; }
+    .player-stage { position: fixed; inset: 0; background: #000000; overflow: hidden; container-type: size; }
     .player-stage .vector-map-host,
     .player-stage .vector-map-host svg { width: 100%; height: 100%; display: block; }
+
+    /* The map and the pointer, turned for a table the players sit around. On its side the box is the
+       stage the other way round (the stage's height wide, its width high), turned about the middle, so
+       it covers the stage exactly; the DM's box for it is that shape already (FramingAspect). The
+       picture over the map is not in here: it is turned on its own (PlayerArtOverlay). */
+    .player-turn { position: absolute; inset: 0; }
+    .player-turn.turn-1,
+    .player-turn.turn-3 {
+        inset: auto;
+        left: 50%;
+        top: 50%;
+        width: 100cqh;
+        height: 100cqw;
+    }
+    .player-turn.turn-1 { transform: translate(-50%, -50%) rotate(90deg); }
+    .player-turn.turn-2 { transform: rotate(180deg); }
+    .player-turn.turn-3 { transform: translate(-50%, -50%) rotate(270deg); }
     .player-fog { display: flex; align-items: center; justify-content: center; height: 100%; color: #cfc7b5; text-align: center; }
 
     /* The projector is set up once and then left running for hours: the mouse pointer parked over a
@@ -89,6 +106,7 @@
 @* The "cursor-idle" class is owned by dt-projector.js, not by this render: Blazor leaves an attribute
    it did not change alone, so the idle state survives the re-renders the DM's reveals cause. *@
 <div class="player-stage" @ref="stageRef">
+    <div class="player-turn turn-@Session.PlayerTurns">
     @if (mapLoaded)
     {
         <VectorMapCanvas Map="map" ViewBox="Session.PlayerViewport" CssClass="player-map"
@@ -125,6 +143,7 @@
             </g>
         </svg>
     }
+    </div>
 
     @* The DM's picture, laid over the map. Inside the stage so fullscreen covers it, and after the
        canvas so it stacks above it without either knowing about the other. *@
@@ -133,7 +152,8 @@
        handed the text "Session.ShownArtImageId" and silently resolves nothing. *@
     @if (Session.ShownArtVisible)
     {
-        <PlayerArtOverlay ImageId="@Session.ShownArtImageId" Size="Session.ShownArtSize" />
+        <PlayerArtOverlay ImageId="@Session.ShownArtImageId" Size="Session.ShownArtSize"
+                          Orientation="Session.ArtOrientationOf(Session.ShownArtImageId)" />
     }
 
     @* Fullscreen has to be entered from a real user gesture, so it is a button (or the "f" key) and

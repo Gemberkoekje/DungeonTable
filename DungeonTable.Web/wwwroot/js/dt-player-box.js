@@ -2,8 +2,13 @@
 // the player projector shows. It lives in map world units and repositions against the DM's own
 // pan/zoom via the SVG screen matrix. Drag the body to move; drag a corner to scale (aspect kept).
 window.dtPlayerBox = (function () {
-    function init(box, dotnet, world, aspect) {
-        if (box.__dtbox) { box.__dtbox.set(world, aspect); return; }
+    // Which edge of the box is the top of the projector's screen, for each quarter turn clockwise: the
+    // map turned a quarter clockwise puts its left edge at the top.
+    const UP = ['n', 'w', 's', 'e'];
+    const TURNED = ['', ' \u00B7 turned 90\u00B0', ' \u00B7 turned 180\u00B0', ' \u00B7 turned 270\u00B0'];
+
+    function init(box, dotnet, world, aspect, turns) {
+        if (box.__dtbox) { box.__dtbox.set(world, aspect, turns); return; }
 
         const overlay = document.createElement('div');
         overlay.className = 'dt-player-box';
@@ -29,6 +34,13 @@ window.dtPlayerBox = (function () {
 
         let W = world;      // { x, y, w, h } in world units
         let A = aspect;     // width / height lock
+
+        function turn(t) {
+            const q = ((t || 0) % 4 + 4) % 4;
+            overlay.dataset.up = UP[q];
+            label.textContent = 'Player view' + TURNED[q];
+        }
+        turn(turns);
 
         function svg() { return box.querySelector('svg'); }
         function ctm() { const s = svg(); return s ? s.getScreenCTM() : null; }
@@ -103,9 +115,10 @@ window.dtPlayerBox = (function () {
         }
 
         box.__dtbox = {
-            set: function (nw, na) {
+            set: function (nw, na, nt) {
                 if (nw) { W = nw; }
                 if (na && na > 0) { A = na; }
+                turn(nt);
                 repositionSoon();
             }
         };
@@ -114,8 +127,8 @@ window.dtPlayerBox = (function () {
 
     return {
         init: init,
-        update: function (box, x, y, w, h, aspect) {
-            if (box && box.__dtbox) { box.__dtbox.set({ x: x, y: y, w: w, h: h }, aspect); }
+        update: function (box, x, y, w, h, aspect, turns) {
+            if (box && box.__dtbox) { box.__dtbox.set({ x: x, y: y, w: w, h: h }, aspect, turns); }
         }
     };
 })();

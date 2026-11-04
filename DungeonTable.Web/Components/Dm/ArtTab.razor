@@ -20,6 +20,7 @@
     IReadOnlyList<ArtImage> tray = TrayImages();
     IReadOnlyList<ArtImage> results = Results();
     IReadOnlyList<ArtImage> suggested = SuggestedFromFight();
+    ArtOrientation orientation = Session.ArtOrientationOf(Session.ShownArtImageId);
 }
 
 <div class="art-tab">
@@ -63,6 +64,23 @@
                             title="@($"Draw the picture at {label.ToLowerInvariant()} size")"
                             @onclick="() => Session.SetArtSize(candidate)">@label</button>
                 }
+            </span>
+
+            @* Turned and flipped per picture, so the tray shows each one as it was set. *@
+            <span class="art-sizes" role="group" aria-label="Turn or flip the picture">
+                <button type="button" class="art-size art-turn @(orientation.QuarterTurns != 0 ? "on" : string.Empty)"
+                        disabled="@(Shown is null)"
+                        title="@($"Turn the picture a quarter turn clockwise (r). Now {orientation.Degrees}°")"
+                        @onclick="TurnShown">
+                    <span aria-hidden="true">&#x21BB;</span> @(orientation.QuarterTurns == 0 ? "Turn" : $"{orientation.Degrees}°")
+                </button>
+                <button type="button" class="art-size art-mirror @(orientation.Mirrored ? "on" : string.Empty)"
+                        disabled="@(Shown is null)"
+                        aria-pressed="@(orientation.Mirrored ? "true" : "false")"
+                        title="Flip the picture left to right (m)"
+                        @onclick="MirrorShown">
+                    <span aria-hidden="true">&#x21C4;</span> Mirror
+                </button>
             </span>
         </div>
     </header>
@@ -246,6 +264,10 @@
         }
     }
 
+    private void TurnShown() => Session.TurnArt(Session.ShownArtImageId);
+
+    private void MirrorShown() => Session.MirrorArt(Session.ShownArtImageId);
+
     private bool IsShown(ArtImage image) =>
         Session.ShownArtVisible && string.Equals(Session.ShownArtImageId, image.Id, StringComparison.Ordinal);
 
@@ -254,7 +276,8 @@
 
     /// <summary>
     /// Handles the tab's bare-key shortcuts, routed from the shell so they only fire while this tab
-    /// is the one on show: <c>n</c> / <c>p</c> flip the tray, <c>h</c> toggles the projector.
+    /// is the one on show: <c>n</c> / <c>p</c> flip the tray, <c>h</c> toggles the projector, <c>r</c>
+    /// turns the staged picture a quarter turn and <c>m</c> flips it.
     /// </summary>
     /// <param name="key">The key token.</param>
     public void HandleKey(string key)
@@ -266,6 +289,12 @@
                 break;
             case "p":
                 Session.StepTray(forward: false);
+                break;
+            case "r":
+                TurnShown();
+                break;
+            case "m":
+                MirrorShown();
                 break;
             case "h":
                 if (Session.ShownArtVisible)

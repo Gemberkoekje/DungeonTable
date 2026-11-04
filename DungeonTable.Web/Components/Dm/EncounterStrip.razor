@@ -89,7 +89,9 @@
                     {
                         <span class="encounter-status" title="@StatusTitle(row, standing)">@status</span>
                     }
-                    @if (standing.BandSize > 1 && !standing.GoneElsewhere)
+                    @* The band's own count, where this room lists only some of it: a room that lists the
+                       whole band says the same in its own chip. *@
+                    @if (standing.BandSize > 1 && standing.Listed < standing.BandSize && !standing.GoneElsewhere)
                     {
                         <span class="encounter-band" title="@($"A band: {standing.BandLeft} of {standing.BandSize} still up, across every room that lists them")">@($"{standing.BandLeft} of {standing.BandSize} in all")</span>
                     }

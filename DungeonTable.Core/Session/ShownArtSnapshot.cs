@@ -28,4 +28,12 @@ public sealed class ShownArtSnapshot
     /// with <c>n</c> / <c>p</c>. Stored so a restart does not cost the prep.
     /// </summary>
     public IReadOnlyList<string> TrayImageIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// How each picture the DM turned or flipped is shown, by its catalogue id; a picture with no entry
+    /// is upright. Kept per picture, so flipping through the tray shows each one as it was set. Added
+    /// after the rest, with an empty default, so an older build reads the document and shows every
+    /// picture upright.
+    /// </summary>
+    public IReadOnlyList<ArtOrientationSnapshot> Orientations { get; set; } = Array.Empty<ArtOrientationSnapshot>();
 }
