@@ -59,16 +59,33 @@ public static class VectorMapSvgRenderer
     // otherwise ask for millions of grid lines and exhaust memory on the render thread.
     private const int MaxGridLinesPerAxis = 2000;
 
+    // The mask the door layer defines and the map layer's walls are drawn through.
+    private const string DoorGapMaskId = "dt-doorgap";
+
+    // The DM fog's reveal mask, which the fog sheet is drawn through.
+    private const string FogMaskId = "dt-reveal";
+
+    // A defensive ceiling on the fog's bands, for a malformed map with a tiny cell size.
+    private const int MaxFogBands = 256;
+
+    /// <summary>
+    /// How many rows of the grid each band of the DM fog's revealed squares covers (see
+    /// <see cref="FogLayerParts"/>). A step of the party token with a 60 ft view touches about 24 rows,
+    /// so three or four bands go out, not the whole map.
+    /// </summary>
+    public const int FogRowsPerBand = 8;
+
     /// <summary>Renders the map to an SVG document string.</summary>
     /// <param name="map">The map to render.</param>
     /// <param name="options">Layer toggles and padding.</param>
-    /// <returns>A complete <c>&lt;svg&gt;</c> element: the three layers in one document.</returns>
+    /// <returns>A complete <c>&lt;svg&gt;</c> element: the four layers in one document.</returns>
     public static string Render(VectorMap map, VectorMapRenderOptions options)
     {
         var svg = new StringBuilder(64 * 1024);
         svg.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"").Append(ViewBox(map, options))
             .Append("\" preserveAspectRatio=\"xMidYMid meet\" class=\"vector-map\">")
             .Append(RenderMapLayer(map, options))
+            .Append(RenderDoorLayer(map, options))
             .Append(RenderFogLayer(map, options))
             .Append(RenderOverlayLayer(options))
             .Append("</svg>");
@@ -92,9 +109,10 @@ public static class VectorMapSvgRenderer
     }
 
     /// <summary>
-    /// The first of a DM map's three layers: the map itself (floor, walls, grid, doors, stairs and
-    /// decorations, with their definitions). It is by far the largest, and it changes only when
-    /// <see cref="MapLayerKey"/> does, so a canvas renders it again only then.
+    /// The first of a DM map's four layers: the map itself (floor, walls, grid and decorations, with their
+    /// definitions), everything but the doors and stairs. It is by far the largest, and it changes only
+    /// when <see cref="MapLayerKey"/> does, so a canvas renders it again only then. Opening a door does not
+    /// change it: the walls are masked by the door layer's <c>dt-doorgap</c>, which cuts the gaps.
     /// </summary>
     /// <param name="map">The map.</param>
     /// <param name="options">The render options.</param>
@@ -108,7 +126,47 @@ public static class VectorMapSvgRenderer
     }
 
     /// <summary>
-    /// The second layer: the fog over what the players cannot see yet, with the revealed regions and
+    /// The second layer: the doors and stairs, and the mask that cuts an open door's gap in the walls of
+    /// the map layer. A door opened, closed or found changes this layer only, which is a few kilobytes
+    /// where the map layer is often over a megabyte. Drawn right after the map layer, where the doors
+    /// were drawn when they were part of it, so the picture is the same.
+    /// </summary>
+    /// <param name="map">The map.</param>
+    /// <param name="options">The render options (doors, conceal, whether objects are drawn).</param>
+    /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element, or an empty string.</returns>
+    public static string RenderDoorLayer(VectorMap map, VectorMapRenderOptions options)
+    {
+        TryFindLayer(map.Layers, LayerKind.Walls, out MapLayer walls);
+        var svg = new StringBuilder(4 * 1024);
+        if (MasksDoorGaps(map, walls))
+        {
+            (double minX, double minY, double width, double height) = Padded(map, options.Padding);
+            string doorGap = OpenDoorHoles(map, options.Doors, StrokeWidth(walls));
+            svg.Append("<defs>");
+            AppendMaskOpen(svg, DoorGapMaskId, minX, minY, width, height, whiteBase: true);
+            if (doorGap.Length > 0)
+            {
+                svg.Append("<path d=\"").Append(doorGap).Append("\" fill=\"black\"/>");
+            }
+
+            svg.Append("</mask></defs>");
+        }
+
+        if (options.ShowObjects)
+        {
+            AppendObjects(svg, map, options, walls.Stroke.Colour.ToHex(), StrokeWidth(walls));
+        }
+
+        return svg.ToString();
+    }
+
+    // The walls are drawn through the door-gap mask whenever the map has a door: whether a door is open
+    // is the door layer's business, so the map layer must not depend on it.
+    private static bool MasksDoorGaps(VectorMap map, MapLayer walls) =>
+        map.Doors.Count > 0 && walls.Visible && walls.Stroke.Visible;
+
+    /// <summary>
+    /// The third layer: the fog over what the players cannot see yet, with the revealed regions and
     /// cells punched out of it. It covers the map but sits below the editor overlay (so the DM keeps
     /// drawing over it) and below the revealed markers it draws itself (so they read on the projector).
     /// Empty when the fog is off.
@@ -116,21 +174,98 @@ public static class VectorMapSvgRenderer
     /// <param name="map">The map (its bounds size the fog sheet).</param>
     /// <param name="options">The render options; <see cref="VectorMapRenderOptions.Fog"/> is drawn.</param>
     /// <returns>SVG markup for inside the map's <c>&lt;svg&gt;</c> element, or an empty string.</returns>
-    public static string RenderFogLayer(VectorMap map, VectorMapRenderOptions options)
+    public static string RenderFogLayer(VectorMap map, VectorMapRenderOptions options) =>
+        RenderFogLayerParts(map, options).ToMarkup();
+
+    /// <summary>
+    /// The fog layer of <see cref="RenderFogLayer"/> in the pieces a canvas sends one at a time, so that a
+    /// reveal sends only the bands of rows it touched (see <see cref="FogLayerParts"/>).
+    /// </summary>
+    /// <param name="map">The map (its bounds size the fog sheet, its grid sets the bands).</param>
+    /// <param name="options">The render options; <see cref="VectorMapRenderOptions.Fog"/> is drawn.</param>
+    /// <returns>The pieces; <see cref="FogLayerParts.None"/> when the fog is off.</returns>
+    public static FogLayerParts RenderFogLayerParts(VectorMap map, VectorMapRenderOptions options)
     {
-        if (!options.Fog.Enabled)
+        FogOverlay fog = options.Fog;
+        if (!fog.Enabled)
         {
-            return string.Empty;
+            return FogLayerParts.None;
         }
 
         (double minX, double minY, double width, double height) = Padded(map, options.Padding);
-        var svg = new StringBuilder(4 * 1024);
-        AppendFog(svg, options.Fog, minX, minY, width, height);
-        return svg.ToString();
+
+        // Reveal mask: white (fog opaque) everywhere, black (fog transparent) over revealed shapes. The
+        // shapes skip non-finite geometry, so a malformed reveal fails closed (stays fogged).
+        var shapes = new StringBuilder(1024);
+        AppendFullRect(shapes, minX, minY, width, height, "white", 1, mask: string.Empty);
+        foreach (IReadOnlyList<MapPoint> polygon in fog.RevealedPolygons)
+        {
+            if (polygon.Count >= 3 && AllFinite(polygon))
+            {
+                shapes.Append("<polygon points=\"").Append(PointsAttribute(polygon)).Append("\" fill=\"black\"/>");
+            }
+        }
+
+        var sheet = new StringBuilder(1024);
+        AppendFullRect(sheet, minX, minY, width, height, AttributeEscape(fog.FogColour), fog.FogOpacity, FogMaskId);
+        double unit = fog.UnitSize > 0 ? fog.UnitSize : 1;
+        foreach (FeatureMarker marker in fog.RevealedMarkers)
+        {
+            AppendMarkerGlyph(sheet, marker, unit, selected: false);
+        }
+
+        return new FogLayerParts
+        {
+            Enabled = true,
+            MaskId = FogMaskId,
+            X = N(minX),
+            Y = N(minY),
+            Width = N(width),
+            Height = N(height),
+            Shapes = shapes.ToString(),
+            Bands = FogBands(map, fog, minY + height),
+            Sheet = sheet.ToString(),
+        };
+    }
+
+    // The revealed cells as one path of runs per band of FogRowsPerBand rows (the cells of a row merged
+    // where they touch), rather than an element per cell: a long evening reveals thousands of cells. A band
+    // with no cells is an empty string, so the list is as long as the map is tall, whatever is revealed.
+    private static string[] FogBands(VectorMap map, FogOverlay fog, double maxY)
+    {
+        double cell = map.Grid.CellSizePx > 0 ? map.Grid.CellSizePx : fog.UnitSize;
+        double top = map.Grid.OriginY;
+        double bandHeight = cell * FogRowsPerBand;
+        int count = bandHeight > 0 && double.IsFinite(top) && maxY > top
+            ? (int)Math.Min(MaxFogBands, Math.Ceiling((maxY - top) / bandHeight))
+            : 1;
+        if (count > 1 && (maxY - top) / bandHeight > MaxFogBands)
+        {
+            // A malformed map with a tiny cell: fewer, taller bands, never thousands of pieces.
+            bandHeight = (maxY - top) / MaxFogBands;
+        }
+
+        var cellsByBand = new List<MapBounds>[Math.Max(1, count)];
+        foreach (MapBounds revealed in fog.RevealedCells)
+        {
+            double middle = (revealed.MinY + revealed.MaxY) / 2;
+            int band = count > 1 && double.IsFinite(middle) ? (int)Math.Floor((middle - top) / bandHeight) : 0;
+            band = Math.Clamp(band, 0, cellsByBand.Length - 1);
+            (cellsByBand[band] ??= new List<MapBounds>()).Add(revealed);
+        }
+
+        var bands = new string[cellsByBand.Length];
+        for (int i = 0; i < bands.Length; i++)
+        {
+            string runs = cellsByBand[i] is null ? string.Empty : CellRunsPathData(cellsByBand[i]);
+            bands[i] = runs.Length > 0 ? "<path d=\"" + runs + "\" fill=\"black\"/>" : string.Empty;
+        }
+
+        return bands;
     }
 
     /// <summary>
-    /// The third layer: the editor overlay (regions, markers, hit targets, the selection, the measured
+    /// The fourth layer: the editor overlay (regions, markers, hit targets, the selection, the measured
     /// line and the DM's pointer), on top of everything. Empty when there is no overlay.
     /// </summary>
     /// <param name="options">The render options; <see cref="VectorMapRenderOptions.Overlay"/> is drawn.</param>
@@ -149,22 +284,19 @@ public static class VectorMapSvgRenderer
 
     /// <summary>
     /// Everything <see cref="RenderMapLayer"/> depends on besides the map itself, as one string: equal keys
-    /// for the same map mean an equal map layer, so a canvas can keep the one it rendered. Only the door
-    /// and object ids that change what is drawn take part: revealing a trap marker or a room does not.
+    /// for the same map mean an equal map layer, so a canvas can keep the one it rendered. The doors are
+    /// not in it (they are <see cref="RenderDoorLayer"/>'s), and neither are reveals: only the grid and the
+    /// other switches, and which concealed decorations are still ghosted.
     /// </summary>
     /// <param name="options">The render options.</param>
     /// <returns>The key.</returns>
     public static string MapLayerKey(VectorMapRenderOptions options)
     {
-        DoorRenderState doors = options.Doors;
         ConcealState conceal = options.Conceal;
         var key = new StringBuilder();
         key.Append(options.ShowGrid ? 'G' : 'g').Append(options.ShowShadow ? 'S' : 's')
             .Append(options.ShowWallShading ? 'W' : 'w').Append(options.ShowObjects ? 'O' : 'o')
-            .Append(options.MarkSecretDoors ? 'M' : 'm').Append(N(options.Padding));
-        AppendKeyIds(key, doors.SecretDoorIds.Where(doors.IsHiddenSecret));
-        AppendKeyIds(key, doors.OpenDoorIds);
-        AppendKeyIds(key, doors.DoubleDoorIds);
+            .Append(N(options.Padding));
         AppendKeyIds(key, conceal.ConcealedIds.Where(conceal.IsHidden));
         key.Append('|').Append(RectsPathData(options.FloorHoles));
         return key.ToString();
@@ -187,9 +319,9 @@ public static class VectorMapSvgRenderer
         return (bounds.MinX - pad, bounds.MinY - pad, bounds.Width + (pad * 2), bounds.Height + (pad * 2));
     }
 
-    // Draws the book-style map itself (defs, exterior shading, floor, grid, walls, objects/decoration)
-    // in world coordinates, without the &lt;svg&gt; wrapper. Shared by the DM view (Render) and the
-    // player projector (RenderRevealed wraps it in a reveal mask), so both draw identical geometry.
+    // Draws the book-style map itself (defs, exterior shading, floor, grid, walls, decorations) in world
+    // coordinates, without the &lt;svg&gt; wrapper: the DM's map layer. The doors and stairs, and the mask
+    // that opens a door's gap in the walls, are the door layer's (RenderDoorLayer).
     private static void AppendMapContent(
         StringBuilder svg, VectorMap map, VectorMapRenderOptions options,
         double minX, double minY, double width, double height)
@@ -202,10 +334,6 @@ public static class VectorMapSvgRenderer
         // parchment, no grid), exactly like the surrounding wall.
         string floorPath = PolygonPathData(floor.Geometry) + RectsPathData(options.FloorHoles);
         string wallPath = PolygonPathData(walls.Geometry);
-
-        // Open doors punch the wall so there is a real gap (no wall drawn where an open door is), on the
-        // DM view exactly as on the player reveal. Closed doors keep their wall.
-        string doorGap = OpenDoorHoles(map, options.Doors, StrokeWidth(walls));
 
         // Floor clip: everything below the walls is confined to the floor interior. Decoration
         // sprites are defined once here and referenced by <use> at each placement.
@@ -220,12 +348,6 @@ public static class VectorMapSvgRenderer
         if (options.ShowObjects)
         {
             AppendSpriteDefs(svg, map.Sprites);
-        }
-
-        if (doorGap.Length > 0)
-        {
-            AppendMaskOpen(svg, "dt-doorgap", minX, minY, width, height, whiteBase: true);
-            svg.Append("<path d=\"").Append(doorGap).Append("\" fill=\"black\"/></mask>");
         }
 
         svg.Append("</defs>");
@@ -269,10 +391,13 @@ public static class VectorMapSvgRenderer
         bool drawWalls = walls.Visible && walls.Stroke.Visible;
         double wallOpacity = Opacity(walls.Stroke.Colour.A, walls.Alpha);
         string wallLines = PolylinePathData(walls.Geometry);
-        bool maskWalls = doorGap.Length > 0 && drawWalls;
+        // Open doors punch the wall so there is a real gap (no wall drawn where an open door is), on the
+        // DM view exactly as on the player reveal; closed doors keep their wall. The mask is the door
+        // layer's, defined after this layer, and changes without this layer changing.
+        bool maskWalls = MasksDoorGaps(map, walls);
         if (maskWalls)
         {
-            svg.Append("<g mask=\"url(#dt-doorgap)\">");
+            svg.Append("<g mask=\"url(#").Append(DoorGapMaskId).Append(")\">");
         }
 
         if (drawWalls && wallPath.Length > 0)
@@ -295,7 +420,6 @@ public static class VectorMapSvgRenderer
             // This render only ever feeds a DM-side view, so a still-concealed object is ghosted
             // rather than omitted — the DM keeps seeing (and can click) what the players cannot.
             AppendDecorations(svg, map, options.Conceal, omitHidden: false);
-            AppendObjects(svg, map, options, walls.Stroke.Colour.ToHex(), StrokeWidth(walls));
         }
     }
 
@@ -816,23 +940,6 @@ public static class VectorMapSvgRenderer
     // Flat sheet (DM view): a translucent rect with the revealed shapes punched out, so the DM sees
     // the whole map tinted where the players cannot yet see. The player projector does NOT use this —
     // it gets a culled render of only the revealed geometry (see RenderRevealed).
-    private static void AppendFog(
-        StringBuilder svg, FogOverlay fog, double minX, double minY, double width, double height)
-    {
-        // Reveal mask: white (fog opaque) everywhere, black (fog transparent) over revealed shapes.
-        AppendMaskOpen(svg, "dt-reveal", minX, minY, width, height, whiteBase: true);
-        AppendRevealShapes(svg, fog, "fill=\"black\"");
-        svg.Append("</mask>");
-
-        AppendFullRect(svg, minX, minY, width, height, AttributeEscape(fog.FogColour), fog.FogOpacity, "dt-reveal");
-
-        double unit = fog.UnitSize > 0 ? fog.UnitSize : 1;
-        foreach (FeatureMarker marker in fog.RevealedMarkers)
-        {
-            AppendMarkerGlyph(svg, marker, unit, selected: false);
-        }
-    }
-
     // ---- Player reveal render -------------------------------------------------------------------
     // The projector's SVG is built from pieces that go out in two orders. RenderRevealed puts them in one
     // document, as it always has. The player view's canvas sends them as two layers instead: the map layer
@@ -1430,28 +1537,6 @@ public static class VectorMapSvgRenderer
         double ix = vertical ? inflate : 0;
         double iy = vertical ? 0 : inflate;
         return new MapBounds(b.MinX - ix, b.MinY - iy, b.MaxX + ix, b.MaxY + iy);
-    }
-
-    // Emits the revealed polygons + cells with the given presentation attributes (fill or stroke),
-    // skipping non-finite geometry so a malformed reveal fails closed (stays fogged). The cells go out as
-    // ONE path of runs (the cells of a row merged where they touch) rather than an element per cell: a
-    // long evening reveals thousands of cells, and the mask is sent again on every reveal.
-    private static void AppendRevealShapes(StringBuilder svg, FogOverlay fog, string attributes)
-    {
-        foreach (IReadOnlyList<MapPoint> polygon in fog.RevealedPolygons)
-        {
-            if (polygon.Count >= 3 && AllFinite(polygon))
-            {
-                svg.Append("<polygon points=\"").Append(PointsAttribute(polygon)).Append("\" ")
-                    .Append(attributes).Append("/>");
-            }
-        }
-
-        string runs = CellRunsPathData(fog.RevealedCells);
-        if (runs.Length > 0)
-        {
-            svg.Append("<path d=\"").Append(runs).Append("\" ").Append(attributes).Append("/>");
-        }
     }
 
     /// <summary>

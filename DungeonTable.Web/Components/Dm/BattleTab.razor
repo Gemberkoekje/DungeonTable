@@ -236,6 +236,9 @@
 </div>
 
 @code {
+    /// <inheritdoc />
+    protected override DockTab Panel => DockTab.Battle;
+
     // Which roster editor is open, if either.
     private enum RosterKind
     {

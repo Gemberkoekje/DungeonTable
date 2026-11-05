@@ -18,9 +18,9 @@ using Microsoft.JSInterop;
 namespace DungeonTable.Tests.Rendering;
 
 /// <summary>
-/// The DM map is drawn in three layers (the map, the fog, the editor overlay) so that a reveal sends
-/// only the fog. Together they draw exactly what the single SVG did, and the map layer's key changes
-/// exactly when the map layer would.
+/// The DM map is drawn in four layers (the map, the doors, the fog, the editor overlay) so that a reveal
+/// sends only the fog and a door only the doors. Together they draw exactly what the single SVG did, and
+/// the map layer's key changes exactly when the map layer would.
 /// </summary>
 public sealed class VectorMapLayersTests
 {
@@ -93,7 +93,8 @@ public sealed class VectorMapLayersTests
     [Fact]
     public async Task A_door_opened_between_renders_shows_open_on_the_next_render()
     {
-        // The canvas keeps the map layer it rendered until its key changes; opening a door must change it.
+        // The canvas keeps the map layer it rendered until its key changes, and draws the doors on their own
+        // every render: opening a door must show in the door layer, and leave the map layer as it was.
         var open = new List<string>();
         string[] door = PlainDoors.Take(1).ToArray();
         RenderAgainHost host = null;
@@ -121,9 +122,24 @@ public sealed class VectorMapLayersTests
             return (html, output.ToHtmlString());
         });
 
-        string expected = VectorMapSvgRenderer.RenderMapLayer(Map, new VectorMapRenderOptions { Doors = new DoorRenderState { OpenDoorIds = door } });
+        string expected = VectorMapSvgRenderer.RenderDoorLayer(Map, new VectorMapRenderOptions { Doors = new DoorRenderState { OpenDoorIds = door } });
+        string mapLayer = VectorMapSvgRenderer.RenderMapLayer(Map, new VectorMapRenderOptions());
         Assert.DoesNotContain(expected, first, StringComparison.Ordinal);
         Assert.Contains(expected, second, StringComparison.Ordinal);
+        Assert.Contains(mapLayer, first, StringComparison.Ordinal);
+        Assert.Contains(mapLayer, second, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_walls_go_through_a_door_gap_mask_the_door_layer_defines_whether_a_door_is_open_or_not()
+    {
+        // Whether a door stands open is the door layer's business, so the map layer must look the same
+        // either way: its walls always refer to the mask, and the door layer always defines it.
+        VectorMapRenderOptions shut = Options();
+
+        Assert.Contains("mask=\"url(#dt-doorgap)\"", VectorMapSvgRenderer.RenderMapLayer(Map, shut), StringComparison.Ordinal);
+        Assert.Contains("<mask id=\"dt-doorgap\"", VectorMapSvgRenderer.RenderDoorLayer(Map, shut), StringComparison.Ordinal);
+        Assert.DoesNotContain("data-object-kind=\"door\"", VectorMapSvgRenderer.RenderMapLayer(Map, shut), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,10 +162,10 @@ public sealed class VectorMapLayersTests
             VectorMapSvgRenderer.MapLayerKey(Options(open: doors.Reverse().ToArray())));
     }
 
-    /// <summary>Each change to what the map layer draws, as a pair of options before and after it.</summary>
+    /// <summary>Each change to what the map layer draws.</summary>
     public static TheoryData<string> Changes => new TheoryData<string>
     {
-        "open a door", "discover a secret door", "show a concealed object", "hide the grid", "make a door double", "unmark secret doors",
+        "show a concealed object", "hide the grid",
     };
 
     [Theory]
@@ -159,16 +175,37 @@ public sealed class VectorMapLayersTests
         VectorMapRenderOptions before = Options();
         VectorMapRenderOptions after = change switch
         {
-            "open a door" => Options(open: PlainDoors.Take(1).ToArray()),
-            "discover a secret door" => Options(revealed: SecretDoors),
             "show a concealed object" => Options(revealed: Concealed.Take(1).ToArray()),
-            "hide the grid" => Options(showGrid: false),
-            "make a door double" => Options(doubles: PlainDoors.Except(DoubleDoors).Take(1).Concat(DoubleDoors).ToArray()),
-            _ => Options(markSecret: false),
+            _ => Options(showGrid: false),
         };
 
         Assert.NotEqual(VectorMapSvgRenderer.RenderMapLayer(Map, before), VectorMapSvgRenderer.RenderMapLayer(Map, after));
         Assert.NotEqual(VectorMapSvgRenderer.MapLayerKey(before), VectorMapSvgRenderer.MapLayerKey(after));
+    }
+
+    /// <summary>Each change to a door, which the door layer draws.</summary>
+    public static TheoryData<string> DoorChanges => new TheoryData<string>
+    {
+        "open a door", "discover a secret door", "make a door double", "unmark secret doors",
+    };
+
+    [Theory]
+    [MemberData(nameof(DoorChanges))]
+    public void A_change_to_a_door_redraws_the_door_layer_and_leaves_the_map_layer_alone(string change)
+    {
+        // A door on a large level used to send the whole map layer again, over half a megabyte.
+        VectorMapRenderOptions before = Options();
+        VectorMapRenderOptions after = change switch
+        {
+            "open a door" => Options(open: PlainDoors.Take(1).ToArray()),
+            "discover a secret door" => Options(revealed: SecretDoors),
+            "make a door double" => Options(doubles: PlainDoors.Except(DoubleDoors).Take(1).Concat(DoubleDoors).ToArray()),
+            _ => Options(markSecret: false),
+        };
+
+        Assert.NotEqual(VectorMapSvgRenderer.RenderDoorLayer(Map, before), VectorMapSvgRenderer.RenderDoorLayer(Map, after));
+        Assert.Equal(VectorMapSvgRenderer.RenderMapLayer(Map, before), VectorMapSvgRenderer.RenderMapLayer(Map, after));
+        Assert.Equal(VectorMapSvgRenderer.MapLayerKey(before), VectorMapSvgRenderer.MapLayerKey(after));
     }
 
     [Fact]

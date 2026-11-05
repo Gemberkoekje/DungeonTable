@@ -193,7 +193,8 @@ whichever dock tab is up.
   floor's facts behind the Room tab's ⓘ (see [Answers that come to you](#answers-that-come-to-you)).
 - **Every dock tab stays mounted**, stacked and hidden with CSS, so a tab keeps its scroll position,
   half-typed boxes and the fight's open pane. The map pane is mounted once and never hidden, because
-  the canvas keeps its pan and zoom in JS.
+  the canvas keeps its pan and zoom in JS. A hidden tab does not follow the table, only the workspace,
+  and catches up when it is shown (see [Over a slow line](#over-a-slow-line)).
 - **The fight has a layout of its own** (`DockLayout`). In a fight the DM keeps the map still and
   reads stat blocks all the time, so the Battle tab gives the dock about 72 % of the width and the
   reading tabs about 40 %. The fight's detail pane sits beside the order only when the dock has about
@@ -334,6 +335,30 @@ looks again from it; the Room tab shows the room it is in.
 The projector's circuit renders again on every change of the session, a move of the token included,
 though nothing it draws has changed: about 10 ms on a large level, and Blazor sends nothing. If it ever
 shows during a drag, key the projector's layers as `MapLayerKey` keys the DM's.
+
+## The projector glides
+
+When the frame moves (the DM drags the box, presses Frame, or the projector follows the party), the
+players see the map slide to the new view instead of jumping to it (`dt-glide.js`). The server is not
+involved: it sets the new `viewBox` as before, and the script makes the move.
+
+**The picture is drawn once and slid, never redrawn per frame.** Drawing the projector's map is
+expensive: its masks, dilations and blurs took 0.3 to 0.7 s for one full redraw in a software-rendered
+browser on the large level, two thirds of it the masks, and a low-spec laptop may be slower. Tweening
+the `viewBox` redraws it every frame and played four frames in 0.8 s. So the moment the new `viewBox`
+arrives, before the browser paints, the wrapper around the map and the DM's pointer (`.player-glide`)
+gets the transform that puts the new view exactly where the old one was on screen, and the transform
+eases to nothing over 0.8 s. A transform is the compositor's work: measured, about 17 ms a frame after
+the one redraw the change costs anyway. While it runs the map draws past its own box (`overflow:
+visible`), so the part of the map coming into view is there rather than black.
+
+- The start is worked out from what is on screen, not from the old `viewBox`: a new view during a glide
+  starts from wherever the picture is, so following the party in steps reads as one movement.
+- No glide when the map changes (the wrapper carries the map's id), when the screen changed size or
+  turned (the old view no longer maps onto it), or when the viewer asks for reduced motion.
+- Zooming in costs more for the first frame than a pan (about 1.6 s against 0.5 s in the software
+  renderer), because the browser draws the zoomed-in picture at the sharpness it ends at. A pan, which
+  is what following the party and moving the frame make, costs what a redraw always did.
 
 ## What is in each room, on the map
 
@@ -498,24 +523,72 @@ diffed as one piece: if one character changes, all of it goes again. The map use
 so every lift, door or ping sent the whole SVG again to every DM screen (1.7 MB on a large level) and to
 the projector (2.8 MB), and each browser parsed it again.
 
-`VectorMapCanvas` therefore draws a Razor `<svg>` that holds three pieces, and Blazor sends only the
-pieces whose text has changed:
+`VectorMapCanvas` therefore draws a Razor `<svg>` that holds its layers as separate pieces, and Blazor
+sends only the pieces whose text has changed:
 
 | layer | DM screen | projector |
 |---|---|---|
-| map | the map itself; drawn again only when `MapLayerKey` changes (a door, a secret door found, a concealed object shown, the grid) | the floor, wall and grid geometry as definitions, the floor clip, the hatch and the sprites; once per map |
-| middle | the fog: revealed rooms, and the revealed cells as one path of row runs | the revealed tiles, the peek rings and the walls, drawing the geometry with `use` |
+| map | the map itself, without its doors; drawn again only when `MapLayerKey` changes (a concealed decoration shown, the grid) | the floor, wall and grid geometry as definitions, the floor clip, the hatch and the sprites; once per map |
+| doors | the doors and stairs, and the `dt-doorgap` mask the map layer's walls are drawn through, which cuts an open door's gap | (none) |
+| middle | the fog: revealed rooms, and the revealed cells as one path of row runs per band of rows | the revealed tiles, the peek rings and the walls, drawing the geometry with `use` |
 | top | the editor overlay | the doors, stairs, decorations and markers, clipped to the revealed tiles |
 
 On a large level a lift now sends a few kilobytes to each DM screen and 5 to 40 KB to the projector.
 The `<svg>` element itself now stays in place between renders, so an empty `g.dt-live` group kept last
 in it holds the editor's drag previews above the layers when Blazor replaces one.
 
+**A door sends the door layer only.** The doors were part of the map layer, so opening one sent the
+whole map again: on a 138×177-cell level 1.65 MB, 586 KB on the wire after compression, over the DM's
+connection. The doors are drawn right after the map, where they were drawn inside it, so the picture
+is the same. What a door changes in the map itself, the gap in the wall, is a mask the walls refer to
+and the door layer defines; the walls refer to it whenever the map has a door, open or not, so the map
+layer does not depend on the doors at all.
+
+**The DM's fog goes in bands.** Its mask is an element of its own in the canvas, holding the revealed
+cells as one path of runs per eight rows (`FogLayerParts`), so a step of the party token sends the
+three or four bands its view touched instead of every cell revealed all evening. There is a band for
+every eight rows whether anything is revealed there or not, so the list keeps its length and each band
+its place, which is how Blazor matches them from one render to the next.
+
 `Render` and `RenderRevealed` still return one SVG, built from the same pieces, and tests hold the
 layers to them: the DM canvas must produce exactly `Render`'s output, and the projector's layers, with
-each `use` expanded into what it draws, must define and paint exactly what `RenderRevealed` does. A
-door still sends the DM's whole map layer again; the doors could move to a layer of their own if that
-ever matters.
+each `use` expanded into what it draws, must define and paint exactly what `RenderRevealed` does.
+
+## Over a slow line
+
+The app runs on a home server, the DM screen often on a laptop tethered to a phone, and the projector
+on another network. Every message to a browser and every acknowledgement back crosses the phone's
+link, and at the table the projector lagged seconds behind the DM. Measured on a 138×177-cell level
+with half of it revealed, three things kept the line busy besides the doors above:
+
+- **One change rendered the DM screen many times.** Every map pane and dock tab listened to the shared
+  state itself and rendered on its own, so a move of the frame made seven render batches and a step of
+  the party token about three, each a message and an acknowledgement. Now the shell (`DmView`) is the
+  only listener: several changes arriving together (a step moves the party, frames the projector and
+  shows a room) make one refresh, and the tabs render with it because the shell cascades a revision
+  that `DmTabBase` takes, which re-renders every tab in the shell's own batch. The revision is needed
+  at all because Blazor skips a child whose parameters did not change, and the Battle tab has none.
+- **Hidden tabs rendered for nothing.** All four dock tabs stay mounted and three are hidden, but a
+  render of a hidden tab is sent all the same, and every render of a tab sends a new id for every
+  button whose handler is a lambda: on the large level 213 of the screen's 274 handlers sat in the
+  hidden Campaign, Art and Battle tabs, and a render of the whole screen was about 14 KB, on every step
+  of the token. A tab names its panel (`DmTabBase.Panel`)
+  and the shell cascades which is up; a hidden tab renders only when the workspace changes (a map
+  loaded, a room shown, the content read again, which are rare), and catches up on the rest when it is
+  shown, since showing it re-renders it.
+- **Every render called the map's scripts four times.** The canvas told pan and zoom, the player-view
+  box, the party token and the editor where things stood after every render, whatever had changed,
+  each call a round trip. Now it makes one call (`dtCanvas.sync`), carrying only what changed since the
+  scripts were last told (`CanvasScripts`), and none when nothing did. What a script moved itself (the
+  box or the token the DM dragged) is told again after the next render whatever the server says,
+  because the server may have put it back where it was.
+
+Over the DM's link, before and after: a 30-square drag of the party token went from 59 KB and 284
+messages down (311 up) to 9 KB and 100 (123 up); a move of the frame from 16 messages to 3; a door from
+586 KB to 7 KB. A step is now two render batches (the event's own and the shell's) and one script call.
+The projector's line was never the problem: a move of the frame sends it under 300 bytes, a step about
+1 KB. The pod's CPU limit, which throttled these renders in bursts, is raised in the cluster's own
+repository.
 
 ## Persistence
 

@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Rendering
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @*
@@ -11,14 +12,20 @@
         draws in MapOverlay.
       - ViewBox restricts the SVG to a world-unit region (the player view shows only that box).
 
-    The map is drawn in three layers inside one svg element. On the DM's map they are the map itself,
-    the fog, and the editor overlay; on the projector (Fog.BookEdge) the map's geometry, the revealed
-    area drawn from it, and the doors, objects and markers on that area. Each is its own piece of
-    markup, and Blazor sends a piece only when its text has changed, so a reveal sends the middle
-    layer (kilobytes) and not the map (often over a megabyte). The map layer is rendered again only
-    when the map, or on the DM's map what MapLayerKey covers, changes. The empty g.dt-live group comes
-    last, so the editor script's drag previews drawn into it stay on top of the layers when Blazor
-    replaces one.
+    The map is drawn in layers inside one svg element. On the DM's map they are the map itself, the
+    doors and stairs, the fog, and the editor overlay; on the projector (Fog.BookEdge) the map's
+    geometry, the revealed area drawn from it, and the doors, objects and markers on that area. Each is
+    its own piece of markup, and Blazor sends a piece only when its text has changed, so a reveal sends
+    the fog (kilobytes) and a door the door layer, not the map (often over a megabyte). The map layer is
+    rendered again only when the map, or on the DM's map what MapLayerKey covers, changes. The DM's fog
+    goes in smaller pieces still: its mask is an element of its own here, holding the revealed squares
+    in bands of rows (FogLayerParts), so a step of the party token sends the bands it touched. The empty
+    g.dt-live group comes last, so the editor script's drag previews drawn into it stay on top of the
+    layers when Blazor replaces one.
+
+    After a render the canvas tells its scripts (pan and zoom, the player-view box, the party token, the
+    editor) what changed, in one call (dtCanvas.sync), and only what changed: on a phone's hotspot every
+    call is a round trip, and a render used to make four whatever had changed.
 *@
 
 <style>
@@ -315,16 +322,49 @@ else
     // The key the projector's map layer is kept under: it depends on the map alone.
     private const string ProjectorMapLayerKey = "projector";
 
-    // The three layers (see the comment at the top), and what the map layer was rendered from.
+    // The layers (see the comment at the top), and what the map layer was rendered from.
     private string viewBox = string.Empty;
     private string mapLayer = string.Empty;
+    private string doorLayer = string.Empty;
     private string middleLayer = string.Empty;
+    private FogLayerParts fogParts = FogLayerParts.None;
     private string topLayer = string.Empty;
     private VectorMap mapLayerMap;
     private string mapLayerKey = string.Empty;
 
+    // What the scripts were last told after a render (see SyncScriptsAsync).
+    private readonly CanvasScripts told = new CanvasScripts();
+
     private RenderFragment MapSvg =>
-        @<svg xmlns="http://www.w3.org/2000/svg" viewBox="@viewBox" preserveAspectRatio="xMidYMid meet" class="vector-map">@((MarkupString)mapLayer)@((MarkupString)middleLayer)@((MarkupString)topLayer)<g class="dt-live"></g></svg>;
+        @<svg xmlns="http://www.w3.org/2000/svg" viewBox="@viewBox" preserveAspectRatio="xMidYMid meet" class="vector-map">@((MarkupString)mapLayer)@((MarkupString)doorLayer)@RenderFog@((MarkupString)topLayer)<g class="dt-live"></g></svg>;
+
+    // The DM's fog as an element with its pieces inside (FogLayerParts), so Blazor sends only the pieces
+    // that changed; the projector's middle layer as one piece. The bands keep their places: there is one
+    // for every few rows of the map whether anything is revealed there or not.
+    private void RenderFog(RenderTreeBuilder builder)
+    {
+        if (!fogParts.Enabled)
+        {
+            builder.AddMarkupContent(0, middleLayer);
+            return;
+        }
+
+        builder.OpenElement(1, "mask");
+        builder.AddAttribute(2, "id", fogParts.MaskId);
+        builder.AddAttribute(3, "maskUnits", "userSpaceOnUse");
+        builder.AddAttribute(4, "x", fogParts.X);
+        builder.AddAttribute(5, "y", fogParts.Y);
+        builder.AddAttribute(6, "width", fogParts.Width);
+        builder.AddAttribute(7, "height", fogParts.Height);
+        builder.AddMarkupContent(8, fogParts.Shapes);
+        foreach (string band in fogParts.Bands)
+        {
+            builder.AddMarkupContent(9, band);
+        }
+
+        builder.CloseElement();
+        builder.AddMarkupContent(10, fogParts.Sheet);
+    }
 
     protected override void OnParametersSet()
     {
@@ -351,6 +391,8 @@ else
         {
             viewBox = VectorMapSvgRenderer.RevealedViewBox(Map, ViewBox);
             KeepMapLayer(ProjectorMapLayerKey, () => VectorMapSvgRenderer.RenderRevealedMapLayer(Map));
+            doorLayer = string.Empty;
+            fogParts = FogLayerParts.None;
             (middleLayer, topLayer) = VectorMapSvgRenderer.RenderRevealedLayers(
                 Map, Fog.RevealedPolygons, Fog.RevealedCells, Fog.RevealedMarkers, doors, conceal);
             return;
@@ -370,7 +412,9 @@ else
 
         viewBox = VectorMapSvgRenderer.ViewBox(Map, options);
         KeepMapLayer(VectorMapSvgRenderer.MapLayerKey(options), () => VectorMapSvgRenderer.RenderMapLayer(Map, options));
-        middleLayer = VectorMapSvgRenderer.RenderFogLayer(Map, options);
+        doorLayer = VectorMapSvgRenderer.RenderDoorLayer(Map, options);
+        middleLayer = string.Empty;
+        fogParts = VectorMapSvgRenderer.RenderFogLayerParts(Map, options);
         topLayer = VectorMapSvgRenderer.RenderOverlayLayer(options);
     }
 
@@ -399,57 +443,32 @@ else
         {
             if (firstRender)
             {
-                await JS.InvokeVoidAsync("dtPanZoom.attach", boxRef);
+                if (ShowPlayerBox || EnableEditor || ShowPartyToken || PeekRooms)
+                {
+                    selfRef ??= DotNetObjectReference.Create(this);
+                }
+
+                // One call sets up every script the canvas uses. The player-view box starts where the
+                // server has it, so the first sync need not tell it again.
+                object playerBox = ShowPlayerBox
+                    ? new
+                    {
+                        world = new { x = PlayerViewport.MinX, y = PlayerViewport.MinY, w = PlayerViewport.Width, h = PlayerViewport.Height },
+                        aspect = PlayerAspect,
+                        turns = PlayerTurns,
+                        held = PlayerBoxHeld,
+                    }
+                    : null;
+                await JS.InvokeVoidAsync(
+                    "dtCanvas.attach", boxRef, selfRef,
+                    new { playerBox, editor = EnableEditor, party = ShowPartyToken, peek = PeekRooms });
                 if (ShowPlayerBox)
                 {
-                    selfRef ??= DotNetObjectReference.Create(this);
-                    await JS.InvokeVoidAsync(
-                        "dtPlayerBox.init", boxRef, selfRef,
-                        new { x = PlayerViewport.MinX, y = PlayerViewport.MinY, w = PlayerViewport.Width, h = PlayerViewport.Height },
-                        PlayerAspect, PlayerTurns, PlayerBoxHeld);
-                }
-
-                if (EnableEditor)
-                {
-                    selfRef ??= DotNetObjectReference.Create(this);
-                    await JS.InvokeVoidAsync("dtEditor.attach", boxRef, selfRef);
-                }
-
-                if (ShowPartyToken)
-                {
-                    selfRef ??= DotNetObjectReference.Create(this);
-                    await JS.InvokeVoidAsync("dtParty.attach", boxRef, selfRef);
-                }
-
-                if (PeekRooms)
-                {
-                    selfRef ??= DotNetObjectReference.Create(this);
-                    await JS.InvokeVoidAsync("dtPeek.attach", boxRef, selfRef);
+                    told.PlayerBoxSetUp(PlayerViewport, PlayerAspect, PlayerTurns, PlayerBoxHeld);
                 }
             }
 
-            await JS.InvokeVoidAsync("dtPanZoom.apply", boxRef);
-            if (ShowPlayerBox)
-            {
-                await JS.InvokeVoidAsync(
-                    "dtPlayerBox.update", boxRef,
-                    PlayerViewport.MinX, PlayerViewport.MinY, PlayerViewport.Width, PlayerViewport.Height, PlayerAspect, PlayerTurns, PlayerBoxHeld);
-            }
-
-            if (ShowPartyToken)
-            {
-                await JS.InvokeVoidAsync(
-                    "dtParty.update", boxRef, Party.IsPlaced, Party.X, Party.Y, PartyVisionRadius,
-                    Map.Grid.CellSizePx, Map.Grid.OriginX, Map.Grid.OriginY, PartyDraggable);
-            }
-
-            if (EnableEditor)
-            {
-                // The grid origin goes over with the cell size so the measuring tool's live figure
-                // is computed against the same absolute cells the server counts — see dt-editor.js.
-                await JS.InvokeVoidAsync(
-                    "dtEditor.setTool", boxRef, EditorTool, Overlay.UnitSize, Map.Grid.OriginX, Map.Grid.OriginY);
-            }
+            await SyncScriptsAsync();
         }
         catch (JSDisconnectedException)
         {
@@ -458,6 +477,58 @@ else
         catch (OperationCanceledException)
         {
             // The render was cancelled during teardown; nothing to update.
+        }
+    }
+
+    // Tells the scripts what changed since they were last told, in one call, and makes no call when
+    // nothing did. A part goes as null when it is unchanged. What a script moved itself (the box, the
+    // token) is told again on the next render whatever it is, since the server may have put it back.
+    private async Task SyncScriptsAsync()
+    {
+        bool apply = told.PanZoomChanged(viewBox);
+
+        object playerBox = null;
+        if (ShowPlayerBox && told.PlayerBoxChanged(PlayerViewport, PlayerAspect, PlayerTurns, PlayerBoxHeld))
+        {
+            playerBox = new
+            {
+                x = PlayerViewport.MinX,
+                y = PlayerViewport.MinY,
+                w = PlayerViewport.Width,
+                h = PlayerViewport.Height,
+                aspect = PlayerAspect,
+                turns = PlayerTurns,
+                held = PlayerBoxHeld,
+            };
+        }
+
+        object party = null;
+        if (ShowPartyToken && told.PartyChanged(Party, PartyVisionRadius, Map.Grid, PartyDraggable))
+        {
+            party = new
+            {
+                placed = Party.IsPlaced,
+                x = Party.X,
+                y = Party.Y,
+                radius = PartyVisionRadius,
+                cell = Map.Grid.CellSizePx,
+                originX = Map.Grid.OriginX,
+                originY = Map.Grid.OriginY,
+                draggable = PartyDraggable,
+            };
+        }
+
+        // The grid origin goes over with the cell size so the measuring tool's live figure is computed
+        // against the same absolute cells the server counts (see dt-editor.js).
+        object editor = null;
+        if (EnableEditor && told.EditorChanged(EditorTool, Overlay.UnitSize, Map.Grid))
+        {
+            editor = new { tool = EditorTool, unit = Overlay.UnitSize, originX = Map.Grid.OriginX, originY = Map.Grid.OriginY };
+        }
+
+        if (apply || playerBox is not null || party is not null || editor is not null)
+        {
+            await JS.InvokeVoidAsync("dtCanvas.sync", boxRef, apply, playerBox, party, editor);
         }
     }
 
@@ -502,9 +573,12 @@ else
     /// <param name="kind">"walk" for the first report of a drag, "walk-on" for the rest.</param>
     /// <returns>A task that completes once the move has been handled, which lets the next report go.</returns>
     [JSInvokable]
-    public Task OnPartyMoved(double worldX, double worldY, string kind) =>
-        PartyMoved.InvokeAsync(new PartyStep(
+    public Task OnPartyMoved(double worldX, double worldY, string kind)
+    {
+        told.ForgetParty();
+        return PartyMoved.InvokeAsync(new PartyStep(
             worldX, worldY, string.Equals(kind, "walk", StringComparison.Ordinal) ? PartyMoveKind.Walk : PartyMoveKind.WalkOn));
+    }
 
     /// <summary>Invoked from JS when the pointer has rested on a region, or has left it.</summary>
     /// <param name="regionId">The region's id, or an empty string when the card should go.</param>
@@ -515,7 +589,11 @@ else
     /// <summary>Invoked from JS when the DM clicks the party token without dragging it.</summary>
     /// <returns>A task that completes once the click has been handled.</returns>
     [JSInvokable]
-    public Task OnPartyClicked() => PartyClicked.InvokeAsync();
+    public Task OnPartyClicked()
+    {
+        told.ForgetParty();
+        return PartyClicked.InvokeAsync();
+    }
 
     /// <summary>Invoked from JS when the DM moves or resizes the box.</summary>
     /// <param name="x">Left edge in world units.</param>
@@ -523,8 +601,11 @@ else
     /// <param name="w">Width in world units.</param>
     /// <param name="h">Height in world units.</param>
     [JSInvokable]
-    public Task OnPlayerBoxChanged(double x, double y, double w, double h) =>
-        PlayerViewportChanged.InvokeAsync(new MapBounds(x, y, x + w, y + h));
+    public Task OnPlayerBoxChanged(double x, double y, double w, double h)
+    {
+        told.ForgetPlayerBox();
+        return PlayerViewportChanged.InvokeAsync(new MapBounds(x, y, x + w, y + h));
+    }
 
     /// <summary>
     /// Pans the view so a world point sits at the centre of the box, optionally zooming about it.
