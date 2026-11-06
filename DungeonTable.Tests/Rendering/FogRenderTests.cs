@@ -119,10 +119,10 @@ public sealed class FogRenderTests
     }
 
     [Fact]
-    public void Revealed_cells_are_one_path_whatever_their_number()
+    public void Revealed_cells_are_one_path_per_band_of_rows_whatever_their_number()
     {
-        // A long evening reveals thousands of cells; the mask is sent again with every reveal, so it must
-        // not grow an element per cell.
+        // A long evening reveals thousands of cells, so the mask must not grow an element per cell. Rows 0
+        // to 8 of a map of 10-unit cells lie in two bands of eight rows.
         var cells = new List<MapBounds>();
         for (int col = 0; col < 10; col++)
         {
@@ -136,8 +136,43 @@ public sealed class FogRenderTests
 
         string fog = VectorMapSvgRenderer.RenderFogLayer(SimpleMap(), options);
 
-        Assert.Equal(1, Count(fog, "<path "));
+        Assert.Equal(2, Count(fog, "<path "));
         Assert.Equal(0, Count(fog, "<rect x=\"0\" y=\"0\" width=\"10\""));
+    }
+
+    [Fact]
+    public void A_reveal_changes_only_the_band_it_lies_in()
+    {
+        // The mask is sent again on every reveal, a piece at a time: a step of the party token far down the
+        // map must leave the bands above it as they were, and the number of bands as it was.
+        var map = new VectorMap { Bounds = new MapBounds(0, 0, 100, 400), Grid = new Grid { CellSizePx = 10, Rows = 40 } };
+        var near = new List<MapBounds> { new MapBounds(0, 0, 10, 10), new MapBounds(10, 30, 20, 40) };
+        var far = new List<MapBounds>(near) { new MapBounds(50, 300, 60, 310) };
+
+        FogLayerParts before = VectorMapSvgRenderer.RenderFogLayerParts(map, new VectorMapRenderOptions { Fog = new FogOverlay { Enabled = true, RevealedCells = near } });
+        FogLayerParts after = VectorMapSvgRenderer.RenderFogLayerParts(map, new VectorMapRenderOptions { Fog = new FogOverlay { Enabled = true, RevealedCells = far } });
+
+        Assert.Equal(before.Bands.Count, after.Bands.Count);
+        int[] changed = Enumerable.Range(0, after.Bands.Count)
+            .Where(band => !string.Equals(before.Bands[band], after.Bands[band], StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(30 / VectorMapSvgRenderer.FogRowsPerBand, Assert.Single(changed));
+        Assert.Equal(before.Shapes, after.Shapes);
+    }
+
+    [Fact]
+    public void The_bands_put_together_are_the_fog_layer()
+    {
+        var map = new VectorMap { Bounds = new MapBounds(0, 0, 100, 400), Grid = new Grid { CellSizePx = 10, Rows = 40 } };
+        var options = new VectorMapRenderOptions
+        {
+            Fog = new FogOverlay { Enabled = true, RevealedCells = new[] { new MapBounds(0, 0, 10, 10), new MapBounds(50, 300, 60, 310) } },
+        };
+
+        FogLayerParts parts = VectorMapSvgRenderer.RenderFogLayerParts(map, options);
+
+        Assert.Equal(VectorMapSvgRenderer.RenderFogLayer(map, options), parts.ToMarkup());
+        Assert.StartsWith("<mask id=\"dt-reveal\" maskUnits=\"userSpaceOnUse\"", parts.ToMarkup(), StringComparison.Ordinal);
     }
 
     private static int Count(string text, string part)

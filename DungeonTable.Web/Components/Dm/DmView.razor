@@ -39,6 +39,11 @@
     ProjectorView projector = Session.Projector();
 }
 
+@* The revision re-renders every tab with the shell, in one render, and a dock tab renders only while it
+   is up (DmTabBase). *@
+<CascadingValue Name="@DmTabBase.RevisionName" Value="revision">
+<CascadingValue Name="@DmTabBase.WorkspaceRevisionName" Value="workspaceRevision">
+<CascadingValue Name="@DmTabBase.ActiveTabName" Value="activeTab">
 <div class="dm-shell @LayoutClass @(drawerOpen ? "drawer-open" : string.Empty)" @ref="shellRef">
     @* The bar belongs to the shell: the DM must be able to see and reframe what the projector shows
        whatever the dock is showing. *@
@@ -217,6 +222,9 @@
         </aside>
     </div>
 </div>
+</CascadingValue>
+</CascadingValue>
+</CascadingValue>
 
 @code {
     private static readonly (DockTab Tab, string Label)[] Tabs =
@@ -249,14 +257,21 @@
 
     private DotNetObjectReference<DmView> selfRef;
 
+    // The revisions cascaded to the tabs (any change; a change of the workspace), and whether a refresh
+    // is already waiting (OnStateChanged).
+    private int revision;
+    private int workspaceRevision;
+    private int refreshQueued;
+
     protected override async Task OnInitializedAsync()
     {
         Session.Changed += OnStateChanged;
-        Workspace.Changed += OnStateChanged;
+        Workspace.Changed += OnWorkspaceChanged;
         Persistence.Changed += OnStateChanged;
         Live.Changed += OnContentChanged;
 
         await Workspace.InitialiseAsync(CancellationToken.None);
+        workspaceRevision++;
         selectedMapId = Workspace.CurrentMapId;
     }
 
@@ -441,13 +456,42 @@
     private Task CentreMapOn(MapPoint point) =>
         mapPane is null ? Task.CompletedTask : mapPane.CenterOnAsync(point.X, point.Y, CentreZoom);
 
-    // Every change of the shared state may have moved the party, by this window, another one or an
-    // undo, so the workspace follows it first, here on this circuit's own dispatcher.
-    private void OnStateChanged() => InvokeAsync(() =>
+    // The workspace is this circuit's own and changes on its dispatcher. A change of it reaches even the
+    // hidden dock tabs (DmTabBase), which a change of the table alone does not.
+    private void OnWorkspaceChanged()
     {
-        Workspace.FollowParty();
-        StateHasChanged();
-    });
+        workspaceRevision++;
+        OnStateChanged();
+    }
+
+    // Every change of the shared state may have moved the party, by this window, another one or an
+    // undo, so the workspace follows it first, here on this circuit's own dispatcher. One action often
+    // raises several changes (a step of the token moves the party, frames the projector and shows the
+    // room it walked into), so a refresh already waiting takes the later ones along: one render, one
+    // message to the browser, not one per change.
+    private void OnStateChanged()
+    {
+        if (Interlocked.Exchange(ref refreshQueued, 1) == 1)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            try
+            {
+                Workspace.FollowParty();
+            }
+            finally
+            {
+                // From here on a change asks for a render of its own: this one may have read too early.
+                Interlocked.Exchange(ref refreshQueued, 0);
+            }
+
+            revision++;
+            StateHasChanged();
+        });
+    }
 
     // Register the global keyboard shortcuts and the dock's divider once the circuit is live: Alt+Left /
     // Alt+Right for the reference history, Ctrl+1..4 for the dock and 1-8 for the map's tools.
@@ -643,7 +687,7 @@
     public async ValueTask DisposeAsync()
     {
         Session.Changed -= OnStateChanged;
-        Workspace.Changed -= OnStateChanged;
+        Workspace.Changed -= OnWorkspaceChanged;
         Persistence.Changed -= OnStateChanged;
         Live.Changed -= OnContentChanged;
 

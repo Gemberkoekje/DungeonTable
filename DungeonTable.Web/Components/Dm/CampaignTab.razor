@@ -26,6 +26,9 @@
 </div>
 
 @code {
+    /// <inheritdoc />
+    protected override DockTab Panel => DockTab.Campaign;
+
     /// <summary>Raised when a link here led to a room, so the dock can show the Room tab.</summary>
     [Parameter]
     public EventCallback OnShowRoom { get; set; }

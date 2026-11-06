@@ -159,6 +159,9 @@
 </div>
 
 @code {
+    /// <inheritdoc />
+    protected override DockTab Panel => DockTab.Room;
+
     /// <summary>Raised with a world point when the DM asks to centre their map on the shown room.</summary>
     [Parameter]
     public EventCallback<MapPoint> OnShowOnMap { get; set; }

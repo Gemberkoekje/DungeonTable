@@ -177,6 +177,9 @@
 </div>
 
 @code {
+    /// <inheritdoc />
+    protected override DockTab Panel => DockTab.Art;
+
     // How many catalogue entries the picker shows at once. The Level 1 set is under a hundred, so
     // this is really a guard for later levels: a grid of 400 thumbnails would stall the circuit.
     private const int PickerLimit = 60;

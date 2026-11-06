@@ -76,7 +76,9 @@ the map instead: **Tab**, or the **Dock** button in the bar, brings it out and p
 
 Rooms the players can see are drawn light; the rest are shaded. The box labelled **Player view** is
 exactly what the projector shows. Drag it by its border to move the projector's view, or by a corner to
-zoom in or out, or press **Frame**. While the projector is on another map, the box is dashed and says
+zoom in or out, or press **Frame**. The projector follows when you let go of the box, and glides there
+rather than jumping, so the players see the map move; it jumps when it changes map or turns, and stays
+still for a viewer whose system asks for reduced motion. While the projector is on another map, the box is dashed and says
 **not on the projector yet**: it is where the projector will look once you show the players this map. Drag anywhere else on the map to pan it, and use the mouse wheel
 (or **+**, **−** and **Reset** at the bottom right) to zoom.
 

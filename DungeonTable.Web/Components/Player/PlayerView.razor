@@ -33,6 +33,10 @@
     .player-turn.turn-1 { transform: translate(-50%, -50%) rotate(90deg); }
     .player-turn.turn-2 { transform: rotate(180deg); }
     .player-turn.turn-3 { transform: translate(-50%, -50%) rotate(270deg); }
+
+    /* The map and the pointer together, which dt-glide.js slides from the old view to the new one with a
+       transform about the top left corner, the corner the slide is worked out from. */
+    .player-glide { position: absolute; inset: 0; transform-origin: 0 0; }
     .player-fog { display: flex; align-items: center; justify-content: center; height: 100%; color: #cfc7b5; text-align: center; }
 
     /* The projector is set up once and then left running for hours: the mouse pointer parked over a
@@ -116,6 +120,9 @@
    it did not change alone, so the idle state survives the re-renders the DM's reveals cause. *@
 <div class="player-stage" @ref="stageRef">
     <div class="player-turn turn-@Session.PlayerTurns">
+    @* The map and the pointer glide together from one view to the next (dt-glide.js), and only on one
+       map: the wrapper says which. *@
+    <div class="player-glide" data-map="@loadedMapId">
     @if (showing)
     {
         <VectorMapCanvas Map="map" ViewBox="view.Viewport" CssClass="player-map"
@@ -152,6 +159,7 @@
             </g>
         </svg>
     }
+    </div>
     </div>
 
     @* The DM's picture, laid over the map. Inside the stage so fullscreen covers it, and after the
@@ -374,6 +382,7 @@
             selfRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("dtAspect.watch", stageRef, selfRef);
             await JS.InvokeVoidAsync("dtProjector.attach", stageRef, selfRef);
+            await JS.InvokeVoidAsync("dtGlide.attach", stageRef);
         }
     }
 
@@ -447,12 +456,30 @@
 
     // The DM may put another map on the projector mid-session (ShowCurrentMapOnProjector). Reload the
     // player's geometry when that happens; otherwise this is a reveal/viewport change and a re-render
-    // is enough.
-    private void OnSessionChanged() => InvokeAsync(async () =>
+    // is enough. Changes that arrive while one is waiting (or a map loads) are taken along by it.
+    private void OnSessionChanged()
     {
-        await SyncMap();
-        StateHasChanged();
-    });
+        if (Interlocked.Exchange(ref refreshQueued, 1) == 1)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await SyncMap();
+            }
+            finally
+            {
+                Interlocked.Exchange(ref refreshQueued, 0);
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private int refreshQueued;
 
     // Follow the projector's map, serialized with a flag + loop so rapid map switches (each awaits an
     // async load) can't interleave two LoadMap calls over the shared geometry. A switch that arrives
@@ -489,6 +516,7 @@
         {
             await JS.InvokeVoidAsync("dtAspect.unwatch", stageRef);
             await JS.InvokeVoidAsync("dtProjector.detach");
+            await JS.InvokeVoidAsync("dtGlide.detach");
         }
         catch (JSDisconnectedException)
         {
