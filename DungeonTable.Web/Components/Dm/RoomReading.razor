@@ -94,6 +94,7 @@
                         {
                             <button type="button" class="ref-link" title="Open reference card"
                                     @onclick="() => OnOpenReference.InvokeAsync(occupant.NodeId)">@occupant.Label</button>
+                            <PictureButton TargetId="@occupant.NodeId" />
                         }
                         else
                         {

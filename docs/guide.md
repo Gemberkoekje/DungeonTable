@@ -324,6 +324,12 @@ round the corner, or a handout.
   right. Each picture keeps its own, so the tray shows each one as you set it. A tall picture turned on
   its side fills a wide screen at **Full**.
 - **Add from the fight** adds a picture for every creature in the running fight that has one.
+- **From a mention, in one click.** Wherever the DM screen names something that has a picture (a link
+  in the text, a creature in the encounter or the occupants, a card's title, the Battle tab's detail
+  pane), a small framed-picture button sits beside it: click it and that picture is on the projector,
+  click it again and it comes down. It is lit while its picture is the one the players see, everywhere
+  it appears. A card for something with several pictures lists them all by title. A picture belongs to
+  what its catalogue entry says it **shows** ([content-format.md §5.15](content-format.md#515-artcataloguejson-pictures-for-the-projector)).
 - **Your own pictures**, at the bottom, adds one from your computer. It is converted to WebP and kept
   in `data/art/uploads/`.
 
@@ -624,7 +630,8 @@ of its own, described in [content-format.md](content-format.md) and shown in the
 - **`sessions.json`** and **`story.json`**: tonight's prep, and what happened before.
 - **`relations.json`**, or a level's `relations`: who is tied to whom.
 - **`monsters.json`** and **`spells.json`**: your own stat blocks, beside the SRD's.
-- **`data/art/catalogue.json`**: pictures for the Art tab.
+- **`data/art/catalogue.json`**: pictures for the Art tab, each with who or what it **shows**, so a
+  mention of them puts the picture on the projector in one click.
 - **`data/book-index/`**: what the books a campaign is run from say, so search and links can reach
   them without copying them.
 

@@ -1,0 +1,103 @@
+@implements IDisposable
+@*
+    The small picture button beside a mention: one click puts the picture of what is mentioned on the
+    projector, the next takes it down again. It is lit while that picture is the one the players see.
+
+    It shows the best picture of the thing a link names (IPictureLinks.PicturesOf: the one that names it
+    first, then the one that shows least), or the Index-th of them, with its title, where a card lists
+    them all. A thing with no picture gets no button, and outside the DM screen, which cascades the
+    ProjectorPictures, nothing shows at all: a render test, or prose shown somewhere with no projector.
+
+    Its parameters are text and numbers, so a parent that renders again does not render it again: its
+    click handler keeps its id, and the DM's line does not carry a button per mention on every step of
+    the party token. It renders on its own when its picture goes up or down, and only then.
+*@
+
+@if (Index < Shown.Count)
+{
+    ArtImage picture = Shown[Index];
+    bool lit = Pictures.IsShowing(picture.Id);
+    string tip = lit ? $"Take “{picture.Title}” off the projector" : $"Show “{picture.Title}” on the projector";
+    string css = "picture-btn" + (lit ? " on" : string.Empty) + (WithTitle ? " with-title" : string.Empty);
+    <button type="button" class="@css"
+            aria-pressed="@(lit ? "true" : "false")" title="@tip" aria-label="@tip"
+            @onclick="() => Pictures.Toggle(picture.Id)">
+        <svg class="picture-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="5.5" cy="6.2" r="1.4" fill="currentColor" /><path d="M2.5 12.5 L6.5 8.5 L9 11 L11 9 L14 12.5 Z" fill="currentColor" /></svg>
+        @if (WithTitle)
+        {
+            <span class="picture-title">@picture.Title</span>
+        }
+    </button>
+}
+
+@code {
+    /// <summary>
+    /// The id the mention's link resolved to ("wenna-brask", "data_statblocks_monsters_gargoyle"): the
+    /// button shows a picture of that.
+    /// </summary>
+    [Parameter]
+    public string TargetId { get; set; } = string.Empty;
+
+    /// <summary>Which of the thing's pictures, best first; 0, the best, unless a card lists them all.</summary>
+    [Parameter]
+    public int Index { get; set; }
+
+    /// <summary>True to show the picture's title beside the icon, for a card's list of pictures.</summary>
+    [Parameter]
+    public bool WithTitle { get; set; }
+
+    /// <summary>The pictures and the projector, cascaded by the DM screen; absent elsewhere.</summary>
+    [CascadingParameter]
+    private ProjectorPictures Pictures { get; set; }
+
+    // What the button showed when it last rendered, so a change elsewhere renders it only when this
+    // button would look different.
+    private string rendered = string.Empty;
+
+    private IReadOnlyList<ArtImage> Shown =>
+        Pictures is null ? Array.Empty<ArtImage>() : Pictures.Of(TargetId);
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        if (Pictures is not null)
+        {
+            Pictures.Changed += OnPicturesChanged;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet() => rendered = Look();
+
+    /// <summary>Stops following the projector.</summary>
+    public void Dispose()
+    {
+        if (Pictures is not null)
+        {
+            Pictures.Changed -= OnPicturesChanged;
+        }
+    }
+
+    // The picture this button stands for and whether it is up, as one string to compare.
+    private string Look()
+    {
+        IReadOnlyList<ArtImage> shown = Shown;
+        if (Index >= shown.Count)
+        {
+            return string.Empty;
+        }
+
+        string id = shown[Index].Id;
+        return Pictures.IsShowing(id) ? id + "|on" : id;
+    }
+
+    private void OnPicturesChanged() => InvokeAsync(() =>
+    {
+        string now = Look();
+        if (!string.Equals(now, rendered, StringComparison.Ordinal))
+        {
+            rendered = now;
+            StateHasChanged();
+        }
+    });
+}

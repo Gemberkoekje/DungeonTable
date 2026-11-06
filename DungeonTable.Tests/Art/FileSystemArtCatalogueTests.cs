@@ -19,6 +19,8 @@ public sealed class FileSystemArtCatalogueTests : IDisposable
 {
     // Hoisted out of the assertion itself (CA1861), as elsewhere in this suite.
     private static readonly string[] RankedBest = { "exact-title", "by-prefix", "by-tag", "by-subject" };
+    private static readonly string[] VampireShows = { "vampire-spawn", "vampire" };
+    private static readonly string[] VampireNodes = { "data_statblocks_monsters_vampire" };
 
     private readonly string tempRoot =
         Path.Combine(Path.GetTempPath(), "dt-art-" + Guid.NewGuid().ToString("N"));
@@ -32,7 +34,7 @@ public sealed class FileSystemArtCatalogueTests : IDisposable
     }
 
     [Fact]
-    public void Loads_the_committed_catalogue_and_indexes_it()
+    public void Loads_the_committed_catalogue_with_what_each_picture_shows()
     {
         WriteBookCatalogue();
         var catalogue = new FileSystemArtCatalogue(tempRoot);
@@ -44,11 +46,10 @@ public sealed class FileSystemArtCatalogueTests : IDisposable
         Assert.Equal(ArtOrigin.Book, image.Value.Origin);
         Assert.Equal(803, image.Value.Width);
 
+        Assert.Equal(VampireShows, image.Value.Shows);
+        Assert.Equal(VampireNodes, image.Value.NodeIds);
+
         Assert.Equal(2, catalogue.All().Count);
-        Assert.Equal(
-            "mm-vampire-spawn",
-            Assert.Single(catalogue.ForNode("data_statblocks_monsters_vampire")).Id);
-        Assert.Empty(catalogue.ForNode("data_statblocks_monsters_nothing"));
     }
 
     [Fact]
@@ -88,6 +89,24 @@ public sealed class FileSystemArtCatalogueTests : IDisposable
         Assert.True(Assert.Single(found).DocumentSkipped);
         Assert.Equal(2, catalogue.All().Count);
         Assert.Equal(0, changed);
+    }
+
+    [Fact]
+    public void A_committed_entry_that_states_no_origin_keeps_what_it_shows()
+    {
+        // The entry is copied to set its origin, and a field the copy left out would be lost on the way:
+        // every picture in a catalogue written without origins would show nothing.
+        Directory.CreateDirectory(tempRoot);
+        File.WriteAllText(Path.Combine(tempRoot, "catalogue.json"), """
+            { "images": [ { "id": "demo-bell-warden", "file": "demo/bell-warden.webp", "title": "The Bell-Warden",
+                            "kind": "creature", "shows": [ "vampire-spawn", "vampire" ],
+                            "nodeIds": [ "data_statblocks_monsters_vampire" ] } ] }
+            """);
+
+        ArtImage image = new FileSystemArtCatalogue(tempRoot).GetImage("demo-bell-warden").Value;
+
+        Assert.Equal(VampireShows, image.Shows);
+        Assert.Equal(VampireNodes, image.NodeIds);
     }
 
     [Fact]
@@ -642,6 +661,7 @@ public sealed class FileSystemArtCatalogueTests : IDisposable
                   "source": "Bestiary.pdf",
                   "sourceLocation": "p.298",
                   "tags": [ "undead", "vampire" ],
+                  "shows": [ "vampire-spawn", "vampire" ],
                   "nodeIds": [ "data_statblocks_monsters_vampire" ],
                   "width": 803,
                   "height": 1147

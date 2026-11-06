@@ -24,7 +24,7 @@
     <header class="detail-head">
         <div class="detail-titles">
             <span class="detail-kind">@KindLabel</span>
-            <h3 class="detail-name">@Who.Name</h3>
+            <h3 class="detail-name">@Who.Name <PictureButton TargetId="@Who.StatBlockNodeId" /></h3>
         </div>
         <button type="button" class="detail-close" title="Close the detail pane (Esc)"
                 aria-label="Close the detail pane" @onclick="() => OnClose.InvokeAsync()">&times;</button>

@@ -653,6 +653,34 @@ side, the frame is laid out upright and turned after, so each size limit is take
 catalogue's pictures are a few hundred to fourteen hundred pixels high and drawn at their own size they
 filled nothing.
 
+### A picture from a mention
+
+"Her, the one from the mill": the party meets someone the text names, and the DM wants her face on the
+projector without leaving the room's text for the Art tab. So **a picture says what it shows** (`ArtImage.Shows`),
+named the way a link names it, and wherever the DM screen names one of those things a small button
+beside it puts the picture up and, clicked again, takes it down.
+
+- **Only what an author wrote counts**, as with links: a picture titled "Wenna Brask" that does not
+  say it shows `wenna-brask` is not hers. The names are resolved by `LinkTargets`, so they follow its
+  rules, and they are resolved when the index is built, not when they were written: a picture that
+  shows a monster the book index answers moves to the campaign's own stat block the day one is written.
+- **`PictureIndex`** maps each resolved id to its pictures, best first: the picture that names it
+  earliest (the first thing a picture names is what it is most a picture of), then the one that shows
+  the fewest things (a portrait before a group sheet), then by title. A card for something with several
+  pictures lists them all. The older `nodeIds` (stat blocks by node id) count as well, after `shows`.
+- **It lives outside the snapshot** (`LivePictureLinks`), because the art catalogue does: uploads change
+  it at run time and the committed catalogue is read again on its own. The index remembers which reading
+  of the content and which of the catalogue it was built from, and builds again on the first question
+  after either changes.
+- **The button follows the projector without following the table.** `ProjectorPictures` listens to the
+  session once and passes on only a change of the picture on show, so a step of the party token renders
+  no button. `PictureButton` takes text and numbers only, so a parent's render does not render it again
+  and its handler keeps its id: a screen of mentions costs the slow line nothing until a picture goes up
+  or down, and then only the buttons whose look changed render. The prose asks whether a link has a
+  picture before it puts a button there, so links without one carry no component at all.
+- **It exists only on the DM screen**, which cascades `ProjectorPictures`. A component rendered anywhere
+  else, a render test among them, shows no picture buttons.
+
 ## The projector on a table
 
 When the projector shines down onto the table, the miniatures stand on the map, and two settings of the

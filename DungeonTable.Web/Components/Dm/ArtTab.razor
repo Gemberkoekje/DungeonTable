@@ -1,5 +1,6 @@
 @inherits DmTabBase
 @inject IArtCatalogue Art
+@inject IPictureLinks Links
 @inject BattleState Fight
 @*
     The DM screen's Art tab: pick a picture, push it onto the projector, and flip between the few
@@ -245,7 +246,7 @@
         : Art.Search(query, PickerLimit);
 
     // The creatures in the running fight that have art and are not staged yet. This is the
-    // pay-off of ArtImage.NodeIds: a node id lookup, not a name match.
+    // pay-off of what a picture shows (ArtImage.Shows): a lookup by stat block, not a name match.
     private IReadOnlyList<ArtImage> SuggestedFromFight()
     {
         var staged = new HashSet<string>(Session.TrayImageIds(), StringComparer.Ordinal);
@@ -253,7 +254,7 @@
             .Select(entry => entry.StatBlockNodeId)
             .Where(node => !string.IsNullOrEmpty(node))
             .Distinct(StringComparer.Ordinal)
-            .SelectMany(node => Art.ForNode(node))
+            .SelectMany(node => Links.PicturesOf(node))
             .DistinctBy(image => image.Id, StringComparer.Ordinal)
             .Where(image => !staged.Contains(image.Id))
             .ToList();

@@ -53,7 +53,7 @@ too, where its regions, doors and markers were made.
 | `data/dossiers/deck-*.json` | Two decks: rumours the players keep, and omens drawn fresh every time. |
 | `data/party.json`, `data/allies.json` | The battle rosters. The app edits these; the numbers match `characters.json`. |
 | `data/statblocks/monsters-srd.json`, `spells-srd.json` | Every monster and spell in SRD 5.1, converted from the SRD itself. |
-| `data/art/catalogue.json`, `data/art/demo/` | Two pictures for the projector. |
+| `data/art/catalogue.json`, `data/art/demo/` | Two pictures for the projector, each saying who it shows: the Bell-Warden (and any gargoyle) and Wenna Brask. |
 | `data/book-index/almanac.json`, `srd.json` | What search and links can find in the campaign's own book and in the SRD. |
 
 Prose links with `[[target]]` or `[[target|shown text]]`. A target is an area on this floor

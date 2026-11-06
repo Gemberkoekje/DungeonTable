@@ -6,7 +6,8 @@ namespace DungeonTable.ContentTests;
 
 /// <summary>
 /// The committed art catalogue: every entry is kept, is a picture the art route serves at the size it
-/// says, links only stat blocks that exist and can be found; and every committed picture is in it.
+/// says, shows something a link can name, links only stat blocks that exist and can be found; and every
+/// committed picture is in it.
 /// </summary>
 public sealed class ArtTests
 {
@@ -44,6 +45,20 @@ public sealed class ArtTests
     public void Every_node_an_entry_links_is_a_stat_block_the_library_has(string document)
     {
         Report.None(ArtAudit.UnknownNodes(ContentDocuments.Loaded<ArtCatalogue>(document), ContentRoot.Stats), $"Links in {document}");
+    }
+
+    [Theory(SkipTestWithoutData = true)]
+    [MemberData(nameof(Catalogues))]
+    public void Every_entry_shows_something(string document)
+    {
+        Report.None(ArtAudit.ShowsNothing(ContentDocuments.Loaded<ArtCatalogue>(document)), $"Entries in {document} that show nothing");
+    }
+
+    [Theory(SkipTestWithoutData = true)]
+    [MemberData(nameof(Catalogues))]
+    public void Everything_an_entry_shows_is_something_a_link_can_name(string document)
+    {
+        Report.None(ArtAudit.UnknownShows(ContentDocuments.Loaded<ArtCatalogue>(document), ContentRoot.Targets), $"What entries in {document} show");
     }
 
     [Theory(SkipTestWithoutData = true)]

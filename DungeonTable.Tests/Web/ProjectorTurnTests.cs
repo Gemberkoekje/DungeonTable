@@ -276,8 +276,6 @@ public sealed class ProjectorTurnTests
 
         public IReadOnlyList<ArtImage> Search(string query, int limit) => All();
 
-        public IReadOnlyList<ArtImage> ForNode(string nodeId) => Array.Empty<ArtImage>();
-
         public Result<ArtImage> Upload(string title, byte[] content) =>
             Result.WithMessages<ArtImage>(ValidationMessage.Error("No uploads.", nameof(content)));
 

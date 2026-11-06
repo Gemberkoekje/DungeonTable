@@ -77,6 +77,12 @@ string artRoot = ArtFileLocator.Locate(startDirectory, builder.Configuration["Ar
 builder.Services.AddSingleton<FileSystemArtCatalogue>(_ => new FileSystemArtCatalogue(artRoot));
 builder.Services.AddSingleton<IArtCatalogue>(sp => sp.GetRequiredService<FileSystemArtCatalogue>());
 
+// Which pictures show what: each picture's "shows" resolved the way a link is, against the content
+// showing now, so a mention of someone can put their picture on the projector. Built again when the
+// content is read again or the catalogue changes.
+builder.Services.AddSingleton<LivePictureLinks>(sp => new LivePictureLinks(sp.GetRequiredService<LiveContent>(), sp.GetRequiredService<IArtCatalogue>()));
+builder.Services.AddSingleton<IPictureLinks>(sp => sp.GetRequiredService<LivePictureLinks>());
+
 // The saved party and ally rosters. Unlike the stores above these are also written to (from the
 // in-app editors), so the adapters re-read on every Get rather than caching at startup.
 //
@@ -90,6 +96,10 @@ builder.Services.AddSingleton<FileSystemAllyRoster>(_ => new FileSystemAllyRoste
 
 // Shared DM/player session state (one live table): the player projector's viewport + aspect.
 builder.Services.AddSingleton<SessionState>();
+
+// The picture buttons beside every mention on the DM screen: which picture, whether it is up, and the
+// toggle. Follows the session for a change of the picture on show only, so a singleton beside it.
+builder.Services.AddSingleton<ProjectorPictures>();
 
 // The one live fight. Singleton, not scoped: a browser refresh mid-combat must not lose it. It is
 // never injected into the player view — the projector shows the map, the fight is on the table.

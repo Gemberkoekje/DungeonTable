@@ -76,6 +76,7 @@
 
                     <button type="button" class="encounter-name ref-link" title="Open the stat block"
                             @onclick="() => OnOpenReference.InvokeAsync(row.NodeId)">@row.Name</button>
+                    <PictureButton TargetId="@row.NodeId" />
 
                     @if (row.Citation.Length > 0)
                     {

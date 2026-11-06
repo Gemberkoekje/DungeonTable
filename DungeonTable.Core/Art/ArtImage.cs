@@ -5,11 +5,12 @@ namespace DungeonTable.Core.Art;
 /// shows, and how to find it again.
 /// </summary>
 /// <remarks>
-/// <see cref="NodeIds"/> is the load-bearing field. It links a picture to the stat blocks of the
-/// creatures it depicts, so "suggest art for the creatures in the running fight" is a lookup rather
-/// than a fuzzy name match. It is deliberately a <em>list</em>: one picture can serve several stat
-/// blocks (the skeleton illustration covers both skeleton and warhorse skeleton), and a picture that
-/// depicts nothing with a stat block — a castle, a vista, an upload — simply carries none.
+/// <see cref="Shows"/> is the load-bearing field. It links a picture to what it depicts, named the way
+/// a link names it, so a mention of Wenna Brask anywhere can put her portrait on the projector, and
+/// "suggest art for the creatures in the running fight" is a lookup rather than a fuzzy name match. It
+/// is deliberately a <em>list</em>: one picture can serve several things (the Bell-Warden is also what
+/// any gargoyle looks like), and the first it names is what it is most a picture of.
+/// <see cref="NodeIds"/> is the older form, stat blocks by node id, still read.
 /// </remarks>
 public sealed class ArtImage
 {
@@ -43,7 +44,17 @@ public sealed class ArtImage
     /// <summary>Free search terms — creature type, mood, gang ("construct", "gargoyle", "statue").</summary>
     public IReadOnlyList<string> Tags { get; init; } = Array.Empty<string>();
 
-    /// <summary>Node ids of the creatures this picture depicts; empty when it depicts none.</summary>
+    /// <summary>
+    /// What this picture depicts, each named the way a link names it: a person or an entity by id
+    /// ("wenna-brask", "bell-warden"), a stat block by name ("gargoyle"), a book entry by id, an area
+    /// with its floor ("L1 area 3"). The first is what it is most a picture of. Empty when it names none.
+    /// </summary>
+    public IReadOnlyList<string> Shows { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Node ids of the stat blocks this picture depicts: the older form of <see cref="Shows"/>, still
+    /// read, and counted after it. Empty when it names none.
+    /// </summary>
     public IReadOnlyList<string> NodeIds { get; init; } = Array.Empty<string>();
 
     /// <summary>Pixel width of the stored file, so the overlay can size its frame before the image loads.</summary>

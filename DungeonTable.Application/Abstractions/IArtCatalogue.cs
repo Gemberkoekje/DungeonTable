@@ -44,14 +44,6 @@ public interface IArtCatalogue
     IReadOnlyList<ArtImage> Search(string query, int limit);
 
     /// <summary>
-    /// The images that depict a given creature, by its node id — the lookup behind
-    /// "suggest art for what is in the fight".
-    /// </summary>
-    /// <param name="nodeId">A creature's node id ("data_statblocks_monsters_vampire").</param>
-    /// <returns>The images tagged with that node (possibly empty).</returns>
-    IReadOnlyList<ArtImage> ForNode(string nodeId);
-
-    /// <summary>
     /// Stores an uploaded picture and adds it to the catalogue.
     /// </summary>
     /// <param name="title">The title the DM gave it; a blank title falls back to the file name.</param>

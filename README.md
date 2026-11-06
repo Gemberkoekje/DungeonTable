@@ -32,6 +32,8 @@ people, quests and monsters. This repository ships one small original adventure,
 - **The fight.** Start a battle from the room: the creatures it lists join the party in an initiative
   order, with hit points, conditions, and each monster's full stat block and spells a click away.
 - **Pictures on the projector**: the campaign's art, or anything the DM uploads, framed over the map.
+  A picture says who or what it shows, and wherever the DM screen mentions them, a small button beside
+  the name puts that picture on the projector in one click.
 - **The Room Editor** (`/editor`): mark which area each room is, and where the doors, secrets, traps
   and features are, over the Dungeon Scrawl map.
 - **It keeps the table.** With PostgreSQL configured, what was revealed, the running fight and the

@@ -4710,3 +4710,74 @@ input.battle-init,
 .art-upload-message.failed {
     color: var(--error);
 }
+
+/* ---- The picture button beside a mention ---- */
+
+/* A small framed-picture icon after a link, a creature or a card's name: one click puts its picture on
+   the projector, the next takes it down. Quiet until hovered, and lit in the accent colour while its
+   picture is the one the players see. It sits inside rows whose shared button rules are (0,3,1) (the
+   Battle tab) and (0,1,1) (the encounter strip), so it matches and outranks each, and comes after
+   them: see the note above the Battle tab's small controls. */
+.picture-btn,
+.encounter button.picture-btn,
+.battle-tab .battle-detail button.picture-btn:not(.link-btn):not(.combatant-name) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0 0 0 0.2em;
+    padding: 0 0.15em;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 0.3rem;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.85em;
+    line-height: 1;
+    vertical-align: baseline;
+    cursor: pointer;
+}
+
+.picture-btn:hover,
+.picture-btn:focus-visible,
+.encounter button.picture-btn:hover:not(:disabled),
+.battle-tab .battle-detail button.picture-btn:not(.link-btn):not(.combatant-name):hover:not(:disabled) {
+    border-color: var(--border);
+    color: var(--ink);
+}
+
+.picture-btn.on,
+.encounter button.picture-btn.on,
+.battle-tab .battle-detail button.picture-btn.on:not(.link-btn):not(.combatant-name) {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+}
+
+.picture-icon {
+    width: 1em;
+    height: 1em;
+    flex: none;
+    position: relative;
+    top: 0.1em;
+}
+
+/* In a card's list of pictures, each one by its title, as a chip. */
+.reference-pictures {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.4rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+}
+
+.picture-btn.with-title {
+    margin: 0;
+    padding: 0.15rem 0.45rem;
+    border-color: var(--border);
+    font-size: 1em;
+}
+
+.picture-btn.with-title .picture-icon {
+    top: 0;
+}

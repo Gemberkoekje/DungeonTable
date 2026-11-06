@@ -7,7 +7,7 @@
       "subject": "A stone gargoyle with raised wings on a plinth in the dim lower nave, a pillar beside it",
       "kind": "creature",
       "tags": [ "gargoyle", "statue", "nave", "undercroft" ],
-      "nodeIds": [ "data_statblocks_monsters_gargoyle" ],
+      "shows": [ "bell-warden", "gargoyle" ],
       "width": 1024,
       "height": 768
     },
@@ -18,7 +18,7 @@
       "subject": "The miller at dusk outside her mill, shawl clutched at her throat, a lantern on the wall beside her",
       "kind": "npc",
       "tags": [ "miller", "mill", "villager", "millbrook" ],
-      "nodeIds": [],
+      "shows": [ "wenna-brask" ],
       "width": 768,
       "height": 1024
     }

@@ -3,14 +3,17 @@ using System.IO;
 using DungeonTable.Application.Abstractions;
 using DungeonTable.Core.Art;
 using DungeonTable.Infrastructure.Art;
+using DungeonTable.Infrastructure.Links;
+using Qowaiv.Validation.Abstractions;
 using SkiaSharp;
 
 namespace DungeonTable.ContentTests.Rules;
 
 /// <summary>
 /// The rules for the committed art catalogue: every entry is kept, points at a picture the art route
-/// serves, carries that picture's size, links only stat blocks that exist, and can be found; and no
-/// committed picture is left out of it. Uploads are not checked: the app writes their entries itself.
+/// serves, carries that picture's size, shows something, names only what a link can name and links
+/// only stat blocks that exist, and can be found; and no committed picture is left out of it. Uploads
+/// are not checked: the app writes their entries itself.
 /// </summary>
 /// <remarks>
 /// A file is compared by its exact name, casing and all. A Windows checkout finds a picture whatever the
@@ -102,6 +105,44 @@ internal static class ArtAudit
             .SelectMany(image => (image.NodeIds ?? Array.Empty<string>())
                 .Where(node => !stats.HasMonster(node))
                 .Select(node => $"'{image.Id}' links '{node}', which is no stat block the library has."))
+            .ToList();
+
+    /// <summary>
+    /// Every name in an entry's <c>shows</c> that is nothing a link can name. Each one is what a mention
+    /// of that thing would put on the projector, so a typo is a picture no mention offers.
+    /// </summary>
+    /// <param name="catalogue">The committed catalogue, as written.</param>
+    /// <param name="targets">Everything a link can name in the content.</param>
+    /// <returns>One sentence per name (empty when there are none).</returns>
+    internal static IReadOnlyList<string> UnknownShows(ArtCatalogue catalogue, LinkTargets targets)
+    {
+        var faults = new List<string>();
+        foreach (ArtImage image in Kept(catalogue))
+        {
+            foreach (string name in image.Shows ?? Array.Empty<string>())
+            {
+                // A picture belongs to no floor, so an area needs its floor, as in a quest.
+                Result<LinkTarget> resolved = targets.Resolve(name, string.Empty);
+                if (!resolved.IsValid)
+                {
+                    faults.Add($"'{image.Id}' shows \"{name}\": {string.Join(" ", resolved.Messages.Select(message => message.Message))}");
+                }
+            }
+        }
+
+        return faults;
+    }
+
+    /// <summary>
+    /// Every entry that says it shows nothing: no <c>shows</c> and no <c>nodeIds</c>. Such a picture is
+    /// found only by searching the picker; no mention of what is in it offers it.
+    /// </summary>
+    /// <param name="catalogue">The committed catalogue, as written.</param>
+    /// <returns>One sentence per entry (empty when there are none).</returns>
+    internal static IReadOnlyList<string> ShowsNothing(ArtCatalogue catalogue) =>
+        Kept(catalogue)
+            .Where(image => (image.Shows ?? Array.Empty<string>()).Count == 0 && (image.NodeIds ?? Array.Empty<string>()).Count == 0)
+            .Select(image => $"'{image.Id}' shows nothing: name who or what is in it in its shows list, the way a link names it, so a mention of it can put it on the projector.")
             .ToList();
 
     /// <summary>Every entry the picker could not show or find: no title, no subject, no kind, no tags.</summary>

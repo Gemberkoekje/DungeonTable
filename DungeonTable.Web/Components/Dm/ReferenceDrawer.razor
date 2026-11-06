@@ -16,11 +16,29 @@
     <header class="reference-head">
         <div class="reference-titles">
             <span class="reference-kind" title="@(Card.Kind == CrossRefKind.Book ? BookIndexNote : null)">@CrossRefStyle.KindName(Card.Kind)</span>
-            <h3 class="reference-label">@Card.Label</h3>
+            <h3 class="reference-label">@Card.Label
+                @if (Npc.Id.Length == 0 && Character.Id.Length == 0)
+                {
+                    <PictureButton TargetId="@Card.NodeId" />
+                }
+            </h3>
         </div>
         <button type="button" class="reference-close" title="Close reference" aria-label="Close reference"
                 @onclick="() => OnClose.InvokeAsync()">&times;</button>
     </header>
+
+    @* More than one picture shows this (a portrait and a group sheet): each by its title, so the DM
+       can pick, where the button by the name shows the first. *@
+    @if (PictureCount > 1)
+    {
+        <div class="reference-pictures">
+            <span class="field-label">Pictures</span>
+            @for (int i = 0; i < PictureCount; i++)
+            {
+                <PictureButton TargetId="@Card.NodeId" Index="i" WithTitle="true" />
+            }
+        </div>
+    }
 
     @if (Npc.Id.Length > 0)
     {
@@ -96,6 +114,13 @@
 </aside>
 
 @code {
+    /// <summary>The pictures and the projector, cascaded by the DM screen; absent elsewhere.</summary>
+    [CascadingParameter]
+    private ProjectorPictures Pictures { get; set; }
+
+    // How many pictures show what the card is about; none outside the DM screen.
+    private int PictureCount => Pictures is null ? 0 : Pictures.Of(Card.NodeId).Count;
+
     /// <summary>The reference card to display.</summary>
     [Parameter]
     public ReferenceCard Card { get; set; } = new ReferenceCard();

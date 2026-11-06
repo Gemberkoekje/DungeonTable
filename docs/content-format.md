@@ -154,13 +154,13 @@ Ids that have to agree across documents:
 - a region's `graphNodeId`, a quest target's `nodeId` and `campaign.json`'s `startAreaNodeId` are area
   ids;
 - a quest's `anyOfQuestIds` are quest ids;
-- `allies.json`'s `statBlockNodeId`, a picture's `nodeIds` and a spellcasting block's spell `nodeId`
-  are the exact `nodeId` of a stat block or spell;
+- `allies.json`'s `statBlockNodeId`, a picture's older `nodeIds` and a spellcasting block's spell
+  `nodeId` are the exact `nodeId` of a stat block or spell;
 - `party.json`'s members are the characters in `characters.json`, by name, with the same level, AC,
   hit points, passive Perception, initiative and player;
 - a `.regions.json` names its map and adventure the way its `.ds` file does;
-- everything else that names something (a creature, an exit, a relation's ends, a contact) names it
-  the way a link does.
+- everything else that names something (a creature, an exit, a relation's ends, a contact, what a
+  picture shows) names it the way a link does.
 
 ## 4. Links
 
@@ -543,9 +543,19 @@ The shapes are easiest to copy from the SRD files. A number written where text i
 | `file` | **required**: its path under `data/art/`, with forward slashes and the file's exact case. PNG, JPEG or WebP |
 | `title`, `subject`, `tags` | what the picker shows and searches |
 | `kind` | `creature`, `npc`, `location`, `item`, `handout` or `diagram`; not shown |
-| `nodeIds` | the stat blocks it shows, by `nodeId`, so the Art tab can suggest it during a fight |
+| `shows` | who and what it shows, each named the way a link names it (§4), without brackets: `[ "bell-warden", "gargoyle" ]`. Wherever one of them is mentioned on the DM screen, a picture button beside it puts this picture on the projector, and the Art tab suggests it for a fight with that stat block in it |
+| `nodeIds` | the older form of `shows` for stat blocks, by `nodeId`: still read, counted after `shows` |
 | `width`, `height` | the picture's size in pixels, which frames it on the projector |
 | `source`, `sourceLocation` | not shown |
+
+**What a picture shows** is read like a link, when the content is read, so the rules of §4 hold: a
+person or an entity by id, a stat block or spell by name, a book entry by id, an area with its floor
+(`L1 area 3a`, since a picture belongs to no floor). A name the book index answers today belongs to
+the campaign's own stat block the day one with that name is written. Name **first** what the picture
+is most a picture of: when several pictures show one thing, its button shows the one that names it
+earliest, then the one that shows the fewest things (a portrait before a group sheet), then the first
+by title, and its card lists them all. The content tests require every picture to show something, and
+every name it shows to be something a link can name.
 
 ### 5.16 Maps
 
@@ -633,7 +643,8 @@ What it checks:
   with the proficiency bonus it gives; every spell a monster casts is in the library; every `source` is
   a book the book index titles.
 - **The pictures are right.** Each exists at its path, with the case it is written in, and has the size
-  the catalogue says; every picture on disk is catalogued.
+  the catalogue says; every picture on disk is catalogued; each shows something, and everything it
+  shows is something a link can name.
 - **The maps can be used.** Each `.regions.json` sits beside its `.ds`; every region has an id and an
   outline; no region covers another's middle; every area on a mapped floor has a region to click.
 - **The people agree.** `party.json` matches `characters.json`.

@@ -6,6 +6,7 @@
 @inject TablePersistence Persistence
 @inject LiveContent Live
 @inject PartyMoves Party
+@inject ProjectorPictures Pictures
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 @*
@@ -44,6 +45,9 @@
 <CascadingValue Name="@DmTabBase.RevisionName" Value="revision">
 <CascadingValue Name="@DmTabBase.WorkspaceRevisionName" Value="workspaceRevision">
 <CascadingValue Name="@DmTabBase.ActiveTabName" Value="activeTab">
+@* The picture buttons beside each mention read this (PictureButton); it never changes, so nothing
+   renders again for it. *@
+<CascadingValue Value="Pictures" IsFixed="true">
 <div class="dm-shell @LayoutClass @(drawerOpen ? "drawer-open" : string.Empty)" @ref="shellRef">
     @* The bar belongs to the shell: the DM must be able to see and reframe what the projector shows
        whatever the dock is showing. *@
@@ -222,6 +226,7 @@
         </aside>
     </div>
 </div>
+</CascadingValue>
 </CascadingValue>
 </CascadingValue>
 </CascadingValue>

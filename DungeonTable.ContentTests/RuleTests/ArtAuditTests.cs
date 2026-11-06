@@ -2,15 +2,17 @@ using System.Collections.Generic;
 using System.IO;
 using DungeonTable.ContentTests.Rules;
 using DungeonTable.Core.Art;
+using DungeonTable.Core.Dossier;
 using DungeonTable.Core.Stats;
+using DungeonTable.Infrastructure.Links;
 using SkiaSharp;
 
 namespace DungeonTable.ContentTests.RuleTests;
 
 /// <summary>
 /// Proves the art rules on real pictures: an entry the catalogue drops, a picture the art route would
-/// not serve or whose size is stale, a link to no stat block, an entry nobody could find, and a picture
-/// in no entry.
+/// not serve or whose size is stale, one that shows nothing or names what no link can, a link to no stat
+/// block, an entry nobody could find, and a picture in no entry.
 /// </summary>
 public sealed class ArtAuditTests
 {
@@ -117,6 +119,47 @@ public sealed class ArtAuditTests
         string fault = Assert.Single(ArtAudit.UnknownNodes(catalogue, stats));
 
         Assert.Contains("links 'data_statblocks_monsters_gargoil'", fault, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_name_an_entry_shows_that_no_link_could_name_is_reported_and_one_on_a_floor_not_written_is_not()
+    {
+        var dossiers = new FakeDossierStore { Npcs = new NpcRoster { Npcs = new[] { new NpcDossier { Id = "wenna-brask", Name = "Wenna Brask" } } } };
+        var stats = new FakeStatLibrary();
+        stats.Monsters["data_statblocks_monsters_gargoyle"] = new StatBlock { NodeId = "data_statblocks_monsters_gargoyle", Name = "Gargoyle" };
+        ArtImage warden = Entry("demo-bell-warden", "demo/bell-warden.png");
+        var catalogue = new ArtCatalogue
+        {
+            Images = new[]
+            {
+                new ArtImage { Id = warden.Id, File = warden.File, Shows = new[] { "Gargoyle", "wenna-brask", "L2 area 1", "wena-brask", "area 1" } },
+            },
+        };
+
+        IReadOnlyList<string> faults = ArtAudit.UnknownShows(catalogue, LinkTargets.Build(dossiers, stats));
+
+        Assert.Equal(2, faults.Count);
+        Assert.Contains("'demo-bell-warden' shows \"wena-brask\": [[wena-brask]] names nothing that is loaded", faults[0], StringComparison.Ordinal);
+        Assert.Contains("'demo-bell-warden' shows \"area 1\": [[area 1]] needs a floor", faults[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_entry_that_shows_nothing_is_reported_and_one_naming_a_stat_block_the_older_way_is_not()
+    {
+        ArtImage warden = Entry("demo-bell-warden", "demo/bell-warden.png");
+        var catalogue = new ArtCatalogue
+        {
+            Images = new[]
+            {
+                new ArtImage { Id = "shows", File = "demo/a.png", Shows = new[] { "bell-warden" } },
+                new ArtImage { Id = "older", File = "demo/b.png", NodeIds = new[] { "data_statblocks_monsters_gargoyle" } },
+                warden,
+            },
+        };
+
+        string fault = Assert.Single(ArtAudit.ShowsNothing(catalogue));
+
+        Assert.StartsWith("'demo-bell-warden' shows nothing", fault, StringComparison.Ordinal);
     }
 
     [Fact]

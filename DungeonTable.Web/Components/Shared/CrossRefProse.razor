@@ -6,7 +6,12 @@
    An authored [[...]] link shows its words, never its brackets. One that names nothing is marked
    rather than hidden, with the markup in its tooltip, so a typo in the content is visible at the
    table instead of silently becoming plain text. One to a floor nobody has authored yet is muted
-   instead: it is early, not wrong. *@
+   instead: it is early, not wrong.
+
+   A link to something with a picture carries a small picture button after it, which puts that picture
+   on the projector (PictureButton). Only on the DM screen, which cascades the pictures. The button
+   would draw nothing for a link with no picture anyway; asking first keeps a component, and its
+   subscription, off every other link on the screen. *@
 
 @foreach (CrossRefText.Segment segment in Segments())
 {
@@ -15,6 +20,10 @@
         <button type="button" class="xref xref-@CrossRefStyle.CssClass(segment.Kind)"
                 title="@CrossRefStyle.KindName(segment.Kind) — open reference"
                 @onclick="() => Activate(segment.TargetId)">@segment.Text</button>
+        @if (Pictures is not null && Pictures.Has(segment.TargetId))
+        {
+            <PictureButton TargetId="@segment.TargetId" />
+        }
     }
     else if (segment.Kind == CrossRefKind.Unresolved)
     {
@@ -47,6 +56,10 @@
     /// </summary>
     [Parameter]
     public EventCallback<string> OnActivate { get; set; }
+
+    /// <summary>The pictures and the projector, cascaded by the DM screen; absent elsewhere.</summary>
+    [CascadingParameter]
+    private ProjectorPictures Pictures { get; set; }
 
     private static readonly IReadOnlyList<CrossRef> NoRefs = Array.Empty<CrossRef>();
 

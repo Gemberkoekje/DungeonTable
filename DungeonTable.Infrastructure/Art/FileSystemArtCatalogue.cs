@@ -10,7 +10,8 @@ namespace DungeonTable.Infrastructure.Art;
 /// <summary>
 /// File-system adapter for <see cref="IArtCatalogue"/>. Reads the committed
 /// <c>catalogue.json</c> in the art root (the curated book art) and <c>uploads/catalogue.json</c>
-/// beside it (whatever the DM has uploaded), and indexes both by id and by the node ids they depict.
+/// beside it (whatever the DM has uploaded), and indexes both by id. Which pictures show what is
+/// <see cref="Content.LivePictureLinks"/>'s, since it needs the content's link targets.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -92,7 +93,6 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
     // Rebuilt from book + uploads whenever either changes; never handed out by reference.
     private Dictionary<string, ArtImage> byId = new Dictionary<string, ArtImage>(StringComparer.Ordinal);
     private List<ArtImage> ordered = new List<ArtImage>();
-    private Dictionary<string, List<ArtImage>> byNode = new Dictionary<string, List<ArtImage>>(StringComparer.Ordinal);
 
     /// <summary>Creates a catalogue over an art root directory, loading both documents.</summary>
     /// <param name="artRoot">Absolute path to the directory holding <c>catalogue.json</c>.</param>
@@ -213,22 +213,6 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<ArtImage> ForNode(string nodeId)
-    {
-        if (string.IsNullOrWhiteSpace(nodeId))
-        {
-            return Array.Empty<ArtImage>();
-        }
-
-        lock (gate)
-        {
-            return byNode.TryGetValue(nodeId, out List<ArtImage> images)
-                ? images.ToArray()
-                : Array.Empty<ArtImage>();
-        }
-    }
-
-    /// <inheritdoc />
     public Result<ArtImage> Upload(string title, byte[] content)
     {
         if (content is null || content.Length == 0)
@@ -326,6 +310,7 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
             Source = string.Empty,
             SourceLocation = string.Empty,
             Tags = new[] { "upload" },
+            Shows = Array.Empty<string>(),
             NodeIds = Array.Empty<string>(),
             Width = width,
             Height = height,
@@ -463,6 +448,7 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
         Source = image.Source,
         SourceLocation = image.SourceLocation,
         Tags = image.Tags,
+        Shows = image.Shows,
         NodeIds = image.NodeIds,
         Width = image.Width,
         Height = image.Height,
@@ -472,7 +458,6 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
     private void Reindex()
     {
         Dictionary<string, ArtImage> ids = new Dictionary<string, ArtImage>(StringComparer.Ordinal);
-        Dictionary<string, List<ArtImage>> nodes = new Dictionary<string, List<ArtImage>>(StringComparer.Ordinal);
 
         foreach (ArtImage image in book.Concat(uploads))
         {
@@ -486,28 +471,8 @@ public sealed class FileSystemArtCatalogue : IArtCatalogue
             .ThenBy(image => image.Id, StringComparer.Ordinal)
             .ToList();
 
-        foreach (ArtImage image in all)
-        {
-            foreach (string node in image.NodeIds ?? Array.Empty<string>())
-            {
-                if (string.IsNullOrEmpty(node))
-                {
-                    continue;
-                }
-
-                if (!nodes.TryGetValue(node, out List<ArtImage> images))
-                {
-                    images = new List<ArtImage>();
-                    nodes[node] = images;
-                }
-
-                images.Add(image);
-            }
-        }
-
         byId = ids;
         ordered = all;
-        byNode = nodes;
     }
 
     // Lower rank sorts first; -1 means no match. Mirrors the dossier/stat search convention.
