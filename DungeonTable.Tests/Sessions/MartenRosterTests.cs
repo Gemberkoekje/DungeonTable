@@ -27,7 +27,7 @@ public sealed class MartenRosterTests
 {
     // Hoisted out of the assertions themselves (CA1861).
     private static readonly string[] EditedParty = { "Sora", "Rurik" };
-    private static readonly string[] EditedAllies = { "Bonnie", "Scrap" };
+    private static readonly string[] EditedAllies = { "Tam", "Scrap" };
 
     [Fact]
     public async Task A_party_saved_by_one_store_is_read_back_by_the_next()
@@ -120,7 +120,7 @@ public sealed class MartenRosterTests
         Assert.True(seeded.IsValid, Explain(seeded));
         Assert.Equal("Shadow", Assert.Single(seeded.Value.Members).Name);
 
-        Result written = new MartenAllyRoster(store, seed, sessionId).Save(AlliesOf("Bonnie", "Scrap"));
+        Result written = new MartenAllyRoster(store, seed, sessionId).Save(AlliesOf("Tam", "Scrap"));
         Assert.True(written.IsValid, Explain(written));
 
         using DocumentStore second = OpenStore();
