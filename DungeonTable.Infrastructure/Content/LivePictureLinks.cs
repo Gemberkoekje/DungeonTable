@@ -57,7 +57,7 @@ public sealed class LivePictureLinks : IPictureLinks
             return current;
         }
 
-        current = new Built(content, revision, PictureIndex.Build(art.All(), content.Targets));
+        current = new Built(content, revision, PictureIndex.Build(art.All(), content.Targets, content.Dossiers));
         Volatile.Write(ref built, current);
         return current;
     }

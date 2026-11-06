@@ -11,7 +11,7 @@ namespace DungeonTable.ContentTests.Rules;
 
 /// <summary>
 /// The rules for the committed art catalogue: every entry is kept, points at a picture the art route
-/// serves, carries that picture's size, shows something, names only what a link can name and links
+/// serves, carries that picture's size, names only what a link can name among what it shows, links
 /// only stat blocks that exist, and can be found; and no committed picture is left out of it. Uploads
 /// are not checked: the app writes their entries itself.
 /// </summary>
@@ -132,18 +132,6 @@ internal static class ArtAudit
 
         return faults;
     }
-
-    /// <summary>
-    /// Every entry that says it shows nothing: no <c>shows</c> and no <c>nodeIds</c>. Such a picture is
-    /// found only by searching the picker; no mention of what is in it offers it.
-    /// </summary>
-    /// <param name="catalogue">The committed catalogue, as written.</param>
-    /// <returns>One sentence per entry (empty when there are none).</returns>
-    internal static IReadOnlyList<string> ShowsNothing(ArtCatalogue catalogue) =>
-        Kept(catalogue)
-            .Where(image => (image.Shows ?? Array.Empty<string>()).Count == 0 && (image.NodeIds ?? Array.Empty<string>()).Count == 0)
-            .Select(image => $"'{image.Id}' shows nothing: name who or what is in it in its shows list, the way a link names it, so a mention of it can put it on the projector.")
-            .ToList();
 
     /// <summary>Every entry the picker could not show or find: no title, no subject, no kind, no tags.</summary>
     /// <param name="catalogue">The committed catalogue, as written.</param>

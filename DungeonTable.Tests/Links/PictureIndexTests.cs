@@ -8,7 +8,8 @@ namespace DungeonTable.Tests.Links;
 
 /// <summary>
 /// Which pictures show what: a picture's <c>shows</c> read the way a link is, its older <c>nodeIds</c>
-/// as they are, and, where several show one thing, the one most about it first.
+/// as they are, and, where several show one thing, the one most about it first; and a creature a level
+/// declares that no picture shows has its stat block's, where a person has none.
 /// </summary>
 public sealed class PictureIndexTests
 {
@@ -22,6 +23,7 @@ public sealed class PictureIndexTests
     private static readonly string[] ByTitle = { "a-gargoyle", "b-gargoyle" };
     private static readonly string[] NibThenGoblin = { "nib", Goblin };
     private static readonly string[] OnlyNib = { "nib" };
+    private static readonly string[] PortraitBeforeScene = { "goblin-portrait", "ambush" };
 
     [Fact]
     public void A_picture_is_found_by_what_it_shows_named_the_way_a_link_names_it()
@@ -33,7 +35,8 @@ public sealed class PictureIndexTests
                 Picture("warden", "bell-warden", "Gargoyle"),
                 Picture("den", "L1 area 2"),
             },
-            Targets());
+            Targets(),
+            Dossiers());
 
         Assert.Equal("wenna", Assert.Single(index.PicturesOf("wenna-brask")).Id);
         Assert.Equal("warden", Assert.Single(index.PicturesOf("bell-warden")).Id);
@@ -49,7 +52,7 @@ public sealed class PictureIndexTests
         var older = new ArtImage { Id = "goblin", Title = "Goblin", Shows = new[] { "nib" }, NodeIds = new[] { Goblin } };
 
         Assert.Equal(NibThenGoblin, PictureIndex.TargetsOf(older, Targets()));
-        Assert.Equal("goblin", Assert.Single(PictureIndex.Build(new[] { older }, Targets()).PicturesOf(Goblin)).Id);
+        Assert.Equal("goblin", Assert.Single(PictureIndex.Build(new[] { older }, Targets(), Dossiers()).PicturesOf(Goblin)).Id);
     }
 
     [Fact]
@@ -69,7 +72,8 @@ public sealed class PictureIndexTests
                 Picture("millbrook-folk", "nib", "wenna-brask"),
                 Picture("wenna-portrait", "wenna-brask", "nib"),
             },
-            Targets());
+            Targets(),
+            Dossiers());
 
         Assert.Equal(WennaFirst, index.PicturesOf("wenna-brask").Select(image => image.Id));
     }
@@ -83,7 +87,8 @@ public sealed class PictureIndexTests
                 Picture("village-sheet", "wenna-brask", "nib", "bell-warden"),
                 Picture("wenna-portrait", "wenna-brask"),
             },
-            Targets());
+            Targets(),
+            Dossiers());
 
         Assert.Equal(PortraitBeforeSheet, index.PicturesOf("wenna-brask").Select(image => image.Id));
     }
@@ -93,9 +98,49 @@ public sealed class PictureIndexTests
     {
         PictureIndex index = PictureIndex.Build(
             new[] { Picture("a-gargoyle", "gargoyle"), Picture("b-gargoyle", "gargoyle") },
-            Targets());
+            Targets(),
+            Dossiers());
 
         Assert.Equal(ByTitle, index.PicturesOf(Gargoyle).Select(image => image.Id));
+    }
+
+    [Fact]
+    public void A_picture_of_the_thing_comes_before_a_scene_or_handout_it_is_in()
+    {
+        PictureIndex index = PictureIndex.Build(
+            new[]
+            {
+                Picture("ambush", ArtKind.Handout, "goblin"),
+                Picture("goblin-portrait", ArtKind.Creature, "nib", "goblin"),
+            },
+            Targets(),
+            Dossiers());
+
+        Assert.Equal(PortraitBeforeScene, index.PicturesOf(Goblin).Select(image => image.Id));
+    }
+
+    [Fact]
+    public void A_creature_a_level_declares_that_no_picture_shows_has_its_stat_blocks_and_a_person_has_none()
+    {
+        // The Bell-Warden is a creature that uses the gargoyle's block; Nib is a person who uses the goblin's.
+        PictureIndex index = PictureIndex.Build(
+            new[] { Picture("gargoyle", "gargoyle"), Picture("goblin", "goblin") },
+            Targets(),
+            Dossiers());
+
+        Assert.Equal("gargoyle", Assert.Single(index.PicturesOf("bell-warden")).Id);
+        Assert.Empty(index.PicturesOf("nib"));
+    }
+
+    [Fact]
+    public void A_creature_with_a_picture_of_its_own_keeps_it()
+    {
+        PictureIndex index = PictureIndex.Build(
+            new[] { Picture("gargoyle", "gargoyle"), Picture("warden", "bell-warden") },
+            Targets(),
+            Dossiers());
+
+        Assert.Equal("warden", Assert.Single(index.PicturesOf("bell-warden")).Id);
     }
 
     [Fact]
@@ -109,10 +154,10 @@ public sealed class PictureIndexTests
         };
         ArtImage[] pictures = { Picture("ankheg", "ankheg") };
 
-        PictureIndex before = PictureIndex.Build(pictures, LinkTargets.Build(Dossiers(), Stats(), new[] { bestiary }));
+        PictureIndex before = PictureIndex.Build(pictures, LinkTargets.Build(Dossiers(), Stats(), new[] { bestiary }), Dossiers());
         FakeStatLibrary written = Stats();
         written.Monsters["data_statblocks_monsters_ankheg"] = new StatBlock { NodeId = "data_statblocks_monsters_ankheg", Name = "Ankheg" };
-        PictureIndex after = PictureIndex.Build(pictures, LinkTargets.Build(Dossiers(), written, new[] { bestiary }));
+        PictureIndex after = PictureIndex.Build(pictures, LinkTargets.Build(Dossiers(), written, new[] { bestiary }), Dossiers());
 
         Assert.Single(before.PicturesOf("ankheg"));
         Assert.Empty(after.PicturesOf("ankheg"));
@@ -122,12 +167,14 @@ public sealed class PictureIndexTests
     [Fact]
     public void A_picture_that_names_one_thing_twice_is_listed_for_it_once()
     {
-        PictureIndex index = PictureIndex.Build(new[] { Picture("warden", "Gargoyle", "gargoyle") }, Targets());
+        PictureIndex index = PictureIndex.Build(new[] { Picture("warden", "Gargoyle", "gargoyle") }, Targets(), Dossiers());
 
         Assert.Single(index.PicturesOf(Gargoyle));
     }
 
     private static ArtImage Picture(string id, params string[] shows) => new ArtImage { Id = id, Title = id, Shows = shows };
+
+    private static ArtImage Picture(string id, ArtKind kind, params string[] shows) => new ArtImage { Id = id, Title = id, Kind = kind, Shows = shows };
 
     private static LinkTargets Targets() => LinkTargets.Build(Dossiers(), Stats());
 

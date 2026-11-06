@@ -328,7 +328,8 @@ round the corner, or a handout.
   in the text, a creature in the encounter or the occupants, a card's title, the Battle tab's detail
   pane), a small framed-picture button sits beside it: click it and that picture is on the projector,
   click it again and it comes down. It is lit while its picture is the one the players see, everywhere
-  it appears. A card for something with several pictures lists them all by title. A picture belongs to
+  it appears. A band or a creature with no picture of its own uses its stat block's. A card for
+  something with several pictures lists them all by title. A picture belongs to
   what its catalogue entry says it **shows** ([content-format.md §5.15](content-format.md#515-artcataloguejson-pictures-for-the-projector)).
 - **Your own pictures**, at the bottom, adds one from your computer. It is converted to WebP and kept
   in `data/art/uploads/`.

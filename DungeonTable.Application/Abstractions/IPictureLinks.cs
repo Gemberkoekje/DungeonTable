@@ -23,8 +23,10 @@ public interface IPictureLinks
     event Action Changed;
 
     /// <summary>
-    /// The pictures that show a thing, best first: the one that names it earliest among what it shows,
-    /// then the one that shows the fewest things (a portrait before a group sheet), then by title.
+    /// The pictures that show a thing, best first: a picture of somebody or something before a scene,
+    /// handout or plan it is in, then the one that names it earliest among what it shows, then the one
+    /// that shows the fewest things (a portrait before a group sheet), then by title. A creature a level
+    /// declares that no picture shows has its stat block's.
     /// </summary>
     /// <param name="targetId">The id a resolved link carries ("wenna-brask", "data_statblocks_monsters_gargoyle").</param>
     /// <returns>The pictures (possibly empty).</returns>

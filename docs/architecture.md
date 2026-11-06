@@ -664,10 +664,15 @@ beside it puts the picture up and, clicked again, takes it down.
   say it shows `wenna-brask` is not hers. The names are resolved by `LinkTargets`, so they follow its
   rules, and they are resolved when the index is built, not when they were written: a picture that
   shows a monster the book index answers moves to the campaign's own stat block the day one is written.
-- **`PictureIndex`** maps each resolved id to its pictures, best first: the picture that names it
-  earliest (the first thing a picture names is what it is most a picture of), then the one that shows
-  the fewest things (a portrait before a group sheet), then by title. A card for something with several
-  pictures lists them all. The older `nodeIds` (stat blocks by node id) count as well, after `shows`.
+- **`PictureIndex`** maps each resolved id to its pictures, best first: a picture of the thing before a
+  scene, handout or plan it is in (by `kind`: a chapter's opening spread of a monster should not stand
+  in for the monster's own portrait), then the picture that names it earliest (the first thing a
+  picture names is what it is most a picture of), then the one that shows the fewest things (a portrait
+  before a group sheet), then by title. A card for something with several pictures lists them all. The
+  older `nodeIds` (stat blocks by node id) count as well, after `shows`.
+- **A creature a level declares borrows its stat block's pictures** when none shows it: a band of
+  goblins is listed as itself in most of a floor's encounters, and its block says what it is. A person,
+  or an entity that is not a creature, borrows nothing, because a stranger's face is worse than none.
 - **It lives outside the snapshot** (`LivePictureLinks`), because the art catalogue does: uploads change
   it at run time and the committed catalogue is read again on its own. The index remembers which reading
   of the content and which of the catalogue it was built from, and builds again on the first question

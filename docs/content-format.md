@@ -554,8 +554,11 @@ person or an entity by id, a stat block or spell by name, a book entry by id, an
 the campaign's own stat block the day one with that name is written. Name **first** what the picture
 is most a picture of: when several pictures show one thing, its button shows the one that names it
 earliest, then the one that shows the fewest things (a portrait before a group sheet), then the first
-by title, and its card lists them all. The content tests require every picture to show something, and
-every name it shows to be something a link can name.
+by title, and its card lists them all; a picture of somebody or something comes before a scene,
+handout or plan it is in (`kind`). A creature a level declares that no picture shows (a band of
+goblins) has its stat block's pictures. The content tests require every name a picture shows to be
+something a link can name. A picture that shows nothing is allowed: it is found by searching the Art
+tab.
 
 ### 5.16 Maps
 
@@ -643,8 +646,8 @@ What it checks:
   with the proficiency bonus it gives; every spell a monster casts is in the library; every `source` is
   a book the book index titles.
 - **The pictures are right.** Each exists at its path, with the case it is written in, and has the size
-  the catalogue says; every picture on disk is catalogued; each shows something, and everything it
-  shows is something a link can name.
+  the catalogue says; every picture on disk is catalogued; everything a picture shows is something a
+  link can name.
 - **The maps can be used.** Each `.regions.json` sits beside its `.ds`; every region has an id and an
   outline; no region covers another's middle; every area on a mapped floor has a region to click.
 - **The people agree.** `party.json` matches `characters.json`.

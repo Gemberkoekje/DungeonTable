@@ -11,8 +11,8 @@ namespace DungeonTable.ContentTests.RuleTests;
 
 /// <summary>
 /// Proves the art rules on real pictures: an entry the catalogue drops, a picture the art route would
-/// not serve or whose size is stale, one that shows nothing or names what no link can, a link to no stat
-/// block, an entry nobody could find, and a picture in no entry.
+/// not serve or whose size is stale, one that shows what no link can name, a link to no stat block, an
+/// entry nobody could find, and a picture in no entry.
 /// </summary>
 public sealed class ArtAuditTests
 {
@@ -141,25 +141,6 @@ public sealed class ArtAuditTests
         Assert.Equal(2, faults.Count);
         Assert.Contains("'demo-bell-warden' shows \"wena-brask\": [[wena-brask]] names nothing that is loaded", faults[0], StringComparison.Ordinal);
         Assert.Contains("'demo-bell-warden' shows \"area 1\": [[area 1]] needs a floor", faults[1], StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void An_entry_that_shows_nothing_is_reported_and_one_naming_a_stat_block_the_older_way_is_not()
-    {
-        ArtImage warden = Entry("demo-bell-warden", "demo/bell-warden.png");
-        var catalogue = new ArtCatalogue
-        {
-            Images = new[]
-            {
-                new ArtImage { Id = "shows", File = "demo/a.png", Shows = new[] { "bell-warden" } },
-                new ArtImage { Id = "older", File = "demo/b.png", NodeIds = new[] { "data_statblocks_monsters_gargoyle" } },
-                warden,
-            },
-        };
-
-        string fault = Assert.Single(ArtAudit.ShowsNothing(catalogue));
-
-        Assert.StartsWith("'demo-bell-warden' shows nothing", fault, StringComparison.Ordinal);
     }
 
     [Fact]

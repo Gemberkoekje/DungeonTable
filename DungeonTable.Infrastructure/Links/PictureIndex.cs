@@ -1,5 +1,6 @@
 using DungeonTable.Application.Abstractions;
 using DungeonTable.Core.Art;
+using DungeonTable.Core.Dossier;
 using Qowaiv.Validation.Abstractions;
 
 namespace DungeonTable.Infrastructure.Links;
@@ -21,6 +22,12 @@ namespace DungeonTable.Infrastructure.Links;
 /// shows <c>ankheg</c> belongs to the book's entry today and moves to the campaign's own stat block by
 /// itself the day one is written: the campaign's content wins over the book index, as for a link.
 /// </para>
+/// <para>
+/// A creature a level declares (a band of goblins, the Bell-Warden) that no picture shows has its stat
+/// block's pictures instead: the author said what it is, and a goblin's picture is what the table needs
+/// when the band comes round the corner. A person, or an entity that is not a creature, gets none: a
+/// stranger's face would be worse than no picture.
+/// </para>
 /// </remarks>
 public sealed class PictureIndex
 {
@@ -33,17 +40,16 @@ public sealed class PictureIndex
         this.byTarget = byTarget;
     }
 
-    /// <summary>An index with no pictures in it.</summary>
-    public static PictureIndex Empty { get; } = new PictureIndex(new Dictionary<string, IReadOnlyList<ArtImage>>(StringComparer.Ordinal));
-
     /// <summary>Indexes pictures by what they show.</summary>
     /// <param name="images">The catalogue's pictures, in the order a tie between two should break.</param>
     /// <param name="targets">Everything a link can name in the content showing now.</param>
+    /// <param name="dossiers">The content those were built from, for the stat block each creature a level declares uses.</param>
     /// <returns>The index.</returns>
-    public static PictureIndex Build(IEnumerable<ArtImage> images, LinkTargets targets)
+    public static PictureIndex Build(IEnumerable<ArtImage> images, LinkTargets targets, IDossierStore dossiers)
     {
         ArgumentNullException.ThrowIfNull(images);
         ArgumentNullException.ThrowIfNull(targets);
+        ArgumentNullException.ThrowIfNull(dossiers);
 
         var found = new Dictionary<string, List<Placing>>(StringComparer.Ordinal);
         int order = 0;
@@ -58,7 +64,7 @@ public sealed class PictureIndex
                     found[shown[position]] = placings;
                 }
 
-                placings.Add(new Placing(image, position, shown.Count, order));
+                placings.Add(new Placing(image, IsScene(image), position, shown.Count, order));
             }
 
             order++;
@@ -68,11 +74,20 @@ public sealed class PictureIndex
         foreach (KeyValuePair<string, List<Placing>> target in found)
         {
             byTarget[target.Key] = target.Value
-                .OrderBy(placing => placing.Position)
+                .OrderBy(placing => placing.Scene)
+                .ThenBy(placing => placing.Position)
                 .ThenBy(placing => placing.Shows)
                 .ThenBy(placing => placing.Order)
                 .Select(placing => placing.Image)
                 .ToArray();
+        }
+
+        foreach ((string creature, string statBlock) in StandIns(targets, dossiers))
+        {
+            if (!byTarget.ContainsKey(creature) && byTarget.TryGetValue(statBlock, out IReadOnlyList<ArtImage> pictures))
+            {
+                byTarget[creature] = pictures;
+            }
         }
 
         return new PictureIndex(byTarget);
@@ -115,7 +130,28 @@ public sealed class PictureIndex
     public IReadOnlyList<ArtImage> PicturesOf(string targetId) =>
         byTarget.TryGetValue(targetId ?? string.Empty, out IReadOnlyList<ArtImage> images) ? images : None;
 
-    // One picture among those that show a thing: how early it names it, how many things it shows, and
-    // where it stands in the catalogue.
-    private sealed record Placing(ArtImage Image, int Position, int Shows, int Order);
+    // A picture of a place or a prop, or one the DM hands round, rather than of somebody: a portrait of a
+    // thing comes before a scene it is in (the manticore before the chapter's opening spread).
+    private static bool IsScene(ArtImage image) =>
+        image.Kind is ArtKind.Location or ArtKind.Handout or ArtKind.Diagram;
+
+    // Each creature a level declares, with the node id of the stat block it uses, read on its own floor.
+    private static IEnumerable<(string Creature, string StatBlock)> StandIns(LinkTargets targets, IDossierStore dossiers)
+    {
+        foreach (LevelDossier level in dossiers.AllLevels())
+        {
+            foreach (Entity entity in level.AllEntities().Where(entity => entity.Kind == EntityKind.Creature && !string.IsNullOrWhiteSpace(entity.StatBlock)))
+            {
+                Result<LinkTarget> block = targets.Resolve(entity.StatBlock, level.LevelNodeId);
+                if (block.IsValid && block.Value.Kind == CrossRefKind.Monster && !string.IsNullOrEmpty(entity.Id))
+                {
+                    yield return (entity.Id, block.Value.TargetId);
+                }
+            }
+        }
+    }
+
+    // One picture among those that show a thing: whether it is a scene, how early it names it, how many
+    // things it shows, and where it stands in the catalogue.
+    private sealed record Placing(ArtImage Image, bool Scene, int Position, int Shows, int Order);
 }
