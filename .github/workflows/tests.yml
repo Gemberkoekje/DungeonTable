@@ -31,6 +31,15 @@ jobs:
     - name: Check out
       uses: actions/checkout@v7
 
+    # The NuGet packages, keyed on the lock files, which name every package exactly. The job's HOME is
+    # /github/home inside the container, and both this step and dotnet restore resolve ~ there.
+    - name: Cache NuGet packages
+      uses: actions/cache@v6
+      with:
+        path: ~/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
+        restore-keys: nuget-${{ runner.os }}-
+
     - name: Restore
       run: dotnet restore DungeonTable.slnx
 
